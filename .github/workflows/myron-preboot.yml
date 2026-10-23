@@ -3,19 +3,22 @@ on:
   workflow_dispatch:
   push:
     branches: [myron-stage0-ci]
-    paths: [myron-preboot-source.zip, .github/workflows/myron-preboot.yml]
+    paths: [myron-preboot-source-r1.zip, .github/workflows/myron-preboot.yml]
 permissions:
   contents: read
 jobs:
   diagnostic:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Verify and unpack source
         run: |
-          echo '7f07cbc281a315aab765fdd2e574e975ab4f1b9cec097b9b3a5571e1e6cc80e9  myron-preboot-source.zip' | sha256sum -c -
-          unzip -o myron-preboot-source.zip
+          echo '8002d520cb0f31f3068d3ce18f0407c11eeb24e5cd82f4a46a3d13370988e843  myron-preboot-source-r1.zip' | sha256sum -c -
+          unzip -o myron-preboot-source-r1.zip
       - name: Install build and emulator tools
         run: |
           sudo apt-get update -qq
@@ -37,14 +40,14 @@ jobs:
           grep -F 'MYRON DIAG QEMU: entry/FDT/RAM PASS' qemu.log
       - name: Package phone image and source
         run: |
-          mkdir package
-          cp ports/myron/preboot/out/myron-preboot-diag.img ports/myron/preboot/out/build-manifest.json package/
-          cp ports/myron/preboot/README.txt ports/myron/preboot/boot_once.py package/
-          cp myron-preboot-source.zip tests.log qemu.log package/
+          mkdir diag-package
+          cp ports/myron/preboot/out/myron-preboot-diag.img ports/myron/preboot/out/build-manifest.json diag-package/
+          cp ports/myron/preboot/README.txt ports/myron/preboot/boot_once.py diag-package/
+          cp myron-preboot-source-r1.zip tests.log qemu.log diag-package/
           python3 - <<'PY'
           import json, os
           from pathlib import Path
-          p=Path('package/build-manifest.json')
+          p=Path('diag-package/build-manifest.json')
           m=json.loads(p.read_text())
           m.update(workflow_commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
                    host_tests='8 passed', qemu_entry_fdt_ram='passed',
@@ -54,7 +57,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: myron-preboot-diag-r1
-          path: package/
+          path: diag-package/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()

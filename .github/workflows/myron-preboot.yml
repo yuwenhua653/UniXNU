@@ -33,9 +33,10 @@ jobs:
         run: |
           DIAG_QEMU_TEST=1 bash ports/myron/preboot/build.sh out-qemu
           set +e
-          timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256M -nographic -no-reboot -kernel ports/myron/preboot/out-qemu/Image > qemu.log 2>&1
+          timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256M -nic none -nographic -no-reboot -kernel ports/myron/preboot/out-qemu/Image > qemu.log 2>&1
           result=$?
           set -e
+          cat qemu.log
           test "$result" = 124
           grep -F 'MYRON DIAG QEMU: entry/FDT/RAM PASS' qemu.log
       - name: Package phone image and source

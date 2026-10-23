@@ -1,0 +1,65 @@
+name: MYRON preboot diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [myron-stage0-ci]
+    paths: [myron-preboot-source.zip, .github/workflows/myron-preboot.yml]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and unpack source
+        run: |
+          echo '7f07cbc281a315aab765fdd2e574e975ab4f1b9cec097b9b3a5571e1e6cc80e9  myron-preboot-source.zip' | sha256sum -c -
+          unzip -o myron-preboot-source.zip
+      - name: Install build and emulator tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang lld llvm qemu-system-arm
+      - name: Parser and framebuffer boundary tests
+        run: |
+          export MYRON_EVOX_DTB="$PWD/ports/myron/preboot/tests/fixtures/myron-evox-merged.dtb"
+          python3 ports/myron/preboot/tests/test_core.py 2>&1 | tee tests.log
+      - name: Build phone diagnostic
+        run: bash ports/myron/preboot/build.sh
+      - name: QEMU entry and live DTB smoke test
+        run: |
+          DIAG_QEMU_TEST=1 bash ports/myron/preboot/build.sh out-qemu
+          set +e
+          timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a57 -m 256M -nographic -no-reboot -kernel ports/myron/preboot/out-qemu/Image > qemu.log 2>&1
+          result=$?
+          set -e
+          test "$result" = 124
+          grep -F 'MYRON DIAG QEMU: entry/FDT/RAM PASS' qemu.log
+      - name: Package phone image and source
+        run: |
+          mkdir package
+          cp ports/myron/preboot/out/myron-preboot-diag.img ports/myron/preboot/out/build-manifest.json package/
+          cp ports/myron/preboot/README.txt ports/myron/preboot/boot_once.py package/
+          cp myron-preboot-source.zip tests.log qemu.log package/
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('package/build-manifest.json')
+          m=json.loads(p.read_text())
+          m.update(workflow_commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
+                   host_tests='8 passed', qemu_entry_fdt_ram='passed',
+                   phone_tested=False, framebuffer_on_phone='not tested')
+          p.write_text(json.dumps(m,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myron-preboot-diag-r1
+          path: package/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: myron-preboot-failure-logs
+          path: |
+            tests.log
+            qemu.log

@@ -1,0 +1,111 @@
+name: MYRON stage0 XNU and QEMU PID1
+
+on:
+  push:
+    branches: [myron-stage0-ci]
+    paths: ['ports/myron/**', 'myron-stage0-source.zip', '.github/workflows/myron-stage0.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: myron-stage0-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PANDORA_SHA: d338ef09c93ba7e69d03e997478fe3ad3acda309
+  SWEET_SHA: 425b25102b6a9ee4b68fb2b9ca5d6a086b8a4116
+  DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
+  MACOS_VERSION: '13.5'
+  KERNEL_CONFIG: DEVELOPMENT
+  MACHINE_CONFIG: PANDORA
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and unpack MYRON sources
+        run: |
+          echo "35e70cbad76e910d7dc59f600b820ad8e81e5b67383350b5a8fc6b62c2d2b2eb  myron-stage0-source.zip" | shasum -a 256 -c -
+          unzip -o myron-stage0-source.zip
+      - name: Prepare pinned MYRON source
+        run: |
+          git init -q "$RUNNER_TEMP/pandora"
+          git -C "$RUNNER_TEMP/pandora" fetch -q --depth 1 https://github.com/ShueiTsuki/ios-pandora "$PANDORA_SHA"
+          git -C "$RUNNER_TEMP/pandora" checkout -q FETCH_HEAD
+          python3 ports/myron/tools/prepare_source.py --upstream "$RUNNER_TEMP/pandora" --out "$RUNNER_TEMP/myron-source"
+          git init -q dxb
+          git -C dxb fetch -q --depth 1 https://github.com/blacktop/darwin-xnu-build "$DXB_SHA"
+          git -C dxb checkout -q FETCH_HEAD
+          cp "$RUNNER_TEMP/myron-source"/xnu/patches/*.patch "$RUNNER_TEMP/myron-source"/xnu/patches/*.sh dxb/patches/
+          sed -i '' 's/\[\[ "\${MACHINE_CONFIG:-}" == SWEET \]\]/[[ "${MACHINE_CONFIG:-}" =~ ^(SWEET|FUXI|PANDORA)$ ]]/' dxb/patches/*.sh
+          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
+          grep -q 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          grep -q -- '-DMYRON_STAGE0=1' dxb/patches/0102-*.patch
+      - name: Xcode and build dependencies
+        run: |
+          brew install jq gum bash cmake ninja
+          printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
+          sudo chmod +x /usr/local/bin/xcodes
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
+          echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+          xcrun --find iig
+      - name: Compile XNU
+        working-directory: dxb
+        env:
+          MAKEFLAGS: -k
+        run: |
+          set -o pipefail
+          bash build.sh 2>&1 | tee "$RUNNER_TEMP/xnu-build.log"
+      - name: Collect kernel and matching symbols
+        if: always()
+        run: |
+          mkdir -p out
+          cp "$RUNNER_TEMP/myron-source/myron-source-receipt.json" out/ || true
+          cp "$RUNNER_TEMP/xnu-build.log" out/ || true
+          cp -R dxb/fakeroot/System/Library/Kernels/. out/ 2>/dev/null || true
+          find dxb/build -type f -name '*pandora*unstripped*' -exec cp '{}' out/ \; 2>/dev/null || true
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          files = {str(p.relative_to('out')): hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in Path('out').rglob('*') if p.is_file()}
+          Path('out/build-manifest.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],
+              'pandora':os.environ['PANDORA_SHA'],'sweet':os.environ['SWEET_SHA'],
+              'dxb':os.environ['DXB_SHA'],'sha256':files},indent=2)+'\n')
+          PY
+      - name: Require compiled kernel
+        run: test -s out/kernel.development.pandora
+      - name: Install QEMU tools
+        run: |
+          brew install qemu llvm
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+      - name: Fetch pinned payload tools
+        run: |
+          git init -q "$RUNNER_TEMP/sweet"
+          git -C "$RUNNER_TEMP/sweet" fetch -q --depth 1 https://github.com/dipa-studio/ios-sweet "$SWEET_SHA"
+          git -C "$RUNNER_TEMP/sweet" checkout -q FETCH_HEAD
+      - name: Boot MYRON kernel to userspace
+        run: |
+          python3 ports/myron/tools/run_qemu.py --sweet "$RUNNER_TEMP/sweet" --kernel-dir out --out qemu-results --seconds 120
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: myron-qemu-evidence
+          path: |
+            out/xnu-build.log
+            out/build-manifest.json
+            out/myron-source-receipt.json
+            qemu-results/verification.json
+            qemu-results/boot/*.txt
+            qemu-results/boot/*.json
+            qemu-results/boot/*.png
+            qemu-results/boot/*.log
+            qemu-results/adt/generation.json
+          if-no-files-found: error
+          retention-days: 14

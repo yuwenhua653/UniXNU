@@ -82,7 +82,8 @@ def macos_smoke(unixnu):
             (var/'mobile').mkdir(); os.chown(var/'mobile', 501, 501)
             (var/'fixture').write_bytes(b'myron-apfs-roundtrip\n')
             os.chmod(var/'fixture', 0o640)
-            os.setxattr(var/'fixture', 'com.myron.seed-test', b'preserve-xattr')
+            subprocess.run(['/usr/bin/xattr', '-w', 'com.myron.seed-test',
+                            'preserve-xattr', str(var/'fixture')], check=True)
             (var/'fixture-link').symlink_to('fixture')
             (var/'staged_system_apps').mkdir()
         finally:
@@ -102,7 +103,8 @@ def macos_smoke(unixnu):
         try:
             assert (readback/'fixture').read_bytes() == b'myron-apfs-roundtrip\n'
             assert (readback/'fixture').stat().st_mode & 0o777 == 0o640
-            assert os.getxattr(readback/'fixture', 'com.myron.seed-test') == b'preserve-xattr'
+            assert subprocess.check_output(['/usr/bin/xattr', '-p', 'com.myron.seed-test',
+                                            str(readback/'fixture')]).rstrip(b'\n') == b'preserve-xattr'
             assert os.readlink(readback/'fixture-link') == 'fixture'
             assert (readback/'mobile/tmp').stat().st_uid == 501
             assert (readback/'tmp').stat().st_mode & 0o7777 == 0o1777

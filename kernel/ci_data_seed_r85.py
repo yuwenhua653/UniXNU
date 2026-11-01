@@ -28,6 +28,9 @@ def main():
     unixnu=args.unixnu.resolve(strict=True);out=args.out.resolve()
     if sha(unixnu/'drivers/DarwinBoot/Test/packed_ramdisk.py')!=PACKER_SHA:
         raise SystemExit('Expected pinned DBRDISK1 packer')
+    # Exercise actual host APFS/ownership/conversion/packing before a 5 GiB fetch.
+    from test_data_seed_r84 import macos_smoke
+    macos_smoke(unixnu)
     out.mkdir(parents=True,exist_ok=False)
     sys.path.insert(0,str(unixnu/'scripts'))
     from unixnu.ipsw import Ipsw
@@ -43,6 +46,7 @@ def main():
     if image.stat().st_size!=5157406069 or sha(image)!=OS_SHA:
         raise SystemExit('Complete original OS.dmg hash/size mismatch')
     source.zip.close();source.stream.close()
+    print('PASS: complete original OS.dmg size and SHA256', flush=True)
     mount=out/'os-mount';mount.mkdir()
     attached=plistlib.loads(subprocess.check_output(['hdiutil','attach','-readonly','-nobrowse',
         '-owners','on','-mountpoint',str(mount),'-plist',str(image)]))

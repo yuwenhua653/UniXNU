@@ -30,6 +30,17 @@ def plist(command):
     return plistlib.loads(subprocess.check_output(command))
 
 
+def require_readonly_mount(source):
+    # statvfs reports the live mount, unlike guessed diskutil plist key names.
+    # Missing information must never be interpreted as read-only.
+    if not os.path.ismount(source):
+        raise ValueError('Source must be the root of a mounted filesystem')
+    flags = os.statvfs(source).f_flag
+    if not flags & os.ST_RDONLY:
+        raise ValueError('Require a read-only source OS mount (ST_RDONLY absent)')
+    return flags
+
+
 def check_source(source):
     version = plistlib.loads((source/'System/Library/CoreServices/SystemVersion.plist').read_bytes())
     if version.get('ProductBuildVersion') != '21H461' or sha(source/'sbin/launchd') != LAUNCHD_SHA:
@@ -60,10 +71,8 @@ def create(args):
     if not 64 <= args.mib <= 2048:
         raise ValueError('Data fixture size must be 64..2048 MiB; memory budget must be checked before boot')
     source = args.os_mount.resolve(strict=True)
+    source_flags = require_readonly_mount(source)
     var = check_source(source)
-    source_info = plist(['diskutil', 'info', '-plist', str(source)])
-    if not (source_info.get('ReadOnlyVolume') or source_info.get('ReadOnlyMedia')):
-        raise ValueError('Require a read-only source OS mount')
     packer_path = args.unixnu.resolve(strict=True)/'drivers/DarwinBoot/Test/packed_ramdisk.py'
     spec = importlib.util.spec_from_file_location('packed_ramdisk_r84', packer_path)
     packer = importlib.util.module_from_spec(spec)
@@ -73,10 +82,11 @@ def create(args):
         raise ValueError('Output must be separate from the source mount')
     output.mkdir(parents=True, exist_ok=False)
     image, target = output/'data.cdr', output/'mount'
+    writable_image = output/'data.dmg'
     target.mkdir()
     subprocess.run(['hdiutil', 'create', '-size', f'{args.mib}m', '-layout', 'NONE',
-                    '-fs', 'APFS', '-volname', 'MyronCleanData', '-type', 'UDTO', str(image)], check=True)
-    attached = plist(['hdiutil', 'attach', '-nobrowse', '-owners', 'on', '-mountpoint', str(target), '-plist', str(image)])
+                    '-fs', 'APFS', '-volname', 'MyronCleanData', '-type', 'UDIF', str(writable_image)], check=True)
+    attached = plist(['hdiutil', 'attach', '-nobrowse', '-owners', 'on', '-mountpoint', str(target), '-plist', str(writable_image)])
     entities = attached['system-entities']
     device = next(e['dev-entry'] for e in entities if 'dev-entry' in e)
     try:
@@ -119,6 +129,9 @@ def create(args):
         subprocess.run(['diskutil', 'verifyVolume', volumes[0]['dev-entry']], check=True)
     finally:
         subprocess.run(['hdiutil', 'detach', device], check=True)
+    # UDTO is a conversion format, not a valid hdiutil create -type.
+    subprocess.run(['hdiutil', 'convert', str(writable_image), '-format', 'UDTO',
+                    '-o', str(image)], check=True)
     with image.open('rb') as stream:
         header = stream.read(4096)
     if image.stat().st_size != args.mib*1024**2 or header[32:36] != b'NXSB':
@@ -129,7 +142,9 @@ def create(args):
         raise ValueError('Packed image must reconstruct the complete raw SHA256')
     # Ensure source identity still matches; no phone operation is part of this tool.
     check_source(source)
+    require_readonly_mount(source)
     report = dict(build='21H461', launchd_sha256=LAUNCHD_SHA, volume_uuid=volume_uuid,
+                  source_mount_flags=source_flags,
                   initial_free_bytes=free_bytes, raw_bytes=image.stat().st_size,
                   packed=encoded, packer_sha256=sha(packer_path),
                   source='Original OS private/var excluding top-level staged_system_apps',

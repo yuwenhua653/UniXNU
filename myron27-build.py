@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 """Reconstruct reviewed source inputs and build the myron iPhone target on macOS."""
 import concurrent.futures,hashlib,json,os,subprocess,sys
+import argparse
 from pathlib import Path
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
+options=parser.parse_args()
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
+if options.desktop:
+ work=root/'out/myron/ios-27.0.1-24A446-iphone12-1/myron27'
+ subprocess.run([sys.executable,str(root/'device/myron27/prepare_desktop.py'),'--upstream',str(root/'upstream'),
+                 '--work',str(work),'--out',str(root/'desktop')],check=True)
+ raise SystemExit(0)
 snapshot=json.loads((here/'myron27-inputs.json').read_text())
 for name,item in snapshot['files'].items():
  relative=Path(name)

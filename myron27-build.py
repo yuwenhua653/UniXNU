@@ -12,7 +12,24 @@ if options.desktop:
  subprocess.run([sys.executable,str(root/'device/myron27/prepare_desktop.py'),'--upstream',str(root/'upstream'),
                  '--work',str(work),'--out',str(root/'desktop')],check=True)
  raise SystemExit(0)
-snapshot=json.loads((here/'myron27-inputs.json').read_text())
+snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
+snapshot=json.loads(snapshot_bytes)
+# This small overlay contains source changes only. Keep the public base
+# snapshot unchanged instead of uploading historical verification records.
+delta=json.loads((here/'myron27-storage-delta.json').read_text())
+if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
+ raise SystemExit('Storage source delta requires the reviewed base snapshot')
+allowed={
+ 'device/myron27/build_ufs_dormant.py',
+ 'device/myron27/prepare_desktop.py',
+ 'device/myron27/replay_prelink.py',
+ 'device/myron27/audit_ufs_storage_abi.py',
+ 'device/myron27/fixtures/storage-24A446-iphone12-1.json',
+ 'device/myron27/patches/xnuprelink/zzz-original-storage-adapters.patch',
+ 'device/myron27/tests/test_ufs_storage_abi.py',
+}
+if set(delta['files'])!=allowed:raise SystemExit('Unexpected storage source delta paths')
+snapshot['files'].update(delta['files'])
 for name,item in snapshot['files'].items():
  relative=Path(name)
  if relative.is_absolute() or '..' in relative.parts:raise SystemExit('Invalid source path')

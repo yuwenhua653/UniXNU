@@ -4,7 +4,9 @@ import concurrent.futures,hashlib,json,os,subprocess,sys
 import argparse
 from pathlib import Path
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
+mode=parser.add_mutually_exclusive_group()
+mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed sources without fetching tools or compiling the kernel')
+mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 options=parser.parse_args()
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 if options.desktop:
@@ -20,6 +22,13 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/loader/KernelStream.h',
+ 'device/myron27/loader/README.md',
+ 'device/myron27/prepare_loader.py',
+ 'device/myron27/tests/kernel_stream_host.c',
+ 'device/myron27/tests/test_kernel_stream.py',
+ 'device/myron27/tests/loader_boot_host.c',
+ 'device/myron27/tests/test_loader_boot.py',
  'device/myron27/MyronStorageRegistration.cpp',
  'device/myron27/MyronStorageBoot.cpp',
  'device/myron27/storage_boot_hook.py',
@@ -40,6 +49,9 @@ for name,item in snapshot['files'].items():
  data=item['content'].encode()
  if hashlib.sha256(data).hexdigest()!=item['sha256']:raise SystemExit('Source input digest mismatch')
  target=root/relative;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+if options.source_only:
+ print('Reconstructed reviewed source inputs:',root/'device',flush=True)
+ raise SystemExit(0)
 def run(args):subprocess.run(list(map(str,args)),check=True)
 def fetch(item):
  path=root/item['path'];path.mkdir(parents=True,exist_ok=True)

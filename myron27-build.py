@@ -20,6 +20,7 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/MyronStorageRegistration.cpp',
  'device/myron27/build_ufs_dormant.py',
  'device/myron27/prepare_desktop.py',
  'device/myron27/replay_prelink.py',

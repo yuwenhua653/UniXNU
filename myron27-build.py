@@ -21,6 +21,9 @@ if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
  'device/myron27/MyronStorageRegistration.cpp',
+ 'device/myron27/MyronStorageBoot.cpp',
+ 'device/myron27/storage_boot_hook.py',
+ 'device/myron27/tests/test_storage_boot.py',
  'device/myron27/build_ufs_dormant.py',
  'device/myron27/prepare_desktop.py',
  'device/myron27/replay_prelink.py',

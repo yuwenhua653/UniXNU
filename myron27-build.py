@@ -9,36 +9,53 @@ mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 options=parser.parse_args()
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
-if options.desktop:
- work=root/'out/myron/ios-27.0.1-24A446-iphone12-1/myron27'
+def root_qualification_identity(fixture):
+ return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
+  'source_overlay':here/'myron27-storage-delta.json','build_entry':Path(__file__).resolve(),
+  'root_bundle':fixture/'bundle/root-bundle.json'}.items()}
+def qualify_root_inputs():
  d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
  qualification.mkdir(exist_ok=True)
+ (qualification/'host-checks.json').unlink(missing_ok=True)
  subprocess.run(['brew','install','openssl@3'],check=True)
  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
  if not (openssl/'include/openssl/evp.h').is_file():
   raise SystemExit('Root qualification requires installed openssl@3 host headers')
- # Synthetic policies exercise the real compiled path; they are never phone inputs.
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  with (qualification/'root-input-tests.log').open('w') as log:
-   subprocess.run([sys.executable,str(d/'tests/check_root_bundle.py'),'--verified-root',str(verified),
-   '--policy-header',str(policy),'--out',str(fixture),'--cc','clang','--cxx','clang++',
-   '--openssl-prefix',str(openssl)],stdout=log,stderr=subprocess.STDOUT,check=True)
-  with (qualification/'root-runtime-tests.log').open('w') as log:
-   subprocess.run([sys.executable,str(d/'tests/test_root_runtime.py'),'--xnu-source',str(root/'references/xnu/bsd/kern/bsd_init.c'),
-   '--upstream',str(u),'--verified-root',str(verified),'--policy-header',str(policy),
-   '--root-bundle',str(fixture/'bundle'),'-v'],stdout=log,stderr=subprocess.STDOUT,check=True)
+  checks=[('root-input-tests.log',[sys.executable,str(d/'tests/check_root_bundle.py'),
+   '--verified-root',str(verified),'--policy-header',str(policy),'--out',str(fixture),
+   '--cc','clang','--cxx','clang++','--openssl-prefix',str(openssl)]),
+   ('root-runtime-tests.log',[sys.executable,str(d/'tests/test_root_runtime.py'),
+   '--xnu-source',str(root/'references/xnu/bsd/kern/bsd_init.c'),'--upstream',str(u),
+   '--verified-root',str(verified),'--policy-header',str(policy),
+   '--root-bundle',str(fixture/'bundle'),'-v'])]
+  for name,command in checks:
+   with (qualification/name).open('w') as log:
+    status=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT).returncode
+   if status:
+    print((qualification/name).read_text(),flush=True)
+    raise SystemExit('Host qualification failed before native build: '+name)
+  (qualification/'host-checks.json').write_text(json.dumps(root_qualification_identity(fixture),indent=2)+'\n')
  finally:
-  # Keep text evidence in the existing CI artifact paths, never the test keys.
   import shutil
   (root/'reports').mkdir(exist_ok=True)
   for log in qualification.glob('*.log'):shutil.copyfile(log,root/'reports'/log.name)
   if (fixture/'report.json').is_file():shutil.copyfile(fixture/'report.json',root/'reports/root-inputs.json')
+  if (qualification/'host-checks.json').is_file():
+   shutil.copyfile(qualification/'host-checks.json',root/'reports/host-checks.json')
+ print('PASS root host qualification before native build',flush=True)
+if options.desktop:
+ work=root/'out/myron/ios-27.0.1-24A446-iphone12-1/myron27'
+ d=root/'device/myron27';u=root/'upstream';fixture=root/'qualification/root-inputs'
+ marker=root/'qualification/host-checks.json'
+ if not marker.is_file() or json.loads(marker.read_text())!=root_qualification_identity(fixture):
+  raise SystemExit('Require successful host checks for these exact sources before desktop integration')
  subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),
                  '--work',str(work),'--out',str(root/'desktop'),
-                 '--root-bundle',str(fixture/'bundle'),'--verified-root',str(verified),
-                 '--policy-header',str(policy)],check=True)
+                 '--root-bundle',str(fixture/'bundle'),'--verified-root',str(u/'kits/VerifiedRoot'),
+                 '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')],check=True)
  raise SystemExit(0)
 snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
 snapshot=json.loads(snapshot_bytes)
@@ -131,6 +148,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
  for path in pool.map(fetch,snapshot['sources']+root_sources):print('Pinned source:',path,flush=True)
 d=root/'device/myron27';u=root/'upstream';out=root/'out'
 run([sys.executable,d/'install_upstream.py',u])
+qualify_root_inputs()
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
 

@@ -32,6 +32,7 @@ allowed={
  'device/myron27/build_payload.py',
  'device/myron27/build_ufs_dormant.py',
  'device/myron27/fixtures/storage-24A446-iphone12-1.json',
+ 'device/myron27/firmware_memory_contract.py',
  'device/myron27/loader/BootShim.S',
  'device/myron27/loader/Handoff.S',
  'device/myron27/loader/Handoff.h',

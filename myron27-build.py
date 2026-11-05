@@ -46,6 +46,8 @@ allowed={
  'device/myron27/prepare_loader.py',
  'device/myron27/replay_prelink.py',
  'device/myron27/storage_boot_hook.py',
+ 'device/myron27/tests/replay_kernel_qemu.py',
+ 'device/myron27/upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/profile.toml',
  'device/myron27/tests/handoff_qemu_start.S',
  'device/myron27/tests/kernel_stream_host.c',
  'device/myron27/tests/loader_boot_host.c',
@@ -85,3 +87,4 @@ d=root/'device/myron27';u=root/'upstream';out=root/'out'
 run([sys.executable,d/'install_upstream.py',u])
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
+

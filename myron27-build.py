@@ -27,6 +27,8 @@ def qualify_root_inputs():
   checks=[('root-input-tests.log',[sys.executable,str(d/'tests/check_root_bundle.py'),
    '--verified-root',str(verified),'--policy-header',str(policy),'--out',str(fixture),
    '--cc','clang','--cxx','clang++','--openssl-prefix',str(openssl)]),
+   ('ram-data-tests.log',[sys.executable,str(d/'tests/test_ram_data.py'),
+   '--source',str(u/'drivers/RamBlock'),'-v']),
    ('root-runtime-tests.log',[sys.executable,str(d/'tests/test_root_runtime.py'),
    '--xnu-source',str(root/'references/xnu/bsd/kern/bsd_init.c'),'--upstream',str(u),
    '--verified-root',str(verified),'--policy-header',str(policy),
@@ -65,6 +67,10 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/ram_data.py',
+ 'device/myron27/MyronRamData.h',
+ 'device/myron27/tests/test_ram_data.py',
+ 'device/myron27/records/ram-data-20261105.md',
  'device/myron27/root_runtime.py',
  'device/myron27/tests/test_root_runtime.py',
  'device/myron27/records/root-runtime-20261105.md',
@@ -141,6 +147,7 @@ def fetch(item):
 # Fetch the parent first, then only the selected components; no unrelated GPU submodules.
 fetch(snapshot['upstream'])
 root_sources=[
+ {'path':'upstream/drivers/RamBlock','url':'https://github.com/UniXNU/RamBlock.git','commit':'4be2d7eb05ef5a98126c91e0302c149140c0e3e1'},
  {'path':'upstream/kits/VerifiedRoot','url':'https://github.com/UniXNU/VerifiedRoot.git','commit':'974f043d0c71ba2e60331483a41c6c6d35274ee3'},
  {'path':'upstream/drivers/VirtioMmioBlock','url':'https://github.com/UniXNU/VirtioMmioBlock.git','commit':'4e1013eb8c45077b57f8d38d61b389fe899ea1c3'},
 ]

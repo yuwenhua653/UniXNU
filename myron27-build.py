@@ -22,6 +22,13 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/prepare_root_bundle.py',
+ 'device/myron27/tests/check_root_bundle.py',
+ 'device/myron27/tests/MyronPolicyBundle.cpp',
+ 'device/myron27/records/root-inputs-20261105.md',
+ 'device/sm8850/drivers/NativeUfs/MyronPolicyCarrier.h',
+ 'device/sm8850/drivers/NativeUfs/MyronUfsProbe.cpp',
+ 'device/sm8850/drivers/NativeUfs/MyronRootBoot.h',
  'device/myron27/build_ufs_source.py',
  'device/myron27/prepare_ufs_transport.py',
  'device/myron27/tests/MyronDmaQuarantine.cpp',

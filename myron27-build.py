@@ -11,8 +11,34 @@ options=parser.parse_args()
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 if options.desktop:
  work=root/'out/myron/ios-27.0.1-24A446-iphone12-1/myron27'
- subprocess.run([sys.executable,str(root/'device/myron27/prepare_desktop.py'),'--upstream',str(root/'upstream'),
-                 '--work',str(work),'--out',str(root/'desktop')],check=True)
+ d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
+ qualification.mkdir(exist_ok=True)
+ subprocess.run(['brew','install','openssl@3'],check=True)
+ openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
+ if not (openssl/'include/openssl/evp.h').is_file():
+  raise SystemExit('Root qualification requires installed openssl@3 host headers')
+ # Synthetic policies exercise the real compiled path; they are never phone inputs.
+ policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
+ fixture=qualification/'root-inputs'
+ try:
+  with (qualification/'root-input-tests.log').open('w') as log:
+   subprocess.run([sys.executable,str(d/'tests/check_root_bundle.py'),'--verified-root',str(verified),
+   '--policy-header',str(policy),'--out',str(fixture),'--cc','clang','--cxx','clang++',
+   '--openssl-prefix',str(openssl)],stdout=log,stderr=subprocess.STDOUT,check=True)
+  with (qualification/'root-runtime-tests.log').open('w') as log:
+   subprocess.run([sys.executable,str(d/'tests/test_root_runtime.py'),'--xnu-source',str(root/'references/xnu/bsd/kern/bsd_init.c'),
+   '--upstream',str(u),'--verified-root',str(verified),'--policy-header',str(policy),
+   '--root-bundle',str(fixture/'bundle'),'-v'],stdout=log,stderr=subprocess.STDOUT,check=True)
+ finally:
+  # Keep text evidence in the existing CI artifact paths, never the test keys.
+  import shutil
+  (root/'reports').mkdir(exist_ok=True)
+  for log in qualification.glob('*.log'):shutil.copyfile(log,root/'reports'/log.name)
+  if (fixture/'report.json').is_file():shutil.copyfile(fixture/'report.json',root/'reports/root-inputs.json')
+ subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),
+                 '--work',str(work),'--out',str(root/'desktop'),
+                 '--root-bundle',str(fixture/'bundle'),'--verified-root',str(verified),
+                 '--policy-header',str(policy)],check=True)
  raise SystemExit(0)
 snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
 snapshot=json.loads(snapshot_bytes)
@@ -22,6 +48,9 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/root_runtime.py',
+ 'device/myron27/tests/test_root_runtime.py',
+ 'device/myron27/records/root-runtime-20261105.md',
  'device/myron27/prepare_root_bundle.py',
  'device/myron27/tests/check_root_bundle.py',
  'device/myron27/tests/MyronPolicyBundle.cpp',
@@ -94,8 +123,12 @@ def fetch(item):
  return item['path']
 # Fetch the parent first, then only the selected components; no unrelated GPU submodules.
 fetch(snapshot['upstream'])
+root_sources=[
+ {'path':'upstream/kits/VerifiedRoot','url':'https://github.com/UniXNU/VerifiedRoot.git','commit':'974f043d0c71ba2e60331483a41c6c6d35274ee3'},
+ {'path':'upstream/drivers/VirtioMmioBlock','url':'https://github.com/UniXNU/VirtioMmioBlock.git','commit':'4e1013eb8c45077b57f8d38d61b389fe899ea1c3'},
+]
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
- for path in pool.map(fetch,snapshot['sources']):print('Pinned source:',path,flush=True)
+ for path in pool.map(fetch,snapshot['sources']+root_sources):print('Pinned source:',path,flush=True)
 d=root/'device/myron27';u=root/'upstream';out=root/'out'
 run([sys.executable,d/'install_upstream.py',u])
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])

@@ -12,7 +12,8 @@ here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron
 def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
   'source_overlay':here/'myron27-storage-delta.json','build_entry':Path(__file__).resolve(),
-  'root_bundle':fixture/'bundle/root-bundle.json'}.items()}
+  'root_bundle':fixture/'bundle/root-bundle.json',
+  'data_seed_contract':fixture/'bundle/data-seed.json'}.items()}
 def qualify_root_inputs():
  d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
  qualification.mkdir(exist_ok=True)
@@ -29,6 +30,7 @@ def qualify_root_inputs():
    '--cc','clang','--cxx','clang++','--openssl-prefix',str(openssl)]),
    ('ram-data-tests.log',[sys.executable,str(d/'tests/test_ram_data.py'),
    '--source',str(u/'drivers/RamBlock'),'-v']),
+   ('data-seed-tests.log',[sys.executable,str(d/'tests/test_data_seed.py'),'-v']),
    ('root-runtime-tests.log',[sys.executable,str(d/'tests/test_root_runtime.py'),
    '--xnu-source',str(root/'references/xnu/bsd/kern/bsd_init.c'),'--upstream',str(u),
    '--verified-root',str(verified),'--policy-header',str(policy),
@@ -67,6 +69,9 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/data_seed.py',
+ 'device/myron27/tests/test_data_seed.py',
+ 'device/myron27/records/data-mount-20261106.md',
  'device/myron27/ram_data.py',
  'device/myron27/MyronRamData.h',
  'device/myron27/tests/test_ram_data.py',

@@ -7,6 +7,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 mode=parser.add_mutually_exclusive_group()
 mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed sources without fetching tools or compiling the kernel')
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
+mode.add_argument('--userland',action='store_true',help='Qualify original iPhone userland without rebuilding the kernel')
 options=parser.parse_args()
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 def root_qualification_identity(fixture):
@@ -79,6 +80,10 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/userland_audit.py',
+ 'device/myron27/prepare_userland.py',
+ 'device/myron27/tests/test_userland_audit.py',
+ 'device/myron27/records/userland-20261108.md',
  'device/myron27/boot_assets.py',
  'device/myron27/tests/test_boot_assets.py',
  'device/myron27/tests/check_boot_payload.py',
@@ -169,6 +174,16 @@ def fetch(item):
  return item['path']
 # Fetch the parent first, then only the selected components; no unrelated GPU submodules.
 fetch(snapshot['upstream'])
+if options.userland:
+ import shutil
+ d=root/'device/myron27';u=root/'upstream'
+ # Cheap negative controls run before any multi-gigabyte firmware extraction.
+ run([sys.executable,d/'tests/test_userland_audit.py','-v'])
+ archive_tool=shutil.which('ipsw')
+ if not archive_tool:raise SystemExit('Install blacktop/tap/ipsw first')
+ run(['sudo','-n',sys.executable,d/'prepare_userland.py','--upstream',u,'--archive-tool',Path(archive_tool).resolve(),
+      '--out',root/'private-userland','--report',root/'reports/original-userland.json'])
+ raise SystemExit(0)
 root_sources=[
  {'path':'upstream/drivers/RamBlock','url':'https://github.com/UniXNU/RamBlock.git','commit':'4be2d7eb05ef5a98126c91e0302c149140c0e3e1'},
  {'path':'upstream/kits/VerifiedRoot','url':'https://github.com/UniXNU/VerifiedRoot.git','commit':'974f043d0c71ba2e60331483a41c6c6d35274ee3'},

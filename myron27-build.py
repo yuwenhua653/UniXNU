@@ -19,14 +19,16 @@ def qualify_root_inputs():
  d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
  qualification.mkdir(exist_ok=True)
  (qualification/'host-checks.json').unlink(missing_ok=True)
- subprocess.run(['brew','install','openssl@3'],check=True)
+ subprocess.run(['brew','install','openssl@3','mtools'],check=True)
  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
  if not (openssl/'include/openssl/evp.h').is_file():
   raise SystemExit('Root qualification requires installed openssl@3 host headers')
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  checks=[('data-volume-tests.log',[sys.executable,str(d/'tests/test_data_volume.py'),
+  checks=[('boot-assets-tests.log',[sys.executable,str(d/'tests/test_boot_assets.py'),
+   '--darwinboot',str(u/'drivers/DarwinBoot'),'-v']),
+   ('data-volume-tests.log',[sys.executable,str(d/'tests/test_data_volume.py'),
    '--ram-source',str(u/'drivers/RamBlock'),'-v']),
    ('data-volume-apfs.log',['sudo','-n',sys.executable,str(d/'tests/check_data_volume.py'),
    '--out',str(qualification/'data-volume')]),
@@ -77,6 +79,10 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/boot_assets.py',
+ 'device/myron27/tests/test_boot_assets.py',
+ 'device/myron27/tests/check_boot_payload.py',
+ 'device/myron27/records/boot-assets-20261108.md',
  'device/myron27/prepare_data_volume.py',
  'device/myron27/tests/test_data_volume.py',
  'device/myron27/tests/check_data_volume.py',

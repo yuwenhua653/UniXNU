@@ -13,7 +13,8 @@ def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
   'source_overlay':here/'myron27-storage-delta.json','build_entry':Path(__file__).resolve(),
   'root_bundle':fixture/'bundle/root-bundle.json',
-  'data_seed_contract':fixture/'bundle/data-seed.json'}.items()}
+  'data_seed_contract':fixture/'bundle/data-seed.json',
+  'data_volume_proof':fixture.parent/'data-volume/report.json'}.items()}
 def qualify_root_inputs():
  d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
  qualification.mkdir(exist_ok=True)
@@ -25,9 +26,14 @@ def qualify_root_inputs():
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  checks=[('root-input-tests.log',[sys.executable,str(d/'tests/check_root_bundle.py'),
+  checks=[('data-volume-tests.log',[sys.executable,str(d/'tests/test_data_volume.py'),
+   '--ram-source',str(u/'drivers/RamBlock'),'-v']),
+   ('data-volume-apfs.log',['sudo','-n',sys.executable,str(d/'tests/check_data_volume.py'),
+   '--out',str(qualification/'data-volume')]),
+   ('root-input-tests.log',[sys.executable,str(d/'tests/check_root_bundle.py'),
    '--verified-root',str(verified),'--policy-header',str(policy),'--out',str(fixture),
-   '--cc','clang','--cxx','clang++','--openssl-prefix',str(openssl)]),
+   '--cc','clang','--cxx','clang++','--openssl-prefix',str(openssl),
+   '--data-volume-report',str(qualification/'data-volume/report.json')]),
    ('ram-data-tests.log',[sys.executable,str(d/'tests/test_ram_data.py'),
    '--source',str(u/'drivers/RamBlock'),'-v']),
    ('data-seed-tests.log',[sys.executable,str(d/'tests/test_data_seed.py'),'-v']),
@@ -46,6 +52,8 @@ def qualify_root_inputs():
   import shutil
   (root/'reports').mkdir(exist_ok=True)
   for log in qualification.glob('*.log'):shutil.copyfile(log,root/'reports'/log.name)
+  if (qualification/'data-volume/report.json').is_file():
+   shutil.copyfile(qualification/'data-volume/report.json',root/'reports/data-volume.json')
   if (fixture/'report.json').is_file():shutil.copyfile(fixture/'report.json',root/'reports/root-inputs.json')
   if (qualification/'host-checks.json').is_file():
    shutil.copyfile(qualification/'host-checks.json',root/'reports/host-checks.json')
@@ -69,6 +77,10 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/prepare_data_volume.py',
+ 'device/myron27/tests/test_data_volume.py',
+ 'device/myron27/tests/check_data_volume.py',
+ 'device/myron27/records/data-volume-20261108.md',
  'device/myron27/data_seed.py',
  'device/myron27/tests/test_data_seed.py',
  'device/myron27/records/data-mount-20261106.md',

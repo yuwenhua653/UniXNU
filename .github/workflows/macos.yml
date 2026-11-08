@@ -9,6 +9,29 @@ concurrency:
   group: myron-iphone27-native
   cancel-in-progress: false
 jobs:
+  userland:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Qualify myron iPhone iOS 27 userland'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install original archive reader
+        run: brew install blacktop/tap/ipsw
+      - name: Check original iPhone userland and prepare volatile Data
+        run: python3 myron27-build.py --userland
+      - name: Preserve userland evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-iphone27-original-userland-reports-only
+          path: ${{ runner.temp }}/myron-iphone27/reports/original-userland.json
+          if-no-files-found: warn
+          retention-days: 7
   kernel:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron iPhone iOS 27 native kernel'
     runs-on: macos-26

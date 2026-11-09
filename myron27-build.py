@@ -80,6 +80,9 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/prepare_root_media.py',
+ 'device/myron27/tests/test_root_media.py',
+ 'device/myron27/tests/check_root_media.py',
  'device/myron27/userland_audit.py',
  'device/myron27/prepare_userland.py',
  'device/myron27/tests/test_userland_audit.py',
@@ -179,6 +182,7 @@ if options.userland:
  d=root/'device/myron27';u=root/'upstream'
  # Cheap negative controls run before any multi-gigabyte firmware extraction.
  run([sys.executable,d/'tests/test_userland_audit.py','-v'])
+ run([sys.executable,d/'tests/test_root_media.py','-v'])
  archive_tool=shutil.which('ipsw')
  if not archive_tool:raise SystemExit('Install blacktop/tap/ipsw first')
  run(['sudo','-n',sys.executable,d/'prepare_userland.py','--upstream',u,'--archive-tool',Path(archive_tool).resolve(),

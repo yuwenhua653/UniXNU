@@ -8,7 +8,9 @@ mode=parser.add_mutually_exclusive_group()
 mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed sources without fetching tools or compiling the kernel')
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 mode.add_argument('--userland',action='store_true',help='Qualify original iPhone userland without rebuilding the kernel')
+parser.add_argument('--original-root',action='store_true',help='Use this job\'s actual original root/Data for offline desktop integration')
 options=parser.parse_args()
+if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
@@ -27,7 +29,9 @@ def qualify_root_inputs():
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  checks=[('boot-assets-tests.log',[sys.executable,str(d/'tests/test_boot_assets.py'),
+  checks=[('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),
+   '--verified-root',str(verified),'--openssl-prefix',str(openssl),'-v']),
+   ('boot-assets-tests.log',[sys.executable,str(d/'tests/test_boot_assets.py'),
    '--darwinboot',str(u/'drivers/DarwinBoot'),'-v']),
    ('data-volume-tests.log',[sys.executable,str(d/'tests/test_data_volume.py'),
    '--ram-source',str(u/'drivers/RamBlock'),'-v']),
@@ -67,9 +71,24 @@ if options.desktop:
  marker=root/'qualification/host-checks.json'
  if not marker.is_file() or json.loads(marker.read_text())!=root_qualification_identity(fixture):
   raise SystemExit('Require successful host checks for these exact sources before desktop integration')
+ selected_bundle=fixture/'bundle'
+ if options.original_root:
+  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
+  original=root/'qualification/original-root'
+  subprocess.run(['sudo','-n',sys.executable,str(d/'qualify_original_root.py'),
+                  '--report',str(root/'reports/original-userland.json'),
+                  '--root-image',str(root/'private-userland/root-media/root-container.raw'),
+                  '--verified-root',str(u/'kits/VerifiedRoot'),'--out',str(original),
+                  '--openssl-prefix',str(openssl)],check=True)
+  subprocess.run(['sudo','-n','chown','-R',f'{os.getuid()}:{os.getgid()}',str(original)],check=True)
+  sys.path.insert(0,str(d))
+  from qualify_original_root import check_prepared
+  selected_bundle=check_prepared(root/'reports/original-userland.json',original)
+  import shutil
+  shutil.copyfile(original/'qualification.json',root/'reports/original-root.json')
  subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),
                  '--work',str(work),'--out',str(root/'desktop'),
-                 '--root-bundle',str(fixture/'bundle'),'--verified-root',str(u/'kits/VerifiedRoot'),
+                 '--root-bundle',str(selected_bundle),'--verified-root',str(u/'kits/VerifiedRoot'),
                  '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')],check=True)
  raise SystemExit(0)
 snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
@@ -80,6 +99,8 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/qualify_original_root.py',
+ 'device/myron27/tests/test_original_root.py',
  'device/myron27/prepare_root_media.py',
  'device/myron27/tests/test_root_media.py',
  'device/myron27/tests/check_root_media.py',
@@ -183,6 +204,7 @@ if options.userland:
  # Cheap negative controls run before any multi-gigabyte firmware extraction.
  run([sys.executable,d/'tests/test_userland_audit.py','-v'])
  run([sys.executable,d/'tests/test_root_media.py','-v'])
+ run([sys.executable,d/'tests/test_original_root.py','-v'])
  archive_tool=shutil.which('ipsw')
  if not archive_tool:raise SystemExit('Install blacktop/tap/ipsw first')
  run(['sudo','-n',sys.executable,d/'prepare_userland.py','--upstream',u,'--archive-tool',Path(archive_tool).resolve(),

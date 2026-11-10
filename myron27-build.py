@@ -9,12 +9,14 @@ mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 mode.add_argument('--userland',action='store_true',help='Qualify original iPhone userland without rebuilding the kernel')
 parser.add_argument('--original-root',action='store_true',help='Use this job\'s actual original root/Data for offline desktop integration')
-for name in ('device-capture','device-history','owner-private-key','owner-public-key','owner-anchor'):
+for name in ('device-capture','device-history','owner-private-key','owner-public-key','owner-anchor','reference-boot'):
  parser.add_argument('--'+name,type=Path,help='Private local original-root inputs; never workflow secrets or public artifacts')
 options=parser.parse_args()
 if options.device_capture is not None and options.device_history is not None:
  parser.error('Select --device-capture or --device-history, never both')
 owner_values=[options.device_capture or options.device_history,options.owner_private_key,options.owner_public_key,options.owner_anchor]
+if any(v is not None for v in owner_values) != (options.reference_boot is not None):
+ parser.error('Device root inputs require --reference-boot; lab mode must not use retained identity')
 if any(v is not None for v in owner_values):
  if not (options.desktop and options.original_root and all(v is not None for v in owner_values)):
   parser.error('Device inputs require --desktop --original-root and one capture/history input plus all key/anchor options')
@@ -37,7 +39,8 @@ def qualify_root_inputs():
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  checks=[('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
+  checks=[('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
+   ('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
    ('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),
    '--verified-root',str(verified),'--openssl-prefix',str(openssl),'-v']),
    ('boot-assets-tests.log',[sys.executable,str(d/'tests/test_boot_assets.py'),
@@ -81,6 +84,11 @@ if options.desktop:
  if not marker.is_file() or json.loads(marker.read_text())!=root_qualification_identity(fixture):
   raise SystemExit('Require successful host checks for these exact sources before desktop integration')
  selected_bundle=fixture/'bundle'
+ if options.reference_boot is not None:
+  sys.path.insert(0,str(d))
+  from boot_reference import recover,require_device_reference
+  require_device_reference(options.device_capture is not None or options.device_history is not None,options.reference_boot)
+  recover(options.reference_boot)
  if options.original_root:
   openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
   original=root/'qualification/original-root'
@@ -102,7 +110,8 @@ if options.desktop:
  subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),
                  '--work',str(work),'--out',str(root/'desktop'),
                  '--root-bundle',str(selected_bundle),'--verified-root',str(u/'kits/VerifiedRoot'),
-                 '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')],check=True)
+                 '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')]+
+                (['--reference-boot',str(options.reference_boot.resolve())] if options.reference_boot is not None else []),check=True)
  raise SystemExit(0)
 snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
 snapshot=json.loads(snapshot_bytes)
@@ -112,6 +121,8 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/boot_reference.py',
+ 'device/myron27/tests/test_boot_reference.py',
  'device/myron27/dyld_flow.py',
  'device/myron27/tests/test_dyld_flow.py',
  'device/myron27/qualify_original_root.py',

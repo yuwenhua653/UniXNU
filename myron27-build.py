@@ -39,7 +39,14 @@ def qualify_root_inputs():
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  checks=[('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
+  sys.path.insert(0,str(d))
+  from prepare_loader import prepare
+  prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
+  checks=[('loader-host-compile.log',[sys.executable,str(d/'tests/test_loader_boot.py'),
+   '--edk2',str(root/'references/loader-basecore'),'--upstream',str(u),
+   '--staged',str(qualification/'loader-source'),'--out',str(qualification/'loader-host-compile'),
+   '--cc','clang','--compile-only']),
+   ('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
    ('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
    ('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),
    '--verified-root',str(verified),'--openssl-prefix',str(openssl),'-v']),
@@ -110,6 +117,7 @@ if options.desktop:
  subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),
                  '--work',str(work),'--out',str(root/'desktop'),
                  '--root-bundle',str(selected_bundle),'--verified-root',str(u/'kits/VerifiedRoot'),
+                 '--loader-headers',str(root/'references/loader-basecore'),
                  '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')]+
                 (['--reference-boot',str(options.reference_boot.resolve())] if options.reference_boot is not None else []),check=True)
  raise SystemExit(0)
@@ -121,6 +129,7 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/tests/check_root_handoff.py',
  'device/myron27/boot_reference.py',
  'device/myron27/tests/test_boot_reference.py',
  'device/myron27/dyld_flow.py',
@@ -241,6 +250,7 @@ if options.userland:
       '--out',root/'private-userland','--report',root/'reports/original-userland.json'])
  raise SystemExit(0)
 root_sources=[
+ {'path':'references/loader-basecore','url':'https://github.com/microsoft/mu_basecore.git','commit':'cfb93724a06ff86ff5ba971413368a7809ee42a5'},
  {'path':'upstream/drivers/RamBlock','url':'https://github.com/UniXNU/RamBlock.git','commit':'4be2d7eb05ef5a98126c91e0302c149140c0e3e1'},
  {'path':'upstream/kits/VerifiedRoot','url':'https://github.com/UniXNU/VerifiedRoot.git','commit':'974f043d0c71ba2e60331483a41c6c6d35274ee3'},
  {'path':'upstream/drivers/VirtioMmioBlock','url':'https://github.com/UniXNU/VirtioMmioBlock.git','commit':'4e1013eb8c45077b57f8d38d61b389fe899ea1c3'},

@@ -9,7 +9,13 @@ mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 mode.add_argument('--userland',action='store_true',help='Qualify original iPhone userland without rebuilding the kernel')
 parser.add_argument('--original-root',action='store_true',help='Use this job\'s actual original root/Data for offline desktop integration')
+for name in ('device-capture','owner-private-key','owner-public-key','owner-anchor'):
+ parser.add_argument('--'+name,type=Path,help='Private local original-root inputs; never workflow secrets or public artifacts')
 options=parser.parse_args()
+owner_values=[options.device_capture,options.owner_private_key,options.owner_public_key,options.owner_anchor]
+if any(v is not None for v in owner_values):
+ if not (options.desktop and options.original_root and all(v is not None for v in owner_values)):
+  parser.error('Device inputs require --desktop --original-root and all capture/key/anchor options')
 if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 def root_qualification_identity(fixture):
@@ -29,7 +35,8 @@ def qualify_root_inputs():
  policy=u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h';verified=u/'kits/VerifiedRoot'
  fixture=qualification/'root-inputs'
  try:
-  checks=[('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),
+  checks=[('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
+   ('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),
    '--verified-root',str(verified),'--openssl-prefix',str(openssl),'-v']),
    ('boot-assets-tests.log',[sys.executable,str(d/'tests/test_boot_assets.py'),
    '--darwinboot',str(u/'drivers/DarwinBoot'),'-v']),
@@ -75,15 +82,19 @@ if options.desktop:
  if options.original_root:
   openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
   original=root/'qualification/original-root'
+  owner_args=[]
+  for name in ('device_capture','owner_private_key','owner_public_key','owner_anchor'):
+   value=getattr(options,name)
+   if value is not None:owner_args+=['--'+name.replace('_','-'),str(value.resolve())]
   subprocess.run(['sudo','-n',sys.executable,str(d/'qualify_original_root.py'),
                   '--report',str(root/'reports/original-userland.json'),
                   '--root-image',str(root/'private-userland/root-media/root-container.raw'),
                   '--verified-root',str(u/'kits/VerifiedRoot'),'--out',str(original),
-                  '--openssl-prefix',str(openssl)],check=True)
+                  '--openssl-prefix',str(openssl)]+owner_args,check=True)
   subprocess.run(['sudo','-n','chown','-R',f'{os.getuid()}:{os.getgid()}',str(original)],check=True)
   sys.path.insert(0,str(d))
   from qualify_original_root import check_prepared
-  selected_bundle=check_prepared(root/'reports/original-userland.json',original)
+  selected_bundle=check_prepared(root/'reports/original-userland.json',original,options.device_capture,options.owner_anchor)
   import shutil
   shutil.copyfile(original/'qualification.json',root/'reports/original-root.json')
  subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),
@@ -102,6 +113,9 @@ allowed={
  'device/myron27/dyld_flow.py',
  'device/myron27/tests/test_dyld_flow.py',
  'device/myron27/qualify_original_root.py',
+ 'device/myron27/device_layout.py',
+ 'device/myron27/capture_device_layout.cmd',
+ 'device/myron27/tests/test_device_layout.py',
  'device/myron27/tests/test_original_root.py',
  'device/myron27/prepare_root_media.py',
  'device/myron27/tests/test_root_media.py',

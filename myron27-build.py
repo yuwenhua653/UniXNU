@@ -9,13 +9,15 @@ mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 mode.add_argument('--userland',action='store_true',help='Qualify original iPhone userland without rebuilding the kernel')
 parser.add_argument('--original-root',action='store_true',help='Use this job\'s actual original root/Data for offline desktop integration')
-for name in ('device-capture','owner-private-key','owner-public-key','owner-anchor'):
+for name in ('device-capture','device-history','owner-private-key','owner-public-key','owner-anchor'):
  parser.add_argument('--'+name,type=Path,help='Private local original-root inputs; never workflow secrets or public artifacts')
 options=parser.parse_args()
-owner_values=[options.device_capture,options.owner_private_key,options.owner_public_key,options.owner_anchor]
+if options.device_capture is not None and options.device_history is not None:
+ parser.error('Select --device-capture or --device-history, never both')
+owner_values=[options.device_capture or options.device_history,options.owner_private_key,options.owner_public_key,options.owner_anchor]
 if any(v is not None for v in owner_values):
  if not (options.desktop and options.original_root and all(v is not None for v in owner_values)):
-  parser.error('Device inputs require --desktop --original-root and all capture/key/anchor options')
+  parser.error('Device inputs require --desktop --original-root and one capture/history input plus all key/anchor options')
 if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 def root_qualification_identity(fixture):
@@ -83,7 +85,7 @@ if options.desktop:
   openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
   original=root/'qualification/original-root'
   owner_args=[]
-  for name in ('device_capture','owner_private_key','owner_public_key','owner_anchor'):
+  for name in ('device_capture','device_history','owner_private_key','owner_public_key','owner_anchor'):
    value=getattr(options,name)
    if value is not None:owner_args+=['--'+name.replace('_','-'),str(value.resolve())]
   subprocess.run(['sudo','-n',sys.executable,str(d/'qualify_original_root.py'),
@@ -94,7 +96,7 @@ if options.desktop:
   subprocess.run(['sudo','-n','chown','-R',f'{os.getuid()}:{os.getgid()}',str(original)],check=True)
   sys.path.insert(0,str(d))
   from qualify_original_root import check_prepared
-  selected_bundle=check_prepared(root/'reports/original-userland.json',original,options.device_capture,options.owner_anchor)
+  selected_bundle=check_prepared(root/'reports/original-userland.json',original,options.device_capture,options.owner_anchor,options.device_history)
   import shutil
   shutil.copyfile(original/'qualification.json',root/'reports/original-root.json')
  subprocess.run([sys.executable,str(d/'prepare_desktop.py'),'--upstream',str(u),

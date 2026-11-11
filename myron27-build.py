@@ -46,6 +46,7 @@ def qualify_root_inputs():
    '--edk2',str(root/'references/loader-basecore'),'--upstream',str(u),
    '--staged',str(qualification/'loader-source'),'--out',str(qualification/'loader-host-compile'),
    '--cc','clang','--memory-preflight']),
+   ('root-firmware-tests.log',[sys.executable,str(d/'tests/test_root_firmware.py'),'-v']),
    ('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
    ('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
    ('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),
@@ -118,6 +119,7 @@ if options.desktop:
                  '--work',str(work),'--out',str(root/'desktop'),
                  '--root-bundle',str(selected_bundle),'--verified-root',str(u/'kits/VerifiedRoot'),
                  '--loader-headers',str(root/'references/loader-basecore'),
+                 '--firmware-tools',str(root/'qualification/firmware-tools/report.json'),
                  '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')]+
                 (['--reference-boot',str(options.reference_boot.resolve())] if options.reference_boot is not None else []),check=True)
  raise SystemExit(0)
@@ -129,6 +131,11 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/prepare_firmware_source.py',
+ 'device/myron27/prepare_firmware_tools.py',
+ 'device/myron27/build_root_firmware.py',
+ 'device/myron27/tests/test_root_firmware.py',
+ 'device/myron27/fixtures/firmware-source.json',
  'device/myron27/tests/check_root_handoff.py',
  'device/myron27/boot_reference.py',
  'device/myron27/tests/test_boot_reference.py',
@@ -260,6 +267,32 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
 d=root/'device/myron27';u=root/'upstream';out=root/'out'
 run([sys.executable,d/'install_upstream.py',u])
 qualify_root_inputs()
+# Compile and unpack the full board before spending time on native XNU.
+# No Apple image or device identity is needed for this empty-FAT smoke test.
+import shutil
+run(['brew','install','qemu'])
+run([sys.executable,'-m','pip','install','pyelftools==0.32','unicorn==2.1.4'])
+llvm_bin=Path(subprocess.check_output(['brew','--prefix','llvm'],text=True).strip())/'bin'
+lld_bin=Path(subprocess.check_output(['brew','--prefix','lld'],text=True).strip())/'bin'
+firmware_clang=root/'qualification/firmware-bin';firmware_clang.mkdir(exist_ok=False)
+# Homebrew ships LLVM and LLD separately. Give EDK II one complete tool prefix.
+for tool in ('clang','clang++','llvm-lib','llvm-objcopy','llvm-rc','ld.lld','lld-link'):
+ candidates=[llvm_bin/tool,lld_bin/tool]
+ selected=next((p for p in candidates if p.is_file()),None)
+ if selected is None:raise SystemExit('Missing firmware tool before native compilation: '+tool)
+ (firmware_clang/tool).symlink_to(selected)
+firmware_qemu=shutil.which('qemu-system-aarch64')
+if not firmware_qemu:raise SystemExit('Missing firmware QEMU tool before native compilation')
+firmware_log=root/'reports/firmware-preflight.log'
+with firmware_log.open('w') as log:
+ status=subprocess.run([sys.executable,str(d/'prepare_firmware_tools.py'),'--upstream',str(u),
+  '--clang-bin',str(firmware_clang),'--qemu',firmware_qemu,
+  '--out',str(root/'qualification/firmware-tools')],stdout=log,stderr=subprocess.STDOUT).returncode
+if status:
+ print('\n'.join(firmware_log.read_text(errors='replace').splitlines()[-120:]),flush=True)
+ raise SystemExit('Full firmware preflight failed before native XNU compilation')
+shutil.copyfile(root/'qualification/firmware-tools/report.json',root/'reports/firmware-preflight.json')
+print('PASS full firmware compile/unpack and PAC preflight before native build',flush=True)
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
 

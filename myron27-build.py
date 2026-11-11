@@ -46,6 +46,7 @@ def qualify_root_inputs():
    '--edk2',str(root/'references/loader-basecore'),'--upstream',str(u),
    '--staged',str(qualification/'loader-source'),'--out',str(qualification/'loader-host-compile'),
    '--cc','clang','--memory-preflight']),
+   ('root-image-tests.log',[sys.executable,str(d/'tests/test_root_image.py'),'-v']),
    ('root-firmware-tests.log',[sys.executable,str(d/'tests/test_root_firmware.py'),'-v']),
    ('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
    ('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
@@ -121,6 +122,7 @@ if options.desktop:
                  '--loader-headers',str(root/'references/loader-basecore'),
                  '--firmware-tools',str(root/'qualification/firmware-tools/report.json'),
                  '--policy-header',str(u/'drivers/VirtioMmioBlock/VerifiedBlockPolicy.h')]+
+                (['--root-qualification',str(root/'reports/original-root.json')] if options.original_root else [])+
                 (['--reference-boot',str(options.reference_boot.resolve())] if options.reference_boot is not None else []),check=True)
  raise SystemExit(0)
 snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
@@ -131,6 +133,8 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/package_root_image.py',
+ 'device/myron27/tests/test_root_image.py',
  'device/myron27/prepare_firmware_source.py',
  'device/myron27/prepare_firmware_tools.py',
  'device/myron27/build_root_firmware.py',

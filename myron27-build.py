@@ -289,7 +289,12 @@ with firmware_log.open('w') as log:
   '--clang-bin',str(firmware_clang),'--qemu',firmware_qemu,
   '--out',str(root/'qualification/firmware-tools')],stdout=log,stderr=subprocess.STDOUT).returncode
 if status:
- print('\n'.join(firmware_log.read_text(errors='replace').splitlines()[-120:]),flush=True)
+ lines=firmware_log.read_text(errors='replace').splitlines()
+ first_error=next((i for i,line in enumerate(lines) if 'error:' in line or '***' in line),None)
+ if first_error is not None:
+  print('First firmware preflight error:',flush=True)
+  print('\n'.join(lines[max(0,first_error-5):first_error+16]),flush=True)
+ print('\n'.join(lines[-120:]),flush=True)
  raise SystemExit('Full firmware preflight failed before native XNU compilation')
 shutil.copyfile(root/'qualification/firmware-tools/report.json',root/'reports/firmware-preflight.json')
 print('PASS full firmware compile/unpack and PAC preflight before native build',flush=True)

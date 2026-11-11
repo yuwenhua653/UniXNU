@@ -42,10 +42,10 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('loader-host-compile.log',[sys.executable,str(d/'tests/test_loader_boot.py'),
+  checks=[('loader-host-memory.log',[sys.executable,str(d/'tests/test_loader_boot.py'),
    '--edk2',str(root/'references/loader-basecore'),'--upstream',str(u),
    '--staged',str(qualification/'loader-source'),'--out',str(qualification/'loader-host-compile'),
-   '--cc','clang','--compile-only']),
+   '--cc','clang','--memory-preflight']),
    ('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
    ('device-layout-tests.log',[sys.executable,str(d/'tests/test_device_layout.py'),'-v']),
    ('original-root-tests.log',[sys.executable,str(d/'tests/test_original_root.py'),

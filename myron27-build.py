@@ -9,12 +9,14 @@ mode.add_argument('--source-only',action='store_true',help='Reconstruct reviewed
 mode.add_argument('--desktop',action='store_true',help='Use this job\'s prepared tree for UFS/LTO/fileset integration')
 mode.add_argument('--userland',action='store_true',help='Qualify original iPhone userland without rebuilding the kernel')
 parser.add_argument('--original-root',action='store_true',help='Use this job\'s actual original root/Data for offline desktop integration')
-for name in ('device-capture','device-history','owner-private-key','owner-public-key','owner-anchor','reference-boot'):
+for name in ('device-capture','device-history','owner-private-key','owner-public-key','owner-anchor','owner-policies','reference-boot'):
  parser.add_argument('--'+name,type=Path,help='Private local original-root inputs; never workflow secrets or public artifacts')
 options=parser.parse_args()
 if options.device_capture is not None and options.device_history is not None:
  parser.error('Select --device-capture or --device-history, never both')
-owner_values=[options.device_capture or options.device_history,options.owner_private_key,options.owner_public_key,options.owner_anchor]
+if options.owner_policies is not None and (options.owner_private_key is not None or options.owner_public_key is not None):
+ parser.error('Use signed policies or signing keys, never both')
+owner_values=[options.device_capture or options.device_history,(options.owner_policies or options.owner_private_key),(options.owner_policies or options.owner_public_key),options.owner_anchor]
 if any(v is not None for v in owner_values) != (options.reference_boot is not None):
  parser.error('Device root inputs require --reference-boot; lab mode must not use retained identity')
 if any(v is not None for v in owner_values):
@@ -104,7 +106,7 @@ if options.desktop:
   openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
   original=root/'qualification/original-root'
   owner_args=[]
-  for name in ('device_capture','device_history','owner_private_key','owner_public_key','owner_anchor'):
+  for name in ('device_capture','device_history','owner_private_key','owner_public_key','owner_anchor','owner_policies'):
    value=getattr(options,name)
    if value is not None:owner_args+=['--'+name.replace('_','-'),str(value.resolve())]
   subprocess.run(['sudo','-n',sys.executable,str(d/'qualify_original_root.py'),

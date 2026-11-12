@@ -1,5 +1,7 @@
 name: Myron device-bound root package
 on:
+  push:
+    branches: [codex/myron-iphone27]
   workflow_dispatch:
     inputs:
       inputs_url:
@@ -17,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -35,8 +38,8 @@ jobs:
           brew install cmake ninja llvm lld unifdef dtc mtools openssl@3 blacktop/tap/ipsw
       - name: Build and export exact device package
         env:
-          MYRON_INPUT_URL: ${{ inputs.inputs_url }}
-          MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 }}
+          MYRON_INPUT_URL: ${{ inputs.inputs_url || 'https://api.github.com/repos/yuwenhua653/UniXNU/releases/assets/738057218' }}
+          MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}
         run: |
           echo "::add-mask::$MYRON_INPUT_URL"
           python3 myron27-device-build.py

@@ -63,15 +63,11 @@ def open_input(url):
         return urllib.request.urlopen(destination,timeout=90)
 
 
-def main():
-    import re
-    here=Path(__file__).resolve().parent;temp=Path(os.environ['RUNNER_TEMP']).resolve()
-    url=os.environ.pop('MYRON_INPUT_URL');expected=os.environ.pop('MYRON_INPUT_SHA256')
+def download(url, archive):
     # A temporary HTTPS download is supplied explicitly at dispatch time.
     parsed=urllib.parse.urlsplit(url)
     if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError('Require an HTTPS input download')
-    archive=temp/'device-inputs.zip'
     try:
         with open_input(url) as source,archive.open('xb') as dest:
             total=0
@@ -79,9 +75,29 @@ def main():
                 total+=len(chunk)
                 if total>230*1024**2:raise ValueError('Oversized archive')
                 dest.write(chunk)
-    except Exception:
-        raise RuntimeError('Private input download failed; no URL is logged') from None
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f'Private input download failed: HTTP {error.code}; URL and credentials omitted') from None
+    except Exception as error:
+        raise RuntimeError(f'Private input download failed: {type(error).__name__}; details omitted') from None
+
+
+def main():
+    import argparse
+    parser=argparse.ArgumentParser()
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--download-only',action='store_true')
+    mode.add_argument('--input-archive',type=Path)
+    args=parser.parse_args()
+    here=Path(__file__).resolve().parent;temp=Path(os.environ['RUNNER_TEMP']).resolve()
+    expected=os.environ.pop('MYRON_INPUT_SHA256')
+    archive=args.input_archive or temp/'device-inputs.zip'
+    if args.input_archive is None:
+        download(os.environ.pop('MYRON_INPUT_URL'),archive)
     inputs=unpack(archive,temp/'myron-private-inputs',expected)
+    if args.download_only:
+        shutil.rmtree(inputs)
+        print('Device input archive downloaded and verified (SHA256 and exact file allowlist).')
+        return
     archive.unlink()
     subprocess.run([sys.executable,str(here/'myron27-build.py'),'--source-only'],check=True)
     sys.path.insert(0,str(temp/'myron-iphone27/device/myron27'))

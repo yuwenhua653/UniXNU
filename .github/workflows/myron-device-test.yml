@@ -1,0 +1,43 @@
+name: Myron Windows device test companion
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - myron-device-test/**
+      - .github/workflows/myron-device-test.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Test archive validation, bounded writes, interruption and restore
+        run: python -m unittest discover -s myron-device-test -p test_companion.py -v
+      - name: Package source-only Windows companion
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          import zipfile
+          root=Path('myron-device-test')
+          with zipfile.ZipFile('myron-ios27-windows-test-43165530177.zip','w',compression=zipfile.ZIP_DEFLATED) as z:
+              for name in ('MYRON-IOS27.cmd','README-CN.txt','myron_device_test.py','device_layout.py','prepare_root_bundle.py','test_companion.py'):
+                  z.write(root/name,name)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: runner.os == 'Windows'
+        with:
+          name: myron-ios27-windows-test-43165530177
+          path: myron-ios27-windows-test-43165530177.zip
+          if-no-files-found: error
+          retention-days: 7

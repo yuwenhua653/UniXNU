@@ -116,7 +116,7 @@ class CommandTests(unittest.TestCase):
         f=t.Fastboot.__new__(t.Fastboot);f.exe='fastboot';f.serial='serial'
         with patch.object(t,'invoke') as call:
             f.flash('boot_a',Path('state/boot_a.img'))
-            self.assertEqual(call.call_args.args[0],['fastboot','-s','serial','flash','boot_a','state/boot_a.img'])
+            self.assertEqual(call.call_args.args[0],['fastboot','-s','serial','flash','boot_a',str(Path('state/boot_a.img'))])
             for name in ('boot','userdata','unixnu','boot_c'):
                 with self.assertRaises(ValueError):f.flash(name,Path('anything'))
     def test_wrong_archive_refused_before_extraction(self):

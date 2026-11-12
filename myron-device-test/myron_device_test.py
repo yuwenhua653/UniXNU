@@ -197,10 +197,19 @@ def backup_state(state):
     return b
 
 
+def match_layout(disk, expected, capture, parent):
+    if disk==expected:return
+    results=Path(parent)/'results';results.mkdir(exist_ok=True)
+    saved=Path(tempfile.mkdtemp(prefix='gpt-mismatch-',dir=results))
+    shutil.copytree(capture,saved,dirs_exist_ok=True)
+    raise ValueError('Current GPT differs from successful build; capture saved: '+str(saved))
+
+
 def live(device, m, parent):
     with tempfile.TemporaryDirectory(prefix='gpt-',dir=parent) as tmp:
-        disk,binding,target=device.capture(Path(tmp)/'capture')
-    require(disk==m['layout'],'Current GPT differs from successful build; stop and send capture')
+        capture=Path(tmp)/'capture'
+        disk,binding,target=device.capture(capture)
+        match_layout(disk,m['layout'],capture,parent)
     return binding,target
 
 
@@ -211,7 +220,7 @@ def prepare(package,state,device):
     require(shutil.disk_usage(state.parent).free>1024**3,'Need 1 GB free for backup')
     with tempfile.TemporaryDirectory(prefix='myron-backup-',dir=state.parent) as tmp:
         work=Path(tmp);disk,binding,target=device.capture(work/'capture')
-        require(disk==m['layout'],'Current GPT differs from successful build')
+        match_layout(disk,m['layout'],work/'capture',state.parent)
         name,path,size=device.boot()
         print('Backing up '+name+' and reading it twice...',flush=True)
         with (work/(name+'.img')).open('xb') as f:

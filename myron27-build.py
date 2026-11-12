@@ -46,6 +46,8 @@ def qualify_root_inputs():
    '--edk2',str(root/'references/loader-basecore'),'--upstream',str(u),
    '--staged',str(qualification/'loader-source'),'--out',str(qualification/'loader-host-compile'),
    '--cc','clang','--memory-preflight']),
+   ('device-deployment-tests.log',[sys.executable,str(d/'tests/test_device_deployment.py'),'-v']),
+   ('owner-request-tests.log',[sys.executable,str(d/'tests/test_owner_request.py'),'-v']),
    ('root-image-tests.log',[sys.executable,str(d/'tests/test_root_image.py'),'-v']),
    ('root-firmware-tests.log',[sys.executable,str(d/'tests/test_root_firmware.py'),'-v']),
    ('boot-reference-tests.log',[sys.executable,str(d/'tests/test_boot_reference.py'),'-v']),
@@ -133,6 +135,11 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/device_inputs.py',
+ 'device/myron27/prepare_root_deployment.py',
+ 'device/myron27/owner_request.py',
+ 'device/myron27/tests/test_device_deployment.py',
+ 'device/myron27/tests/test_owner_request.py',
  'device/myron27/package_root_image.py',
  'device/myron27/tests/test_root_image.py',
  'device/myron27/prepare_firmware_source.py',

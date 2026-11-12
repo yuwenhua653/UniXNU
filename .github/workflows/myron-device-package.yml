@@ -1,0 +1,54 @@
+name: Myron device-bound root package
+on:
+  workflow_dispatch:
+    inputs:
+      inputs_url:
+        description: Temporary HTTPS URL for the approved device input archive (no private keys)
+        required: true
+        type: string
+      inputs_sha256:
+        description: SHA256 of the exact approved input archive
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: myron-device-package
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: |
+          python3 -m pip install capstone==5.0.6
+          brew install cmake ninja llvm lld unifdef dtc mtools openssl@3 blacktop/tap/ipsw
+      - name: Build and export exact device package
+        env:
+          MYRON_INPUT_URL: ${{ inputs.inputs_url }}
+          MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 }}
+        run: |
+          echo "::add-mask::$MYRON_INPUT_URL"
+          python3 myron27-device-build.py
+      - name: Preserve verified device package only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-device-root-package
+          path: ${{ runner.temp }}/myron-private-native/device-package
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove private build inputs
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/myron-private-inputs"
+          rm -f "$RUNNER_TEMP/myron-device-session.json" "$RUNNER_TEMP/device-inputs.zip"

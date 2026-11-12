@@ -10,6 +10,7 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+import urllib.error
 import zipfile
 
 FILES={'history/storage-report-r65s.json','history/verification.json','history/installation.json',
@@ -38,6 +39,30 @@ def unpack(archive, output, expected):
     return output
 
 
+def open_input(url):
+    parsed=urllib.parse.urlsplit(url)
+    if parsed.hostname!='api.github.com':
+        return urllib.request.urlopen(url,timeout=90)
+    import re
+    if parsed.scheme!='https' or parsed.netloc!='api.github.com' or parsed.query or parsed.fragment or not re.fullmatch(
+            r'/repos/yuwenhua653/UniXNU/releases/assets/[0-9]+',parsed.path):
+        raise ValueError('Unapproved authenticated asset endpoint')
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,req,fp,code,msg,headers,newurl):return None
+    request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],
+        'Accept':'application/octet-stream','X-GitHub-Api-Version':'2022-11-28'})
+    try:
+        return urllib.request.build_opener(NoRedirect).open(request,timeout=90)
+    except urllib.error.HTTPError as error:
+        if error.code not in (301,302,303,307,308):raise
+        destination=error.headers['Location']
+        target=urllib.parse.urlsplit(destination)
+        if target.scheme!='https' or not target.hostname or target.username or target.password:
+            raise ValueError('Unsafe asset redirect')
+        # Never forward the repository token to the signed asset host.
+        return urllib.request.urlopen(destination,timeout=90)
+
+
 def main():
     import re
     here=Path(__file__).resolve().parent;temp=Path(os.environ['RUNNER_TEMP']).resolve()
@@ -48,7 +73,7 @@ def main():
         raise ValueError('Require an HTTPS input download')
     archive=temp/'device-inputs.zip'
     try:
-        with urllib.request.urlopen(url,timeout=90) as source,archive.open('xb') as dest:
+        with open_input(url) as source,archive.open('xb') as dest:
             total=0
             while chunk:=source.read(1024*1024):
                 total+=len(chunk)

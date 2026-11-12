@@ -1,0 +1,47 @@
+name: Transfer myron part16 in smaller chunks
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths: [.github/workflows/myron-part16-transfer.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  split:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Split only the verified part16 transport archive
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import sys
+          from pathlib import Path
+          sys.path.insert(0,'myron-download')
+          import split_artifact as s
+          s.URL='https://api.github.com/repos/yuwenhua653/UniXNU/actions/artifacts/13945353852/zip'
+          s.NAME='myron-root-part16.zip'
+          s.SIZE=471859398
+          s.SHA='bdbf3a1b58453967d50cefd9435491e65b0fc2713850ebb1e07ed888afebe1cc'
+          s.PART_BYTES=240*1024**2
+          s.COUNT=2
+          with s.response() as source:s.split(source,Path('repair-parts'))
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-root-part16-transfer-a
+          path: repair-parts/myron-root-part16.zip.part00
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-root-part16-transfer-b
+          path: repair-parts/myron-root-part16.zip.part01
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error

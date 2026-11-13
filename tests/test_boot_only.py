@@ -43,6 +43,21 @@ class ReuseTests(unittest.TestCase):
         b.save(self.repo/'myron27-storage-delta.json',d)
         with self.assertRaisesRegex(ValueError,'source digest'):b.check_sources(self.repo,a.baseline_source)
 
+class CheckoutTests(unittest.TestCase):
+    def test_empty_submodule_placeholder_is_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target=Path(tmp)/'drivers/DarwinBoot';target.mkdir(parents=True)
+            with patch.object(b.subprocess,'run') as run,patch.object(b.subprocess,'check_output',return_value='pinned\n'):
+                b.checkout('unused','pinned',target)
+                self.assertEqual(run.call_count,3)
+    def test_nonempty_directory_is_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target=Path(tmp);(target/'keep').write_text('keep')
+            with patch.object(b.subprocess,'run') as run:
+                with self.assertRaisesRegex(ValueError,'absent or empty'):b.checkout('unused','pinned',target)
+                run.assert_not_called()
+            self.assertEqual((target/'keep').read_text(),'keep')
+
 class BinaryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.raw,cls.m=b.read_base(a.base)

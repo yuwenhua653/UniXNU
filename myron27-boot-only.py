@@ -174,7 +174,9 @@ def finish(base, work, output, source_check, elapsed):
 
 
 def checkout(url, pin, target):
-    target.mkdir(parents=True)
+    need(not target.is_symlink() and (not target.exists() or
+         (target.is_dir() and not any(target.iterdir()))), 'Dependency target must be absent or empty')
+    target.mkdir(parents=True,exist_ok=True)
     subprocess.run(['git','-C',str(target),'init','-q'],check=True)
     subprocess.run(['git','-C',str(target),'fetch','-q','--depth','1',url,pin],check=True)
     subprocess.run(['git','-C',str(target),'checkout','-q','--detach','FETCH_HEAD'],check=True)

@@ -1,0 +1,92 @@
+name: Myron resume qualified continuous firmware
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - .github/workflows/myron-continuous-resume.yml
+      - myron27-continuous-firmware.py
+      - myron27-package-continuous.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: myron-continuous-resume
+  cancel-in-progress: false
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 149bbe923e465eb8f86ccc01ec71cfec34420d8c
+          path: qualified-source
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: '14012803800'
+          run-id: '43368377366'
+          github-token: ${{ github.token }}
+          path: native-input
+          merge-multiple: true
+      - name: Check exact retained artifact before any build
+        shell: python
+        run: |
+          import hashlib, json
+          from pathlib import Path
+          root=Path('native-input')
+          expected={'root-startup.img':'0755a47ad5893bdf2ba0f0049d6b88ee9cf81a248604b1ea9d2668b1d78ba249',
+                    'deployment.json':'2fbd06688552f989c585eb32c1009270148e496a3832c0952e1dfa837ee3934c'}
+          for name,digest in expected.items(): assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest
+          producer=json.loads((root/'producer.json').read_text())
+          assert producer['source_commit']=='149bbe923e465eb8f86ccc01ec71cfec34420d8c'
+          assert producer['run_id']=='43368377366'
+      - name: Install firmware tools only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
+          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+      - name: Verify permission-error regression
+        run: python3 tests/test_collect_native_checks.py
+      - name: Resume Linux firmware using the already compiled kernel
+        run: |
+          python3 myron27-continuous-firmware.py --base native-input \
+            --source-repo qualified-source --producer-run 43368377366 \
+            --work "$RUNNER_TEMP/continuous-work" --output "$RUNNER_TEMP/continuous-output" \
+            --clang-bin /usr/lib/llvm-18/bin --qemu /usr/bin/qemu-system-aarch64
+      - name: Package and test Windows update and Android restore helper
+        run: |
+          python3 myron27-package-continuous.py --candidate "$RUNNER_TEMP/continuous-output" \
+            --run "$GITHUB_RUN_ID" --output "$RUNNER_TEMP/ready/myron-ios27-continuous-$GITHUB_RUN_ID.zip"
+      - name: Preserve firmware diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-continuous-resume-checks
+          path: |
+            ${{ runner.temp }}/continuous-work/firmware/build.log
+            ${{ runner.temp }}/continuous-work/firmware/firmware-verification.json
+            ${{ runner.temp }}/continuous-work/root-handoff/report.json
+            ${{ runner.temp }}/continuous-work/capsule-test/handoff-qemu.json
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-continuous-ready
+          path: ${{ runner.temp }}/ready
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-continuous-candidate
+          path: ${{ runner.temp }}/continuous-output
+          if-no-files-found: error
+          retention-days: 7

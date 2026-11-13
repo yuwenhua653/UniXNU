@@ -15,9 +15,13 @@ import zlib
 
 p=argparse.ArgumentParser(description=__doc__)
 for n in ('base','work','output','clang-bin','qemu'):p.add_argument('--'+n,type=Path,required=True)
+p.add_argument("--source-repo", type=Path, help="Exact pinned source checkout for a previously qualified native artifact")
+p.add_argument("--producer-run", help="Original artifact-producing run; requires --source-repo")
 a=p.parse_args()
-for k,v in vars(a).items():setattr(a,k,v.resolve())
-repo=Path(__file__).resolve().parent
+if bool(a.source_repo) != bool(a.producer_run): p.error("Recovery requires both source checkout and producer run")
+for k,v in vars(a).items():
+    if isinstance(v,Path):setattr(a,k,v.resolve())
+repo=a.source_repo or Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('boot_only',repo/'myron27-boot-only.py')
 bp=importlib.util.module_from_spec(spec);spec.loader.exec_module(bp)
 need,sha,save=bp.need,bp.sha,bp.save
@@ -25,8 +29,9 @@ need(not a.work.exists() and not a.output.exists(),'Use fresh work/output direct
 a.work.mkdir(parents=True);start=time.monotonic()
 producer=bp.read_json(a.base/'producer.json')
 commit=subprocess.check_output(['git','-C',str(repo),'rev-parse','HEAD'],text=True).strip()
-need(producer['source_commit']==commit==os.environ['GITHUB_SHA'],'Payload must come from this exact workflow commit')
-need(producer['run_id']==os.environ['GITHUB_RUN_ID'],'Payload must come from this workflow run')
+need(producer['source_commit']==commit,'Payload must come from this exact checked-out source commit')
+if a.source_repo is None: need(commit==os.environ['GITHUB_SHA'],'Source differs from workflow commit')
+need(producer['run_id']==(a.producer_run or os.environ['GITHUB_RUN_ID']),'Payload producer run differs')
 need(producer['source_delta_sha256']==sha((repo/'myron27-storage-delta.json').read_bytes()),'Native source snapshot differs')
 mraw=(a.base/'deployment.json').read_bytes();raw=(a.base/'root-startup.img').read_bytes()
 need(sha(mraw)==producer['manifest_sha256'] and sha(raw)==producer['boot_sha256'],'Native artifact transport differs')
@@ -92,7 +97,7 @@ need(len(fd)==bp.FD_BYTES and sha(fd)==fv['fd_sha256']==fw['fd_sha256'],'Firmwar
 image=raw[:bp.FD_OFFSET]+fd+fat
 need(len(image)==len(raw) and image[:bp.FD_OFFSET]==raw[:bp.FD_OFFSET] and image[bp.FAT_OFFSET:]==raw[bp.FAT_OFFSET:],'Non-FD bytes changed')
 a.output.mkdir();(a.output/'root-startup.img').write_bytes(image)
-report=dict(result='passed',kind='continuous-xnu-source-boot',producer=producer,intentional_stop=False,
+report=dict(result='passed',kind='continuous-xnu-source-boot',producer=producer,assembly_commit=os.environ['GITHUB_SHA'],assembly_run=os.environ['GITHUB_RUN_ID'],intentional_stop=False,
     required_symbols=sorted(required),kernel_sha256=h('kernel.macho'),firmware_verification=fv,root_handoff=host,
     boot_sha256=sha(image),elapsed_seconds=round(time.monotonic()-start,1),root_install_reusable=True,phone_tested=False,desktop_reached=False)
 save(a.output/'continuous-report.json',report)
@@ -101,3 +106,4 @@ r=m['image_reports']['root-startup.img'];r.update(sha256=sha(image),fd_sha256=sh
 m['continuous_boot']=dict(intentional_stop=False,kernel_sha256=h('kernel.macho'),source_commit=commit)
 save(a.output/'deployment.json',m)
 print('PASS: continuous source kernel with Linux firmware; phone/desktop execution remains unverified')
+

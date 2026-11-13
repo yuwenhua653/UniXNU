@@ -1,0 +1,65 @@
+name: Myron XNU entry observer
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - myron-entry-probe/**
+      - .github/workflows/myron-entry-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  entry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ce869a1d7be7c845b1202777c05c3d61baf1a681
+          path: baseline-source
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: myron-ios27-boot-regression
+          run-id: '43349357896'
+          github-token: ${{ github.token }}
+          path: base-boot
+      - name: Install bounded observer and firmware toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
+          python -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+      - name: Execute XNU prefix and fault control before firmware assembly
+        run: |
+          python myron-entry-probe/build.py --baseline-source baseline-source --base base-boot \
+            --work "$RUNNER_TEMP/entry-work" --output "$RUNNER_TEMP/entry-output" \
+            --clang-bin /usr/lib/llvm-18/bin --qemu /usr/bin/qemu-system-aarch64
+      - name: Preserve diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-xnu-entry-checks
+          path: |
+            ${{ runner.temp }}/entry-work/probe/probe.json
+            ${{ runner.temp }}/entry-work/probe/observer.elf
+            ${{ runner.temp }}/entry-work/prefix-test/**/*.json
+            ${{ runner.temp }}/entry-work/prefix-test/**/*.txt
+            ${{ runner.temp }}/entry-work/prefix-test/**/*.log
+            ${{ runner.temp }}/entry-work/firmware/build.log
+            ${{ runner.temp }}/entry-work/firmware/firmware-verification.json
+            ${{ runner.temp }}/entry-work/root-handoff/report.json
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-xnu-entry-candidate
+          path: ${{ runner.temp }}/entry-output
+          if-no-files-found: error
+          retention-days: 7

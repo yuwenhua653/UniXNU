@@ -101,12 +101,39 @@ int main(void) {
  // All five rows and the heartbeat fit; padding/guard bytes remain intact.
  for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
  for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
+ // The IRQ-only rows continue even when the normal writer is held.
+ busy=1;test_clock+=1000;boot_progress_irq(0xabc,0x3c5,0x123);
+ assert(myron_irq_pc==0xabc && myron_irq_psr==0x3c5 && myron_irq_sp==0x123);
+ assert(strstr(display.previous[25],"console=BUSY") && irq_refresh==seconds());
+ assert(mount_refresh!=seconds());busy=0;
+ myron_boot_progress_irq_return();assert(myron_irq_returns==1);
+ // A pending independent writer must drain before display handoff succeeds.
+ irq_busy=1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1 && !release_calls);
+ myron_boot_progress_fault("handoff pending",1,2,3,4);assert(!panic_claimed);
+ irq_busy=0;myron_boot_progress_cancel_scanout();assert(!scanout_state);
+ // A real early panic bypasses the stuck normal writer; nested panic preserves
+ // the first numeric fault record and does not recurse into display output.
+ busy=1;myron_boot_progress_fault("fatal test",0x100,0x200,0x96000004,0x300);
+ assert(panic_claimed && myron_panic_pc==0x100 && myron_panic_lr==0x200);
+ assert(myron_panic_esr==0x96000004 && myron_panic_far==0x300);
+ assert(strstr(display.previous[45],"fatal test") && strstr(display.previous[46],"00000100"));
+ myron_boot_progress_panic("nested %s",0x999);assert(myron_panic_pc==0x100);
+ assert(!myron_boot_progress_prepare_scanout());busy=0;
+ panic_claimed=0; // isolated test of the ordinary-panic path
+ myron_boot_progress_panic("ordinary format %s",0x444);
+ assert(myron_panic_pc==0x444 && !myron_panic_lr && !myron_panic_esr && !myron_panic_far);
+ assert(strstr(display.previous[45],"ordinary format %s"));
+ panic_claimed=0;display.bound=0;myron_boot_progress_panic("unbound",1);assert(!panic_claimed);display.bound=1;
+ // Fault rows preserve both frame guards and padded scanline bytes.
+ for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
+ for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
  // Release failure may retry; acknowledged scanout cannot resume console writes.
  release_result=-1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1);
  release_result=0;assert(myron_boot_progress_prepare_scanout());assert(scanout_state==2 && release_calls==2);
  unsigned char *saved=malloc(bytes);assert(saved);memcpy(saved,memory+32,bytes);
  myron_boot_progress_cancel_scanout();boot_progress_stage("userspace owns display");boot_progress_putc('\n');
  myron_mount_event(1,"scanout active","apfs",0,0);test_clock+=1000;boot_progress_irq(0,0,0);
+ myron_boot_progress_fault("scanout owns display",1,2,3,4);assert(!panic_claimed);
  assert(scanout_state==2 && !memcmp(saved,memory+32,bytes));
  boot_progress_exit(1,"launchd",9,3,0xdead);assert(myron_boot_progress_state.history_count>history);
  // Missing timer frequency must not turn the recorder or boot path off.
@@ -119,4 +146,4 @@ int main(void) {
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
-print('PASS persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+print('PASS lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

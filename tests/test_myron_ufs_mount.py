@@ -41,8 +41,8 @@ volatile uint64_t native_ufs_read_ticks,native_ufs_verify_ticks,native_ufs_verif
 volatile uint32_t native_ufs_integrity_failures;
 struct {const char *stage;uint32_t verify,result;} gRootDiagnostic;
 void rootDiagnosticFailure(const char *){}
-static unsigned events,completions;
-void event(unsigned s,const char *p,const char *n,uint64_t,uint64_t){assert((s==2||s==4)&&p&&n);++events;}
+static unsigned events,completions;static const char *last_request;
+void event(unsigned s,const char *p,const char *n,uint64_t,uint64_t){assert((s==2||s==4)&&p&&n);++events;if(s==4)last_request=p;}
 #define MYRON_UFS_EVENT(s,p,n,a,b) event(s,p,n,a,b)
 #define NATIVE_VERIFIED_BLOCK 1
 IOReturn hostRead4k(unsigned,uint64_t,uint32_t n,void *dst){if(fault==1)return kIOReturnIOError;memset(dst,0x5a,n*4096);return 0;}
@@ -83,11 +83,14 @@ int main(){
   unsigned before=completions;
   assert(dev.doAsyncReadWrite(&buf,0,8,nullptr,&cb)==0);
   assert(completions-before==(fault==0?2u:1u));assert(!dev.mutex.held);
+  assert(!strcmp(last_request,"request returned"));
   if(fault==2)for(auto v:buf.data)assert(v==0); // Never copy failed integrity blocks.
  }
  unsigned before=completions;IOMemoryDescriptor buf{};Context ctx{&dev,false,0,0};IOStorageCompletion cb{completed,&ctx,nullptr};
  assert(dev.doAsyncReadWrite(&buf,32,8,nullptr,&cb)==kIOReturnBadArgument);
+ assert(!strcmp(last_request,"argument rejected"));
  buf.direction=2;assert(dev.doAsyncReadWrite(&buf,0,8,nullptr,&cb)==kIOReturnNotWritable);
+ assert(!strcmp(last_request,"write refused"));
  assert(completions==before && events>0 && native_ufs_integrity_failures==1);
 }
 '''

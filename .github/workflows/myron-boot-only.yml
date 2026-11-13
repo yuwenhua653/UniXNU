@@ -1,0 +1,67 @@
+name: Myron firmware-only rebuild
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - myron27-boot-only.py
+      - tests/test_boot_only.py
+      - .github/workflows/myron-boot-only.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: myron-boot-only
+  cancel-in-progress: false
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ce869a1d7be7c845b1202777c05c3d61baf1a681
+          path: baseline-source
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: myron-ios27-boot-regression
+          run-id: '43349357896'
+          github-token: ${{ github.token }}
+          path: base-boot
+      - name: Install firmware and host-check tools only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
+          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+      - name: Reject incompatible source reuse and verify exact baseline
+        run: python3 tests/test_boot_only.py --baseline-source baseline-source --base base-boot -v
+      - name: Rebuild firmware without XNU or root-media compilation
+        run: |
+          python3 myron27-boot-only.py --baseline-source baseline-source --base base-boot \
+            --work "$RUNNER_TEMP/boot-only-work" --output "$RUNNER_TEMP/boot-only-output" \
+            --clang-bin /usr/lib/llvm-18/bin --qemu /usr/bin/qemu-system-aarch64
+      - name: Retain build logs and verification reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-boot-only-checks
+          path: |
+            ${{ runner.temp }}/boot-only-work/firmware/build.log
+            ${{ runner.temp }}/boot-only-work/firmware/firmware-verification.json
+            ${{ runner.temp }}/boot-only-work/root-handoff/report.json
+            ${{ runner.temp }}/boot-only-work/capsule-test/handoff-qemu.json
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-firmware-only-candidate
+          path: ${{ runner.temp }}/boot-only-output
+          if-no-files-found: error
+          retention-days: 7

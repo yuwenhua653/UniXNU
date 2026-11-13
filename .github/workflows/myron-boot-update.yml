@@ -1,0 +1,52 @@
+name: Myron boot-only update companion
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - myron-device-test/**
+      - .github/workflows/myron-boot-update.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Test install, boot-only update, failure paths and independent restore
+        run: python -m unittest discover -s myron-device-test -p "test_*.py" -v
+  package:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: myron-ios27-boot-regression
+          run-id: '43349357896'
+          github-token: ${{ github.token }}
+          path: boot-input
+      - name: Verify pinned release and assemble isolated boot-only companion
+        run: python myron-device-test/package_boot_update.py --input boot-input --output myron-ios27-boot-update-43349357896.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-boot-update-43349357896
+          path: myron-ios27-boot-update-43349357896.zip
+          if-no-files-found: error
+          retention-days: 7

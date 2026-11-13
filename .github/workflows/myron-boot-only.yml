@@ -3,6 +3,7 @@ on:
   push:
     branches: [codex/myron-iphone27]
     paths:
+      - myron27-storage-delta.json
       - myron27-boot-only.py
       - tests/test_boot_only.py
       - .github/workflows/myron-boot-only.yml
@@ -15,6 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   firmware:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Build myron device-bound iOS 27 package'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

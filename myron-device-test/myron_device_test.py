@@ -162,9 +162,8 @@ class Recovery:
     def read(self,path,offset,size):
         require(re.fullmatch(r'/dev/block/sd[a-z][1-9][0-9]*',path) is not None,'Invalid block read path')
         require(offset>=0 and offset%BLOCK==0 and 0<size<=CHUNK and size%BLOCK==0,'Invalid block read range')
-        data=self.call('exec-out','dd','if='+path,'bs=4096','skip='+str(offset//BLOCK),'count='+str(size//BLOCK),timeout=300)
-        require(len(data)==size,'Short/contaminated device read')
-        return data
+        return layout.read_blocks(lambda *args:self.call(*args,timeout=300),
+                                  path,offset//BLOCK,size//BLOCK)
 
     def write(self,target,offset,data,host_chunk):
         require(re.fullmatch(r'/dev/block/sda[1-9][0-9]*',target) is not None,'Only unixnu LUN0 writes allowed')

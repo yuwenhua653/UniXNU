@@ -126,6 +126,52 @@ class CommandTests(unittest.TestCase):
             self.assertFalse((Path(d)/'package').exists())
 
 
+class BinaryReadTests(unittest.TestCase):
+    def test_exact_bytes_preserved(self):
+        data=bytes(range(256))*16
+        self.assertEqual(t.layout.read_blocks(lambda *args:data,'/dev/block/sda',1,1),data)
+
+    def test_truncated_contaminated_and_failed_full_reads_rejected(self):
+        for data in (bytes(4095),bytes(4096)+b'1+0 records out\n',
+                     bytes(4096)+b'MYRON_READ_FAILED',b'MYRON_READ_FAILED'):
+            with self.subTest(size=len(data)),self.assertRaisesRegex(ValueError,'expected 4096 bytes'):
+                t.layout.read_blocks(lambda *args:data,'/dev/block/sda',1,1)
+
+    def test_invalid_arguments_never_execute(self):
+        for path,skip,count in [('/dev/block/sda;echo bad',0,1),('/dev/block/sda',-1,1),
+                                ('/dev/block/sda',0,16385),('/dev/block/sda',0,True)]:
+            with self.assertRaises(ValueError):
+                t.layout.read_blocks(lambda *args:self.fail('must not execute'),path,skip,count)
+
+    def test_boot_read_uses_clean_transport(self):
+        r=t.Recovery.__new__(t.Recovery)
+        with patch.object(r,'call',return_value=bytes(4096)) as call:
+            self.assertEqual(r.read('/dev/block/sde11',4096,4096),bytes(4096))
+            self.assertIn('2>/dev/null || printf MYRON_READ_FAILED',call.call_args.args[1])
+            self.assertEqual(call.call_args.kwargs,{'timeout':300})
+
+    def test_real_dd_with_merged_remote_streams(self):
+        import shlex,shutil,subprocess
+        if not shutil.which('sh') or not shutil.which('dd'):
+            self.skipTest('POSIX shell transport integration test')
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'disk.bin';data=bytes(range(256))*32;path.write_bytes(data)
+            def remote(*args):
+                self.assertEqual(args[0],'exec-out')
+                command=args[1].replace('/dev/block/sda',shlex.quote(str(path)))
+                return subprocess.run(['sh','-c',command],stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT,check=True).stdout
+            old=subprocess.run(['sh','-c','dd if='+shlex.quote(str(path))+' bs=4096 count=1'],
+                               stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=True).stdout
+            self.assertGreater(len(old),4096)
+            self.assertEqual(t.layout.read_blocks(remote,'/dev/block/sda',1,1),data[4096:])
+            with self.assertRaisesRegex(ValueError,'received 0 bytes'):
+                t.layout.read_blocks(remote,'/dev/block/sda',2,1)
+            path.unlink()
+            with self.assertRaisesRegex(ValueError,'dd_failed=True'):
+                t.layout.read_blocks(remote,'/dev/block/sda',0,1)
+
+
 class ArchiveTests(unittest.TestCase):
     def test_actual_unpack_and_hash_checks(self):
         import struct,zipfile

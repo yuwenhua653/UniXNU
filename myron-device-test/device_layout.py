@@ -209,6 +209,27 @@ def historical_geometry(directory,image_bytes,carrier_bytes):
     return allocate(layout,image_bytes,carrier_bytes),binding
 
 
+def read_blocks(call, path, skip, count):
+    """Read exact bytes through legacy exec-out without remote dd diagnostics.
+
+    exec-out can merge remote stderr into stdout before the host sees it.
+    Suppress stderr on the device, and append a failure marker on nonzero dd
+    status so even a full-length failed read cannot be accepted.
+    """
+    require(re.fullmatch(r'/dev/block/sda|/dev/block/sd[a-z][1-9][0-9]*',path) is not None,
+            'Invalid binary read path')
+    require(type(skip) is int and skip>=0 and type(count) is int and 1<=count<=16384,
+            'Invalid binary read range')
+    command=(f'dd if={path} bs=4096 skip={skip} count={count} '
+             '2>/dev/null || printf MYRON_READ_FAILED')
+    raw=call('exec-out',command)
+    require(len(raw)==count*BLOCK,
+            f'Short or contaminated device read: {path}, LBA {skip}, '
+            f'expected {count*BLOCK} bytes, received {len(raw)} bytes; '
+            f'dd_failed={raw.endswith(b"MYRON_READ_FAILED")}')
+    return raw
+
+
 def capture(adb, output, serial=None):
     """Only fixed read-only ADB commands, in an already-running root recovery."""
     output=Path(output).resolve();require(not output.exists(),'Use a new capture directory')
@@ -229,9 +250,7 @@ def capture(adb, output, serial=None):
     require(11<=disk_last<=0xffffffff,'Unsupported LUN0 capacity')
     def read(lba,count):
         require(1<=count<=4 and 0<=lba<=disk_last and count<=disk_last-lba+1,'Bounded GPT read exceeded')
-        raw=call('exec-out','dd','if=/dev/block/sda','bs=4096','skip='+str(lba),'count='+str(count))
-        require(len(raw)==count*BLOCK,'Short or contaminated GPT read')
-        return raw
+        return read_blocks(call,'/dev/block/sda',lba,count)
     primary=read(1,1);p=header(primary,1,disk_last)
     require(2<=p['table']<=64 and p['first']>=p['table']+p['blocks'],'Unsafe primary table range')
     backup=read(disk_last,1);b=header(backup,disk_last,1)

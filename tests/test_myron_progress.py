@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the actual recorder, including continued boot and framebuffer ownership."""
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -74,18 +75,38 @@ int main(void) {
  boot_progress_bind(UINTPTR_MAX-4096,1200,2608,4800,32);assert(!display.bound);
  boot_progress_bind(0xfffffff000000000ULL,1200,2608,4799,32);assert(!display.bound);
  // Use a real host buffer to execute rendering and preserve guard/padding bytes.
- size_t bytes=736*4*768;unsigned char *memory=malloc(bytes+64);assert(memory);
+ size_t bytes=736*4*1500;unsigned char *memory=malloc(bytes+64);assert(memory);
  memset(memory,0xa5,bytes+64);
- display.frame=(uintptr_t)(memory+32);display.width=720;display.height=768;
+ display.frame=(uintptr_t)(memory+32);display.width=720;display.height=1500;
  display.stride=736*4;display.scale=2;display.bound=1;
  bp_clear(&display);boot_progress_stage("draw test");
  for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
- for(size_t y=0;y<768;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
+ for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
+ // Root/VFS/transport/request facts survive history and console rollover.
+ myron_mount_event(0,"root returned","disk0s1",0x1000001,0);
+ myron_mount_event(1,"mount callback enter","apfs",0x1000001,0);
+ myron_mount_event(4,"request enter","OS",8192,8);
+ for(unsigned i=0;i<40;i++){boot_progress_stage("rolling stage");boot_progress_putc('\n');}
+ assert(!strcmp(myron_mount_slots[0].name,"disk0s1") && myron_mount_slots[0].a==0x1000001);
+ assert(!strcmp(myron_mount_slots[1].name,"apfs") && myron_mount_slots[1].b==0);
+ assert(!strcmp(myron_mount_slots[4].name,"OS") && myron_mount_slots[4].a==8192);
+ busy=1;myron_mount_event(1,"dropped","",0,0);busy=0;
+ assert(myron_mount_dropped==1 && !strcmp(myron_mount_slots[1].phase,"mount callback enter"));
+ char long_name[1000];memset(long_name,'X',sizeof(long_name));long_name[999]=0;
+ myron_mount_event(2,"copy returned",long_name,4096,4096);
+ assert(strlen(myron_mount_slots[2].name)==BP_COLS-1);
+ myron_mount_event(100,"invalid","",0,0);assert(myron_mount_dropped==1);
+ test_clock+=1000;boot_progress_irq(0,0,0);assert(mount_refresh==seconds());
+ unsigned refresh=mount_refresh;boot_progress_irq(0,0,0);assert(mount_refresh==refresh);
+ // All five rows and the heartbeat fit; padding/guard bytes remain intact.
+ for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
+ for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
  // Release failure may retry; acknowledged scanout cannot resume console writes.
  release_result=-1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1);
  release_result=0;assert(myron_boot_progress_prepare_scanout());assert(scanout_state==2 && release_calls==2);
  unsigned char *saved=malloc(bytes);assert(saved);memcpy(saved,memory+32,bytes);
  myron_boot_progress_cancel_scanout();boot_progress_stage("userspace owns display");boot_progress_putc('\n');
+ myron_mount_event(1,"scanout active","apfs",0,0);test_clock+=1000;boot_progress_irq(0,0,0);
  assert(scanout_state==2 && !memcmp(saved,memory+32,bytes));
  boot_progress_exit(1,"launchd",9,3,0xdead);assert(myron_boot_progress_state.history_count>history);
  // Missing timer frequency must not turn the recorder or boot path off.
@@ -95,7 +116,7 @@ int main(void) {
 }
 '''
     (root/'test.c').write_text(test)
-    subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1',
+    subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
-    subprocess.run([str(root/'test')],check=True)
-print('PASS continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+    subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
+print('PASS persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

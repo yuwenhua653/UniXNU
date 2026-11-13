@@ -44,7 +44,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('loader-host-memory.log',[sys.executable,str(d/'tests/test_loader_boot.py'),
+  checks=[('mount-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_mount_patch.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
+   ('loader-host-memory.log',[sys.executable,str(d/'tests/test_loader_boot.py'),
    '--edk2',str(root/'references/loader-basecore'),'--upstream',str(u),
    '--staged',str(qualification/'loader-source'),'--out',str(qualification/'loader-host-compile'),
    '--cc','clang','--memory-preflight']),
@@ -142,6 +144,7 @@ allowed={
  'device/myron27/scripts/build-myron-progress.py',
  'device/myron27/patches/xnu/series',
  'device/myron27/patches/xnu/myron-early-progress.patch',
+ 'device/myron27/patches/xnu/myron-root-mount-progress.patch',
  'device/myron27/package/MyronBootProgress.c',
  'device/myron27/package/BootProgressCore.h',
  'device/myron27/package/BootProgressDisplay.h',
@@ -322,4 +325,5 @@ shutil.copyfile(root/'qualification/firmware-tools/report.json',root/'reports/fi
 print('PASS full firmware compile/unpack and PAC preflight before native build',flush=True)
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
+
 

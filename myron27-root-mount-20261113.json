@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-13",
+  "base_commit": "c8622c318f51bf7c5dc591d41e40ea32887aeab1",
+  "device_observation": {
+    "title": "CONTINUOUS XNU BOOT",
+    "last_stage": "vfs_mountroot enter",
+    "panic_visible": false,
+    "root_mount_confirmed": false,
+    "desktop_confirmed": false
+  },
+  "interpretation": "setconf returned before the observed vfs_mountroot call; selection may still be the explicit fallback. No diagnosis from NVRAM warning alone.",
+  "change": "Persistent root, VFS, UFS, host-command and request events, with IRQ/time refresh; continuous execution and cached software values only.",
+  "control_flow": "No mount result, root authentication, UFS error, integrity, completion, retry/reset or disk layout policy changed.",
+  "validation": [
+    "actual selected XNU patch series applied; stripped instrumentation preserves mount/selection source exactly",
+    "recorder ASan/UBSan: history rollover, dropped reentry, long names, IRQ rate, framebuffer guards and scanout stop",
+    "staged production UFS request ASan/UBSan: nested completion outside lock; read, integrity and short-copy failures; writes refused",
+    "pinned production RootCommands (observer enabled), RootWindowRead, RootPublication and TransferPoll ASan/UBSan passed"
+  ],
+  "limitation": "Observations are last software events, not an atomic hardware or per-thread snapshot. Actual card stall cause is not yet established. Full native ABI/build and phone results remain pending.",
+  "delta_sha256": "04eac35fce15abe788a74f2fef7513c65504d2e291ccc20cc9e9af296b675d86",
+  "changed_source_paths": [
+    "device/myron27/MyronStorageBoot.cpp",
+    "device/myron27/prepare_ufs_transport.py",
+    "device/myron27/verify_native_artifact.py",
+    "device/myron27/patches/xnu/series",
+    "device/myron27/patches/xnu/myron-early-progress.patch",
+    "device/myron27/package/MyronBootProgress.c",
+    "device/myron27/patches/xnu/myron-root-mount-progress.patch"
+  ]
+}

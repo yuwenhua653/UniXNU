@@ -108,12 +108,38 @@ jobs:
         with:
           name: verified-device-inputs
           path: ${{ runner.temp }}
+      - name: Check authenticated public-header access before build setup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import json, os, urllib.request
+          sources = (
+              ('iokit/DriverKit', 'xnu-10063.121.3'),
+              ('iokit/DriverKit/crypto', 'xnu-10063.121.3'),
+              ('EXTERNAL_HEADERS/TrustCache', 'xnu-8796.101.5'),
+          )
+          for path, tag in sources:
+              url = f'https://api.github.com/repos/apple-oss-distributions/xnu/contents/{path}?ref={tag}'
+              request = urllib.request.Request(url, headers={
+                  'User-Agent': 'myron-public-header-preflight',
+                  'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
+              })
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  entries = json.load(response)
+              assert isinstance(entries, list) and any(
+                  e.get('type') == 'file' and e.get('name', '').endswith('.h')
+                  and e.get('sha') for e in entries), f'Header inventory missing: {path}'
+              print(f'PASS public header access: {path} at {tag}')
       - name: Install build dependencies
         run: |
           python3 -m pip install capstone==5.0.6
           brew install cmake ninja llvm lld unifdef dtc mtools openssl@3 blacktop/tap/ipsw
       - name: Build and export exact device package
         env:
+          # The pinned public-header fetcher already supports authenticated GitHub requests.
+          # This job retains contents: read; do not expose this token as a command argument.
+          GITHUB_TOKEN: ${{ github.token }}
           MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}
         run: python3 myron27-device-build.py --input-archive "$RUNNER_TEMP/device-inputs.zip"
       - name: Check retained root compatibility and prepare boot-only candidate

@@ -1,0 +1,233 @@
+{
+  "result": "passed",
+  "commit": "a683d8d08af683aea0e7175cc2ca02acbb71d8a3",
+  "run": 43366081203,
+  "build_elapsed_seconds": 79.5,
+  "kernel_recompiled": false,
+  "root_media_rebuilt": false,
+  "probe": {
+    "result": "passed",
+    "input_sha256": "8c1dca686c9a99126402e59b1e5e553beb88abe4dbcf2d2a40b335bfc4e97718",
+    "output_sha256": "bbbffd7a7550aad8d60545326d29285fe73045cec175871159a4ac52581fd3de",
+    "bytes": 82771968,
+    "entry": "0xfffffff00a3a1488",
+    "c_entry": "0xfffffff00aa744e4",
+    "cave": "0xfffffff00a3a1500",
+    "observer_bytes": 1032,
+    "source_sha256": "8feceaf72014a6ddbc052b3c4c75b96cc71a4765803733e7d48fa2e36c0a3e0f",
+    "labels": {
+      "$x.0": "0xfffffff00a3a1500",
+      "EntryMark": "0xfffffff00a3a150c",
+      "Render": "0xfffffff00a3a1748",
+      "LowMark": "0xfffffff00a3a155c",
+      "LowResume": "0xfffffff00a3a15ac",
+      "TablesMark": "0xfffffff00a3a15b4",
+      "TablesResume": "0xfffffff00a3a1604",
+      "KeysMark": "0xfffffff00a3a160c",
+      "KeysResume": "0xfffffff00a3a165c",
+      "MmuMark": "0xfffffff00a3a1664",
+      "MmuResume": "0xfffffff00a3a16b4",
+      "CPhysical": "0xfffffff00a3a16cc",
+      "Digit": "0xfffffff00a3a1764",
+      "Font": "0xfffffff00a3a180c",
+      "Row": "0xfffffff00a3a177c",
+      "Column": "0xfffffff00a3a1784",
+      "$d.1": "0xfffffff00a3a180c",
+      "ProbeEntry": "0xfffffff00a3a1500",
+      "Context": "0xfffffff00a3a1880",
+      "start_first_cpu": "0xfffffff00a3a305c",
+      "low_continue": "0xfffffff00a3a307c",
+      "tables_continue": "0xfffffff00a3a3294",
+      "keys_continue": "0xfffffff00a3a33cc",
+      "mmu_continue": "0xfffffff00a3a341c",
+      "CStop": "0xfffffff00a3a16bc",
+      "ProbePark": "0xfffffff00a3a1708",
+      "LowFault": "0xfffffff00a3a1714"
+    },
+    "changes": [
+      {
+        "va": "0xfffffff00a3a1488",
+        "before": "0x140006f5",
+        "after": "0x1400001e",
+        "target": "ProbeEntry"
+      },
+      {
+        "va": "0xfffffff00a3a3078",
+        "before": "0xf9400696",
+        "after": "0x17fff939",
+        "target": "LowMark"
+      },
+      {
+        "va": "0xfffffff00a3a3290",
+        "before": "0xd5033b9f",
+        "after": "0x17fff8c9",
+        "target": "TablesMark"
+      },
+      {
+        "va": "0xfffffff00a3a33c8",
+        "before": "0xa9400c02",
+        "after": "0x17fff891",
+        "target": "KeysMark"
+      },
+      {
+        "va": "0xfffffff00a3a3418",
+        "before": "0xd5181000",
+        "after": "0x17fff893",
+        "target": "MmuMark"
+      },
+      {
+        "va": "0xfffffff00aa744e4",
+        "before": "0xd503237f",
+        "after": "0x17e4b476",
+        "target": "CStop"
+      },
+      {
+        "va": "0xfffffff00a3a2000",
+        "before": "0x14000000",
+        "after": "0x17fffdc5",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2080",
+        "before": "0x14000000",
+        "after": "0x17fffda5",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2100",
+        "before": "0x14000000",
+        "after": "0x17fffd85",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2180",
+        "before": "0x14000000",
+        "after": "0x17fffd65",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2200",
+        "before": "0x14000000",
+        "after": "0x17fffd45",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2280",
+        "before": "0x14000000",
+        "after": "0x17fffd25",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2300",
+        "before": "0x14000000",
+        "after": "0x17fffd05",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2380",
+        "before": "0x14000000",
+        "after": "0x17fffce5",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2400",
+        "before": "0x14000000",
+        "after": "0x17fffcc5",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2480",
+        "before": "0x14000000",
+        "after": "0x17fffca5",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2500",
+        "before": "0x14000000",
+        "after": "0x17fffc85",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2580",
+        "before": "0x14000000",
+        "after": "0x17fffc65",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2600",
+        "before": "0x14000000",
+        "after": "0x17fffc45",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2680",
+        "before": "0x14000000",
+        "after": "0x17fffc25",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2700",
+        "before": "0x14000000",
+        "after": "0x17fffc05",
+        "target": "LowFault"
+      },
+      {
+        "va": "0xfffffff00a3a2780",
+        "before": "0x14000000",
+        "after": "0x17fffbe5",
+        "target": "LowFault"
+      }
+    ],
+    "phase_meanings": {
+      "2710": "Actual XNU entry",
+      "2711": "Low vectors installed; boot arguments next",
+      "2712": "Bootstrap page tables constructed",
+      "2713": "Kernel PAC keys about to be installed",
+      "2714": "About to enable MMU",
+      "2716": "C entry reached; intentional terminal stop",
+      "27EE": "Low exception caught; terminal stop"
+    },
+    "first_c_prologue_executed": false,
+    "terminal_stop": true,
+    "automatic_reset": false,
+    "phone_tested": false
+  },
+  "qemu": {
+    "result": "passed",
+    "kernel_sha256": "bbbffd7a7550aad8d60545326d29285fe73045cec175871159a4ac52581fd3de",
+    "cases": [
+      {
+        "name": "prefix",
+        "result": "passed",
+        "phase": "0x2716",
+        "pc": "0x8c33a1710",
+        "rendered_phase_checked": true
+      },
+      {
+        "name": "undefined_before_tables",
+        "result": "passed",
+        "phase": "0x27ee",
+        "pc": "0x8c33a1710",
+        "rendered_phase_checked": true
+      }
+    ],
+    "actual_xnu_prefix_executed": true,
+    "pac_hooks": false,
+    "instruction_hooks": false,
+    "first_c_prologue_executed": false,
+    "boot_args_synthetic": true,
+    "phone_tested": false,
+    "desktop_reached": false
+  },
+  "firmware_modules": 35,
+  "host_handoff_scenarios": 79,
+  "packaged_helper_guard_tests": 33,
+  "package": {
+    "file": "myron-ios27-xnu-entry-43366081203.zip",
+    "bytes": 27355502,
+    "sha256": "1525ee2ffb527696f98c70f4253ff64238ca2146e2d20c4954b929407f74a5a2"
+  },
+  "boot_sha256": "0be0196bb202f168b98024e64b5ee372526a04680912c6efe1b65311f834ea3f",
+  "phone_tested": false,
+  "desktop_reached": false
+}

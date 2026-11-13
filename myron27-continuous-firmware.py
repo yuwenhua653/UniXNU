@@ -50,7 +50,7 @@ subprocess.run([sys.executable,str(repo/'myron27-build.py'),'--source-only'],env
 device=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27/device/myron27';sys.path.insert(0,str(device))
 from prepare_firmware_source import prepare
 from prepare_loader import prepare as loader
-from build_ufs_dormant import macho
+from myron_continuous_contract import kernel_definitions
 up=a.work/'upstream'
 bp.checkout('https://github.com/UniXNU/UniXNU.git','04573c510c5fd4892ca6948739389141cc9e05f5',up)
 bp.checkout('https://github.com/UniXNU/DarwinBoot.git','3c75734014cdab0acd9541e88057b7606ee7ae08',up/'drivers/DarwinBoot')
@@ -59,9 +59,9 @@ def read(name):return subprocess.check_output(['mtype','-i',str(payload/'payload
 hashes=r['embedded_files']
 need(set(hashes)=={'EFI/UniXNU/Payloads/'+n for n in ('kernel.macho','kernel.macho.adt','kernel.macho.trustcache','scratch-data.img')},'Unexpected payload inventory')
 for name,digest in hashes.items():need(sha(read(name[len('EFI/UniXNU/'):]))==digest,'Embedded file mismatch '+name)
-kernel=read('Payloads/kernel.macho');info=macho(kernel,12)
+kernel=read('Payloads/kernel.macho');definitions=kernel_definitions(kernel)
 required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_boot_progress_putc','_myron_boot_progress_state'}
-need(required<=info['defined'].keys(),'Continuous recorder missing from final prelinked kernel')
+need(required<=definitions.keys(),'Continuous recorder missing from final prelinked kernel')
 need(b'MYRON iOS27 - CONTINUOUS XNU BOOT' in kernel,'Wrong final recorder implementation')
 menu=tomllib.loads(read('unixnu.toml').decode());entries=[e for e in menu['entry'] if e['id']==menu['boot']['default']]
 need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']==0,'Manual menu policy changed')

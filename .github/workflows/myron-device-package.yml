@@ -18,6 +18,38 @@ concurrency:
   group: myron-device-package
   cancel-in-progress: false
 jobs:
+  handoff:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install capsule test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld qemu-system-arm
+          python3 -m pip install pyelftools==0.32
+      - name: Reconstruct and execute exact capsule before the native build
+        run: |
+          python3 myron27-build.py --source-only
+          git init "$RUNNER_TEMP/loader-headers"
+          git -C "$RUNNER_TEMP/loader-headers" fetch --depth 1 https://github.com/microsoft/mu_basecore.git cfb93724a06ff86ff5ba971413368a7809ee42a5
+          git -C "$RUNNER_TEMP/loader-headers" checkout --detach FETCH_HEAD
+          python3 "$RUNNER_TEMP/myron-iphone27/device/myron27/tests/test_handoff_qemu.py" \
+            --clang /usr/bin/clang --qemu /usr/bin/qemu-system-aarch64 \
+            --edk2 "$RUNNER_TEMP/loader-headers" --out "$RUNNER_TEMP/handoff-check"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: myron-handoff-regression-check
+          path: ${{ runner.temp }}/handoff-check
+          if-no-files-found: warn
+          retention-days: 7
   inputs:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
     # Draft release assets require push access. This job only downloads and
@@ -54,7 +86,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/myron-private-inputs"
           rm -f "$RUNNER_TEMP/device-inputs.zip"
   package:
-    needs: inputs
+    needs: [inputs, handoff]
     permissions:
       contents: read
     runs-on: macos-26
@@ -85,6 +117,35 @@ jobs:
         with:
           name: myron-ios27-device-root-package
           path: ${{ runner.temp }}/myron-private-native/device-package
+          if-no-files-found: error
+          retention-days: 7
+      - name: Check retained root compatibility and prepare boot-only candidate
+        shell: python
+        run: |
+          import hashlib, json, os, shutil
+          from pathlib import Path
+          package = Path(os.environ['RUNNER_TEMP'])/'myron-private-native/device-package'
+          manifest = json.loads((package/'deployment.json').read_text())
+          root = manifest['files']['root-container.raw']
+          assert root['bytes'] == 15092154368
+          assert root['sha256'] == '7d3b1200d14e4f27f12ef1680184033b0f95035475635f57c5b4130c28cdb81c'
+          out = Path(os.environ['RUNNER_TEMP'])/'boot-regression'
+          out.mkdir()
+          for name in ('root-startup.img', 'deployment.json'):
+              shutil.copyfile(package/name, out/name)
+          image = out/'root-startup.img'
+          assert hashlib.sha256(image.read_bytes()).hexdigest() == manifest['files'][image.name]['sha256']
+          (out/'README.txt').write_text(
+              'Diagnostic candidate only; phone boot is not verified.\n'
+              'Root image identity matches installed build 43165530177.\n'
+              'Do not replace package/state metadata or manually flash this image.\n'
+              'A checked boot-update companion must bind the existing backup and installation receipt first.\n'
+              'Phases: 2700 cache sweep, 2701 key access, 2702 EL1 PAC, 2703 EL0/SVC, 2704 pre-XNU branch.\n'
+              '2704 is not evidence that XNU executed.\n')
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-boot-regression
+          path: ${{ runner.temp }}/boot-regression
           if-no-files-found: error
           retention-days: 7
       - name: Remove private build inputs

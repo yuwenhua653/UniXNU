@@ -137,6 +137,15 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/configs/myron27_defconfig',
+ 'device/myron27/verify_native_artifact.py',
+ 'device/myron27/scripts/build-myron-progress.py',
+ 'device/myron27/patches/xnu/series',
+ 'device/myron27/patches/xnu/myron-early-progress.patch',
+ 'device/myron27/package/MyronBootProgress.c',
+ 'device/myron27/package/BootProgressCore.h',
+ 'device/myron27/package/BootProgressDisplay.h',
+ 'device/myron27/package/Font.h',
  'device/myron27/device_inputs.py',
  'device/myron27/prepare_root_deployment.py',
  'device/myron27/owner_request.py',

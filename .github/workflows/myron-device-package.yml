@@ -37,6 +37,7 @@ jobs:
       - name: Reconstruct and execute exact capsule before the native build
         run: |
           python3 myron27-build.py --source-only
+          python3 tests/test_myron_progress.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang --target-cc clang
           python3 tests/test_myron_bds.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang
           python3 -m unittest discover -s "$RUNNER_TEMP/myron-iphone27/device/myron27/tests" -p test_root_firmware.py -v
           git init "$RUNNER_TEMP/loader-headers"
@@ -114,13 +115,6 @@ jobs:
         env:
           MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}
         run: python3 myron27-device-build.py --input-archive "$RUNNER_TEMP/device-inputs.zip"
-      - name: Preserve verified device package only
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: myron-ios27-device-root-package
-          path: ${{ runner.temp }}/myron-private-native/device-package
-          if-no-files-found: error
-          retention-days: 7
       - name: Check retained root compatibility and prepare boot-only candidate
         shell: python
         run: |
@@ -137,8 +131,13 @@ jobs:
               shutil.copyfile(package/name, out/name)
           image = out/'root-startup.img'
           assert hashlib.sha256(image.read_bytes()).hexdigest() == manifest['files'][image.name]['sha256']
+          (out/'producer.json').write_text(json.dumps(dict(
+              source_commit=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
+              source_delta_sha256=hashlib.sha256(Path('myron27-storage-delta.json').read_bytes()).hexdigest(),
+              manifest_sha256=hashlib.sha256((out/'deployment.json').read_bytes()).hexdigest(),
+              boot_sha256=hashlib.sha256(image.read_bytes()).hexdigest()), indent=2)+'\n')
           (out/'README.txt').write_text(
-              'Diagnostic candidate only; phone boot is not verified.\n'
+              'Intermediate native payload only. Wait for the Linux firmware job.\n'
               'Root image identity matches installed build 43165530177.\n'
               'Do not replace package/state metadata or manually flash this image.\n'
               'A checked boot-update companion must bind the existing backup and installation receipt first.\n'
@@ -147,12 +146,74 @@ jobs:
               '2704 is not evidence that XNU executed.\n')
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: myron-ios27-boot-regression
+          name: myron-ios27-native-continuous-input
           path: ${{ runner.temp }}/boot-regression
           if-no-files-found: error
+          retention-days: 7
+      - name: Preserve native failure details and recorder ABI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-continuous-native-checks
+          path: |
+            ${{ runner.temp }}/myron-iphone27/out/**/logs/*.log
+            ${{ runner.temp }}/myron-iphone27/out/**/build/myron-progress/build-report.json
+            ${{ runner.temp }}/myron-iphone27/reports/*.log
+            ${{ runner.temp }}/myron-private-native/**/desktop-integration.json
+            ${{ runner.temp }}/myron-private-native/**/native-link.log
+            ${{ runner.temp }}/myron-private-native/**/*compile.log
+            ${{ runner.temp }}/myron-private-native/**/*preflight.log
+          if-no-files-found: warn
           retention-days: 7
       - name: Remove private build inputs
         if: always()
         run: |
           rm -rf "$RUNNER_TEMP/myron-private-inputs"
           rm -f "$RUNNER_TEMP/myron-device-session.json" "$RUNNER_TEMP/device-inputs.zip"
+
+  linux-firmware:
+    needs: package
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: myron-ios27-native-continuous-input
+          path: native-input
+      - name: Install phone-tested firmware compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
+          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+      - name: Automatically assemble continuous kernel with Linux firmware
+        run: |
+          python3 myron27-continuous-firmware.py --base native-input \
+            --work "$RUNNER_TEMP/continuous-work" --output "$RUNNER_TEMP/continuous-output" \
+            --clang-bin /usr/lib/llvm-18/bin --qemu /usr/bin/qemu-system-aarch64
+      - name: Preserve final firmware checks
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-continuous-firmware-checks
+          path: |
+            ${{ runner.temp }}/continuous-work/firmware/build.log
+            ${{ runner.temp }}/continuous-work/firmware/firmware-verification.json
+            ${{ runner.temp }}/continuous-work/root-handoff/report.json
+            ${{ runner.temp }}/continuous-work/capsule-test/handoff-qemu.json
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-continuous-candidate
+          path: ${{ runner.temp }}/continuous-output
+          if-no-files-found: error
+          retention-days: 7

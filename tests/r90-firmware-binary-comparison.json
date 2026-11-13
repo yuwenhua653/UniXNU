@@ -1,0 +1,730 @@
+{
+  "format": 1,
+  "old_boot_sha256": "8362b828b04c78ad076fe490490650679466933f955cbb03e39e9434e203a6ca",
+  "old_package": "myron-r90-keystore-test",
+  "old_package_phone_tested": false,
+  "mac_run": 43349357896,
+  "linux_run": 43361559288,
+  "linux_boot_sha256": "ecbd5ae2af2fa94c2cb6fa3bb37d2616667f6ceab5b8f0111f2beeeec8e0a8be",
+  "linux_whole_module_matches": 31,
+  "mac_whole_module_matches": 0,
+  "module_count": 35,
+  "interpretation": "Binary comparison only; compiler causality and phone boot remain unproven.",
+  "sections": [
+    {
+      "name": "DxeCore",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "PcdDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "ReportStatusCodeRouterRuntimeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "StatusCodeHandlerRuntimeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "RuntimeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "ArmCpuDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "MyronGicDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "MetronomeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "ArmTimerDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "ResetSystemRuntimeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "WatchdogTimer",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "SecurityStubDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "VariableRuntimeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "CapsuleRuntimeDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "EmbeddedMonotonicCounter",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "RealTimeClock",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "DevicePathDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "DiskIoDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "PartitionDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "EnglishDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "Fat",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "HiiDatabase",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "PrintDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "MyronFdtGopDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "MyronKeysDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "ConPlatformDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "ConSplitterDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "GraphicsConsoleDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "BdsDxe",
+      "linux_equals_old": false,
+      "mac_equals_old": false,
+      "linux_text_equals_old": false,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": [
+        ".reloc",
+        ".text",
+        ".data",
+        ".pdata"
+      ]
+    },
+    {
+      "name": "Sec",
+      "linux_equals_old": false,
+      "mac_equals_old": false,
+      "linux_text_equals_old": null,
+      "mac_text_equals_old": null,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "UniXNU",
+      "linux_equals_old": false,
+      "mac_equals_old": false,
+      "linux_text_equals_old": false,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": [
+        ".text"
+      ]
+    },
+    {
+      "name": "UniXNUDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "UniXNURamDiskDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "AdvancedLogDxe",
+      "linux_equals_old": true,
+      "mac_equals_old": false,
+      "linux_text_equals_old": true,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": []
+    },
+    {
+      "name": "DarwinBoot",
+      "linux_equals_old": false,
+      "mac_equals_old": false,
+      "linux_text_equals_old": false,
+      "mac_text_equals_old": false,
+      "changed_linux_sections": [
+        ".text",
+        ".data",
+        ".pdata"
+      ]
+    }
+  ],
+  "linux_hashes": [
+    {
+      "name": "DxeCore",
+      "old_sha256": "fb769b435b136aed4fc35e781ee561d23bd87749cf0d1f38c76f988f7eb4953d",
+      "new_sha256": "fb769b435b136aed4fc35e781ee561d23bd87749cf0d1f38c76f988f7eb4953d",
+      "same": true
+    },
+    {
+      "name": "PcdDxe",
+      "old_sha256": "a106a9567da4b14a793c432c70b36cf8fd90642613601a14e530c4256cb54581",
+      "new_sha256": "a106a9567da4b14a793c432c70b36cf8fd90642613601a14e530c4256cb54581",
+      "same": true
+    },
+    {
+      "name": "ReportStatusCodeRouterRuntimeDxe",
+      "old_sha256": "f8cb8bf1bdfd79f6797ece5af16280ccc50410f60fff44082087b2845dfae9f7",
+      "new_sha256": "f8cb8bf1bdfd79f6797ece5af16280ccc50410f60fff44082087b2845dfae9f7",
+      "same": true
+    },
+    {
+      "name": "StatusCodeHandlerRuntimeDxe",
+      "old_sha256": "748b4bf371d8a13d6ac07952424549f4155f60f01cdd9177c063d8f3abd10d41",
+      "new_sha256": "748b4bf371d8a13d6ac07952424549f4155f60f01cdd9177c063d8f3abd10d41",
+      "same": true
+    },
+    {
+      "name": "RuntimeDxe",
+      "old_sha256": "d398bde44f807ad4dba289c7cd290a8a772af29fb6b7e620d7bd1fbdff40e756",
+      "new_sha256": "d398bde44f807ad4dba289c7cd290a8a772af29fb6b7e620d7bd1fbdff40e756",
+      "same": true
+    },
+    {
+      "name": "ArmCpuDxe",
+      "old_sha256": "66867c74ca4edc31994723a8f12fa7ff5fbb8dbbfa1f614bab0cfd20770b47f2",
+      "new_sha256": "66867c74ca4edc31994723a8f12fa7ff5fbb8dbbfa1f614bab0cfd20770b47f2",
+      "same": true
+    },
+    {
+      "name": "MyronGicDxe",
+      "old_sha256": "c6e40c3a136896bd2b3a5f078b151aa3ba201d3680f9420a6dba6c3d76b6e4b6",
+      "new_sha256": "c6e40c3a136896bd2b3a5f078b151aa3ba201d3680f9420a6dba6c3d76b6e4b6",
+      "same": true
+    },
+    {
+      "name": "MetronomeDxe",
+      "old_sha256": "b162b8dfcb090ff4445440b4b3f204b16c5eed24eb419a40425cabf1f4e0bc22",
+      "new_sha256": "b162b8dfcb090ff4445440b4b3f204b16c5eed24eb419a40425cabf1f4e0bc22",
+      "same": true
+    },
+    {
+      "name": "ArmTimerDxe",
+      "old_sha256": "7662cfb374676b36ff012cdc28016ff1b49d6519f654fd7e52afa7e2bb23996d",
+      "new_sha256": "7662cfb374676b36ff012cdc28016ff1b49d6519f654fd7e52afa7e2bb23996d",
+      "same": true
+    },
+    {
+      "name": "ResetSystemRuntimeDxe",
+      "old_sha256": "10395ae0a22aa5034067ce178db50473687530b2df4b9fd71dd6fd35ab39e5b3",
+      "new_sha256": "10395ae0a22aa5034067ce178db50473687530b2df4b9fd71dd6fd35ab39e5b3",
+      "same": true
+    },
+    {
+      "name": "WatchdogTimer",
+      "old_sha256": "186f7b47b189708ea785c17c21f8c6352db7dfbc344f057727f4a4e4d9a5e420",
+      "new_sha256": "186f7b47b189708ea785c17c21f8c6352db7dfbc344f057727f4a4e4d9a5e420",
+      "same": true
+    },
+    {
+      "name": "SecurityStubDxe",
+      "old_sha256": "30c4c7729405346151c5fe684f4e5ad30785aae31d33dacf2de3fadabe8eda4f",
+      "new_sha256": "30c4c7729405346151c5fe684f4e5ad30785aae31d33dacf2de3fadabe8eda4f",
+      "same": true
+    },
+    {
+      "name": "VariableRuntimeDxe",
+      "old_sha256": "bdeff549741e1378360a0b7aaf6b905e563ddab02ba0bb3b5af358979eb08416",
+      "new_sha256": "bdeff549741e1378360a0b7aaf6b905e563ddab02ba0bb3b5af358979eb08416",
+      "same": true
+    },
+    {
+      "name": "CapsuleRuntimeDxe",
+      "old_sha256": "a0b793a6f821b5a0f128887e2e697f1704aebfc60d0f0e818a76ed20fc2ec79b",
+      "new_sha256": "a0b793a6f821b5a0f128887e2e697f1704aebfc60d0f0e818a76ed20fc2ec79b",
+      "same": true
+    },
+    {
+      "name": "EmbeddedMonotonicCounter",
+      "old_sha256": "0102db4c73c69eb1cf2d82a9e60816da9b7bdedda808b6127df5ccdb5e9dc0fa",
+      "new_sha256": "0102db4c73c69eb1cf2d82a9e60816da9b7bdedda808b6127df5ccdb5e9dc0fa",
+      "same": true
+    },
+    {
+      "name": "RealTimeClock",
+      "old_sha256": "abc5018168093ea252eda8e24020aebd9dd78f994866819ecad0f7c6f7ab5ef9",
+      "new_sha256": "abc5018168093ea252eda8e24020aebd9dd78f994866819ecad0f7c6f7ab5ef9",
+      "same": true
+    },
+    {
+      "name": "DevicePathDxe",
+      "old_sha256": "7f6dfe85274c76c5a36999fd9095f551430ac00e41861a3496d4a149230ca723",
+      "new_sha256": "7f6dfe85274c76c5a36999fd9095f551430ac00e41861a3496d4a149230ca723",
+      "same": true
+    },
+    {
+      "name": "DiskIoDxe",
+      "old_sha256": "48fbd86b3ed9ca978b845707a7b0a1e442365805f56adae9b4936bc9c6b4fdf2",
+      "new_sha256": "48fbd86b3ed9ca978b845707a7b0a1e442365805f56adae9b4936bc9c6b4fdf2",
+      "same": true
+    },
+    {
+      "name": "PartitionDxe",
+      "old_sha256": "8691a16808f3fe32b47ac33bc151372f446651169a893eeef8ffb715266d46a8",
+      "new_sha256": "8691a16808f3fe32b47ac33bc151372f446651169a893eeef8ffb715266d46a8",
+      "same": true
+    },
+    {
+      "name": "EnglishDxe",
+      "old_sha256": "ab62a1f762ee715064e3ec214e98bd8129f39028f089970657b77e56d7dce76a",
+      "new_sha256": "ab62a1f762ee715064e3ec214e98bd8129f39028f089970657b77e56d7dce76a",
+      "same": true
+    },
+    {
+      "name": "Fat",
+      "old_sha256": "6c712bbe49d051874d6b5be512f61b99b7d88c755b96ec83e53ccd7467dcd574",
+      "new_sha256": "6c712bbe49d051874d6b5be512f61b99b7d88c755b96ec83e53ccd7467dcd574",
+      "same": true
+    },
+    {
+      "name": "HiiDatabase",
+      "old_sha256": "ca30b5e0140bb9e581fb54e767bf2bea3cfaabb799f4c22a66d5e7db4e4b1abd",
+      "new_sha256": "ca30b5e0140bb9e581fb54e767bf2bea3cfaabb799f4c22a66d5e7db4e4b1abd",
+      "same": true
+    },
+    {
+      "name": "PrintDxe",
+      "old_sha256": "b0e33855ec01d480d6d0c527c7dd8a6f84004fd011df276352ed1ca2ec70fcc7",
+      "new_sha256": "b0e33855ec01d480d6d0c527c7dd8a6f84004fd011df276352ed1ca2ec70fcc7",
+      "same": true
+    },
+    {
+      "name": "MyronFdtGopDxe",
+      "old_sha256": "cced1709ec4e13c6d2070fd3d89e6789a42605da5564acc0a95add7d1eb43107",
+      "new_sha256": "cced1709ec4e13c6d2070fd3d89e6789a42605da5564acc0a95add7d1eb43107",
+      "same": true
+    },
+    {
+      "name": "MyronKeysDxe",
+      "old_sha256": "6f0f4f9a3015d3c2b640e410135fcc3855fb5217c40a107c084b28a87c4705bf",
+      "new_sha256": "6f0f4f9a3015d3c2b640e410135fcc3855fb5217c40a107c084b28a87c4705bf",
+      "same": true
+    },
+    {
+      "name": "ConPlatformDxe",
+      "old_sha256": "1a73529303bbd00381dda2ec0a95e33696963518540e80ca72c1b0876d942c4f",
+      "new_sha256": "1a73529303bbd00381dda2ec0a95e33696963518540e80ca72c1b0876d942c4f",
+      "same": true
+    },
+    {
+      "name": "ConSplitterDxe",
+      "old_sha256": "f92f45b575bf30b3428c7f424fa4a5427d21feb980667021f97be97033d1783c",
+      "new_sha256": "f92f45b575bf30b3428c7f424fa4a5427d21feb980667021f97be97033d1783c",
+      "same": true
+    },
+    {
+      "name": "GraphicsConsoleDxe",
+      "old_sha256": "9c77ec8b14830efe291b1df812e0f5127155f283053f34d5004bcf4de752bfcc",
+      "new_sha256": "9c77ec8b14830efe291b1df812e0f5127155f283053f34d5004bcf4de752bfcc",
+      "same": true
+    },
+    {
+      "name": "BdsDxe",
+      "old_sha256": "95054af207514e4cce4b9d51f08fd7745c28027f2af2e3aeaac18bb44ca40371",
+      "new_sha256": "75d41270c0951cdab7045680e2ecd3aedd4f1a069ae9669a3687547c98b1ad9d",
+      "same": false
+    },
+    {
+      "name": "Sec",
+      "old_sha256": "50baacd5a0df3f99c9bd4d28cca4ee02413e41e2cf4571c5b6e242f78786047d",
+      "new_sha256": "f80c8a726e7c5dddf3d2b4b2528e4beb16d62c6962289d9f23534c04f1036e84",
+      "same": false
+    },
+    {
+      "name": "UniXNU",
+      "old_sha256": "8842809b73d956a00195942cee0e7555de329c9702f89d0bee12f02126990685",
+      "new_sha256": "5df126bd2a81b75ba0f98f070c8cada5064512056e75b87f2201c1041cde03b3",
+      "same": false
+    },
+    {
+      "name": "UniXNUDxe",
+      "old_sha256": "d1d11bda0ce7debc9a52f12f41d1407bed8b1e3e5e6636a757ac14bd28994ecb",
+      "new_sha256": "d1d11bda0ce7debc9a52f12f41d1407bed8b1e3e5e6636a757ac14bd28994ecb",
+      "same": true
+    },
+    {
+      "name": "UniXNURamDiskDxe",
+      "old_sha256": "708e5488333fcd2c3073cb5000890a50ae38bb0bbc80d91c702910f1c6346573",
+      "new_sha256": "708e5488333fcd2c3073cb5000890a50ae38bb0bbc80d91c702910f1c6346573",
+      "same": true
+    },
+    {
+      "name": "AdvancedLogDxe",
+      "old_sha256": "93c3f74dd11c3448b95d08ff4d11604bd0fa0fd200cfa14fc2fbfebb513f2eee",
+      "new_sha256": "93c3f74dd11c3448b95d08ff4d11604bd0fa0fd200cfa14fc2fbfebb513f2eee",
+      "same": true
+    },
+    {
+      "name": "DarwinBoot",
+      "old_sha256": "f38a2bbd280ce3b994c5aa0a0f766b5f4fc6069c0215943d37c3cb8ea6c260e3",
+      "new_sha256": "17aa8c2fece1d7c6baa6e35ea16f7997a35e90ffbb8c7fce671ed2cd3b41c059",
+      "same": false
+    }
+  ],
+  "mac_hashes": [
+    {
+      "name": "DxeCore",
+      "mac_sha256": "1c9e3ce0d5817489f253cbfd86d80e3286c69648d4bf209f3e721a1c015e8df3",
+      "old_sha256": "fb769b435b136aed4fc35e781ee561d23bd87749cf0d1f38c76f988f7eb4953d",
+      "same": false
+    },
+    {
+      "name": "PcdDxe",
+      "mac_sha256": "e275e06a2886e0072893b085be13aa9079792e9d0a2b01b6e6a543e6c47ac934",
+      "old_sha256": "a106a9567da4b14a793c432c70b36cf8fd90642613601a14e530c4256cb54581",
+      "same": false
+    },
+    {
+      "name": "ReportStatusCodeRouterRuntimeDxe",
+      "mac_sha256": "5fc301f038edd161359cf1e4b3b75062d73c3207269d66156fe375cd1b64778d",
+      "old_sha256": "f8cb8bf1bdfd79f6797ece5af16280ccc50410f60fff44082087b2845dfae9f7",
+      "same": false
+    },
+    {
+      "name": "StatusCodeHandlerRuntimeDxe",
+      "mac_sha256": "b7a1b0d8a3005c61960736e3d753d7e5f163543aa3d7adde983717e8f2518522",
+      "old_sha256": "748b4bf371d8a13d6ac07952424549f4155f60f01cdd9177c063d8f3abd10d41",
+      "same": false
+    },
+    {
+      "name": "RuntimeDxe",
+      "mac_sha256": "87fe531582cdf4ad85b84792cd21d72344d77ccc08524363e8895c9f9c201027",
+      "old_sha256": "d398bde44f807ad4dba289c7cd290a8a772af29fb6b7e620d7bd1fbdff40e756",
+      "same": false
+    },
+    {
+      "name": "ArmCpuDxe",
+      "mac_sha256": "acd3a20295d97183f608e74ee9c79fafe34c0e45c78f1799bd85673ef5dc7920",
+      "old_sha256": "66867c74ca4edc31994723a8f12fa7ff5fbb8dbbfa1f614bab0cfd20770b47f2",
+      "same": false
+    },
+    {
+      "name": "MyronGicDxe",
+      "mac_sha256": "416fa0cfa29d7ed8aab5e90236bec2c8d0834256efcea85d9272c1b4a9578875",
+      "old_sha256": "c6e40c3a136896bd2b3a5f078b151aa3ba201d3680f9420a6dba6c3d76b6e4b6",
+      "same": false
+    },
+    {
+      "name": "MetronomeDxe",
+      "mac_sha256": "e87990ceb36e7cb21b84fc212c5b253747f9ce4d0dce4b0b30d4436377aebb0a",
+      "old_sha256": "b162b8dfcb090ff4445440b4b3f204b16c5eed24eb419a40425cabf1f4e0bc22",
+      "same": false
+    },
+    {
+      "name": "ArmTimerDxe",
+      "mac_sha256": "2073a86b644752ad6197342fe5ce71c6681e93a83f62afb0490531841eb88fc9",
+      "old_sha256": "7662cfb374676b36ff012cdc28016ff1b49d6519f654fd7e52afa7e2bb23996d",
+      "same": false
+    },
+    {
+      "name": "ResetSystemRuntimeDxe",
+      "mac_sha256": "29aca5cdf6dba194757a1ca58cac76c34cd69bb862ce857adae0a091d4dce415",
+      "old_sha256": "10395ae0a22aa5034067ce178db50473687530b2df4b9fd71dd6fd35ab39e5b3",
+      "same": false
+    },
+    {
+      "name": "WatchdogTimer",
+      "mac_sha256": "51b72993f7083a08267a00f7491a6c1e16cc6a6bf8ad92d367dd931e12266bf4",
+      "old_sha256": "186f7b47b189708ea785c17c21f8c6352db7dfbc344f057727f4a4e4d9a5e420",
+      "same": false
+    },
+    {
+      "name": "SecurityStubDxe",
+      "mac_sha256": "bbd11cf8f68f840ecc5f70df22a41b6fef37fbcf04541bc0848b24e7f2ba9d78",
+      "old_sha256": "30c4c7729405346151c5fe684f4e5ad30785aae31d33dacf2de3fadabe8eda4f",
+      "same": false
+    },
+    {
+      "name": "VariableRuntimeDxe",
+      "mac_sha256": "d76c041c30801dfbc5d16b9d7de1564fe19373889b52310923a40570af616153",
+      "old_sha256": "bdeff549741e1378360a0b7aaf6b905e563ddab02ba0bb3b5af358979eb08416",
+      "same": false
+    },
+    {
+      "name": "CapsuleRuntimeDxe",
+      "mac_sha256": "2b962c89081368be310d0cfbcf1cae236d244fbe54ebb9cc0cbf4707bf7ec444",
+      "old_sha256": "a0b793a6f821b5a0f128887e2e697f1704aebfc60d0f0e818a76ed20fc2ec79b",
+      "same": false
+    },
+    {
+      "name": "EmbeddedMonotonicCounter",
+      "mac_sha256": "f174336e53aad0d5e91a19d282c3be08f839c92b1855ec76a382973de926bd47",
+      "old_sha256": "0102db4c73c69eb1cf2d82a9e60816da9b7bdedda808b6127df5ccdb5e9dc0fa",
+      "same": false
+    },
+    {
+      "name": "RealTimeClock",
+      "mac_sha256": "6ed6879f8165072fc55c02da3594fc00c518efd7a0b024e6e94aab64fec2014d",
+      "old_sha256": "abc5018168093ea252eda8e24020aebd9dd78f994866819ecad0f7c6f7ab5ef9",
+      "same": false
+    },
+    {
+      "name": "DevicePathDxe",
+      "mac_sha256": "323b054546ee4c6bfdf72859774ba002feaaefc88118c8a3bf8bbffdf4b49f29",
+      "old_sha256": "7f6dfe85274c76c5a36999fd9095f551430ac00e41861a3496d4a149230ca723",
+      "same": false
+    },
+    {
+      "name": "DiskIoDxe",
+      "mac_sha256": "7e45240ce228280e474af5d8cdf435a9ca028621dd2f89d6c38ce9ec32b952f3",
+      "old_sha256": "48fbd86b3ed9ca978b845707a7b0a1e442365805f56adae9b4936bc9c6b4fdf2",
+      "same": false
+    },
+    {
+      "name": "PartitionDxe",
+      "mac_sha256": "4b6213eac19f4189677e3831d945a29e4d12082fd7e30f4abd204183481c7a0d",
+      "old_sha256": "8691a16808f3fe32b47ac33bc151372f446651169a893eeef8ffb715266d46a8",
+      "same": false
+    },
+    {
+      "name": "EnglishDxe",
+      "mac_sha256": "4a4b98e9e11786b5f5fdcde6d0b5432e0d852d6cc159c45adaed33d6a3d78299",
+      "old_sha256": "ab62a1f762ee715064e3ec214e98bd8129f39028f089970657b77e56d7dce76a",
+      "same": false
+    },
+    {
+      "name": "Fat",
+      "mac_sha256": "266c7087be757d987017ba5ffafcffd236bcf9a12b6e207193fefffcc792d3d6",
+      "old_sha256": "6c712bbe49d051874d6b5be512f61b99b7d88c755b96ec83e53ccd7467dcd574",
+      "same": false
+    },
+    {
+      "name": "HiiDatabase",
+      "mac_sha256": "1808b846fecb8fd8b75cd46c7d703817a3a9d36c1a09949ca67f019c0f11221d",
+      "old_sha256": "ca30b5e0140bb9e581fb54e767bf2bea3cfaabb799f4c22a66d5e7db4e4b1abd",
+      "same": false
+    },
+    {
+      "name": "PrintDxe",
+      "mac_sha256": "fd825bc9b09d0fdacfc06658356746bfd85633595978badba9dda25fd22153ed",
+      "old_sha256": "b0e33855ec01d480d6d0c527c7dd8a6f84004fd011df276352ed1ca2ec70fcc7",
+      "same": false
+    },
+    {
+      "name": "MyronFdtGopDxe",
+      "mac_sha256": "5f0439f76cba40329ea43ace8d69b22d77ab1965fcaf76a7c48bd0ca55583be0",
+      "old_sha256": "cced1709ec4e13c6d2070fd3d89e6789a42605da5564acc0a95add7d1eb43107",
+      "same": false
+    },
+    {
+      "name": "MyronKeysDxe",
+      "mac_sha256": "84eb934cc995013e4694c69b468df42b9a492e5d5c793cd138de4646579fc63e",
+      "old_sha256": "6f0f4f9a3015d3c2b640e410135fcc3855fb5217c40a107c084b28a87c4705bf",
+      "same": false
+    },
+    {
+      "name": "ConPlatformDxe",
+      "mac_sha256": "600a1a8431d27122420584b334873790f7415905fa32f09f11832cf7244f0784",
+      "old_sha256": "1a73529303bbd00381dda2ec0a95e33696963518540e80ca72c1b0876d942c4f",
+      "same": false
+    },
+    {
+      "name": "ConSplitterDxe",
+      "mac_sha256": "875867d68c6c5b1ad7641956a5796080dea13a4f5f9484284516faea09babb5d",
+      "old_sha256": "f92f45b575bf30b3428c7f424fa4a5427d21feb980667021f97be97033d1783c",
+      "same": false
+    },
+    {
+      "name": "GraphicsConsoleDxe",
+      "mac_sha256": "8950d7d5f70e618ad9972d641e9373d8d51347482d40b0719c5bf0d987b8a670",
+      "old_sha256": "9c77ec8b14830efe291b1df812e0f5127155f283053f34d5004bcf4de752bfcc",
+      "same": false
+    },
+    {
+      "name": "BdsDxe",
+      "mac_sha256": "67de0218259a8c7d7f097878170a0b8fd6f5c7318557f136e453447cc462bc10",
+      "old_sha256": "95054af207514e4cce4b9d51f08fd7745c28027f2af2e3aeaac18bb44ca40371",
+      "same": false
+    },
+    {
+      "name": "Sec",
+      "mac_sha256": "badde31c01f1dad2b197b95056d6ebaf31bcb712b081557202e3991c2878d493",
+      "old_sha256": "50baacd5a0df3f99c9bd4d28cca4ee02413e41e2cf4571c5b6e242f78786047d",
+      "same": false
+    },
+    {
+      "name": "UniXNU",
+      "mac_sha256": "2b03cbc9414582e9888fe34e1395ff941f42de43d8701574ff14933df605fc6a",
+      "old_sha256": "8842809b73d956a00195942cee0e7555de329c9702f89d0bee12f02126990685",
+      "same": false
+    },
+    {
+      "name": "UniXNUDxe",
+      "mac_sha256": "4014be61d8a4d277f4bd26442b9cae0ab6c5ea5452d0bef641a88a4bafea92a9",
+      "old_sha256": "d1d11bda0ce7debc9a52f12f41d1407bed8b1e3e5e6636a757ac14bd28994ecb",
+      "same": false
+    },
+    {
+      "name": "UniXNURamDiskDxe",
+      "mac_sha256": "e456547d2c2679fc4d7130e09fe3a7aa8ad628adf2a0c502271fc4c84e879d1c",
+      "old_sha256": "708e5488333fcd2c3073cb5000890a50ae38bb0bbc80d91c702910f1c6346573",
+      "same": false
+    },
+    {
+      "name": "AdvancedLogDxe",
+      "mac_sha256": "d64e1d880922533588605b4228ec11267e432a60fa4caf5a0c87061d75224838",
+      "old_sha256": "93c3f74dd11c3448b95d08ff4d11604bd0fa0fd200cfa14fc2fbfebb513f2eee",
+      "same": false
+    },
+    {
+      "name": "DarwinBoot",
+      "mac_sha256": "ce0e46866a4c37533b1a9e8ebad6bcd9470cb5a5aadd7223a51ed81ddb821905",
+      "old_sha256": "f38a2bbd280ce3b994c5aa0a0f766b5f4fc6069c0215943d37c3cb8ea6c260e3",
+      "same": false
+    }
+  ]
+}

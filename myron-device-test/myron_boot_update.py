@@ -10,9 +10,9 @@ import re
 import struct
 import myron_device_test as t
 
-RUN = 43349357896
-MANIFEST_SHA = '09454c2348ec41420d2a9c90656bc9746d11b18a9352f9b572e96eedceac6429'
-BOOT_SHA = 'a251b4eaf6f17feff09aed144259aafbc28dde01ec9508269184b6a1cb2b1735'
+RUN = 43361559288
+MANIFEST_SHA = '9807319d98ccd6adbd2c0b3e1d1a3059645f2feaeab7988d3d1c9101b5403bf2'
+BOOT_SHA = 'ecbd5ae2af2fa94c2cb6fa3bb37d2616667f6ceab5b8f0111f2beeeec8e0a8be'
 BOOT_BYTES = 95428608
 RETAINED = {
     'root-container.raw': dict(bytes=15092154368, sha256='7d3b1200d14e4f27f12ef1680184033b0f95035475635f57c5b4130c28cdb81c'),
@@ -90,7 +90,7 @@ def start(package, state, update, fastboot_factory):
     fb.reboot()
     record['reboot_completed'] = True
     t.save(path, record)
-    print('Boot probe started. Record the last 2700-2704 phase, text or coloured lines.')
+    print('Boot probe started. Record the last B001-B017 / B0FF / 2700-2704 phase, text or coloured lines.')
     print('If stuck, enter bootloader fastboot and restore the saved Android boot.')
 
 

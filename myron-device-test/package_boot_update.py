@@ -12,9 +12,10 @@ def package(update, output):
     source = Path(__file__).resolve().parent
     prefix = 'boot-update-'+str(u.RUN)+'/'
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as z:
-        for name in ('UPDATE-BOOT.cmd', 'UPDATE-BOOT-README-CN.txt'):
+        for name, target in (('UPDATE-BOOT.cmd', 'START-IOS27-LINUX.cmd'),
+                             ('UPDATE-BOOT-README-CN.txt', 'START-IOS27-LINUX-README-CN.txt')):
             data=(source/name).read_text(encoding='utf-8').replace('\r\n','\n').replace('\n','\r\n')
-            z.writestr(name,data.encode('utf-8'))
+            z.writestr(target,data.encode('utf-8'))
         for name in ('myron_boot_update.py','myron_device_test.py','device_layout.py','prepare_root_bundle.py'):
             z.write(source/name,prefix+name)
         for name in ('deployment.json','root-startup.img'):

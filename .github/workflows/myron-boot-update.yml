@@ -38,15 +38,15 @@ jobs:
           python-version: '3.12'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: myron-ios27-boot-regression
-          run-id: '43349357896'
+          name: myron-ios27-firmware-only-candidate
+          run-id: '43361559288'
           github-token: ${{ github.token }}
           path: boot-input
       - name: Verify pinned release and assemble isolated boot-only companion
-        run: python myron-device-test/package_boot_update.py --input boot-input --output myron-ios27-boot-update-43349357896.zip
+        run: python myron-device-test/package_boot_update.py --input boot-input --output myron-ios27-linux-boot-43361559288.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: myron-ios27-boot-update-43349357896
-          path: myron-ios27-boot-update-43349357896.zip
+          name: myron-ios27-linux-boot-43361559288
+          path: myron-ios27-linux-boot-43361559288.zip
           if-no-files-found: error
           retention-days: 7

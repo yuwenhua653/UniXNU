@@ -32,11 +32,13 @@ jobs:
       - name: Install capsule test tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld qemu-system-arm
+          sudo apt-get install -y clang lld qemu-system-arm mtools
           python3 -m pip install pyelftools==0.32
       - name: Reconstruct and execute exact capsule before the native build
         run: |
           python3 myron27-build.py --source-only
+          python3 tests/test_myron_bds.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang
+          python3 -m unittest discover -s "$RUNNER_TEMP/myron-iphone27/device/myron27/tests" -p test_root_firmware.py -v
           git init "$RUNNER_TEMP/loader-headers"
           git -C "$RUNNER_TEMP/loader-headers" fetch --depth 1 https://github.com/microsoft/mu_basecore.git cfb93724a06ff86ff5ba971413368a7809ee42a5
           git -C "$RUNNER_TEMP/loader-headers" checkout --detach FETCH_HEAD
@@ -140,6 +142,7 @@ jobs:
               'Root image identity matches installed build 43165530177.\n'
               'Do not replace package/state metadata or manually flash this image.\n'
               'A checked boot-update companion must bind the existing backup and installation receipt first.\n'
+              'Early BDS phases: B001-B006 before/through console setup, B010-B017 application launch; B0FF application returned an error.\n'
               'Phases: 2700 cache sweep, 2701 key access, 2702 EL1 PAC, 2703 EL0/SVC, 2704 pre-XNU branch.\n'
               '2704 is not evidence that XNU executed.\n')
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

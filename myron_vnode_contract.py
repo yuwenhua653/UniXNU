@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Check retained APFS vnode descriptors by name against the emitted kernel.
+"""Check retained APFS vnode descriptors and I/O dispatch against the emitted kernel.
 
 The donor has 64-byte descriptors; a compiled kernel can use a different
-stride. Adjacent-address inference is not an identity proof. This verifies
-chained descriptor imports, not instruction references or runtime behavior.
+stride. Adjacent-address inference is not an identity proof. STRATEGY and
+BWRITE wrappers also have indistinguishable masked instruction shapes.
+This verifies chained imports, not runtime behavior.
 """
 import argparse
 import hashlib
@@ -13,6 +14,9 @@ import sys
 
 DONOR_SHA256 = '813be26ab6bd1d8de211904eca413a1a2ebf79989f90c33a48ff0f2fcff99036'
 APFS = 'com.apple.filesystems.apfs'
+STRATEGY_ORIGINAL = 0xfffffff00a3b6830
+STRATEGY_DESCRIPTOR = 0xfffffff00ac95568
+STRATEGY_SITE = 0xfffffff0080e7b20
 
 
 def descriptor_name(kernel, fixups, address):
@@ -28,7 +32,7 @@ def descriptor_name(kernel, fixups, address):
 
 def audit(donor, candidate, tool):
     sys.path.insert(0, str(Path(tool).resolve()))
-    from kc_image import Image
+    from kc_image import Image, scan
     raw = Path(donor).read_bytes()
     if hashlib.sha256(raw).hexdigest() != DONOR_SHA256:
         raise ValueError('Vnode identities require the pinned iPhone12,1 24A446 donor')
@@ -64,16 +68,39 @@ def audit(donor, candidate, tool):
                          passed=expected is not None and actual == expected and target_name == name))
     if len(rows) != 189 or len({r['symbol'] for r in rows}) != 56:
         raise ValueError('Incomplete descriptor inventory for pinned APFS: expected 189 sites / 56 names')
+    # Prove the stripped donor wrapper's identity from its own descriptor,
+    # independently of the prelink matcher's function-shape/name guesses.
+    starts = source.function_starts()
+    index = starts.index(STRATEGY_ORIGINAL)
+    size = starts[index + 1] - STRATEGY_ORIGINAL
+    refs = scan(source.read(STRATEGY_ORIGINAL, size), STRATEGY_ORIGINAL)[1]
+    if size != 72 or not any(ref == STRATEGY_DESCRIPTOR for _, ref, _ in refs) or \
+            descriptor_name(source, before, STRATEGY_DESCRIPTOR) != 'vnop_strategy':
+        raise ValueError('Donor VNOP_STRATEGY semantic identity changed')
+    sites = [site for site, ptr in before.items() if ptr[0] == STRATEGY_ORIGINAL
+             and any(lo <= site < hi for lo, hi in old_apfs.mapped())]
+    if sites != [STRATEGY_SITE]:
+        raise ValueError('Donor APFS strategy import inventory changed')
+    targets = names.get('_VNOP_STRATEGY', set())
+    expected = next(iter(targets)) if len(targets) == 1 else None
+    actual = after.get(STRATEGY_SITE, (None,))[0]
+    function_rows = [dict(site=hex(STRATEGY_SITE), original=hex(STRATEGY_ORIGINAL),
+                         symbol='_VNOP_STRATEGY',
+                         expected=hex(expected) if expected is not None else None,
+                         actual=hex(actual) if actual is not None else None,
+                         passed=expected is not None and actual == expected)]
     return dict(donor_sha256=DONOR_SHA256, candidate_sha256=hashlib.sha256(built).hexdigest(),
                 sites_checked=len(rows), descriptors_checked=len({r['symbol'] for r in rows}),
-                mismatches=[r for r in rows if not r['passed']], rows=rows,
+                function_sites_checked=len(function_rows),
+                mismatches=[r for r in rows + function_rows if not r['passed']], rows=rows,
+                function_rows=function_rows,
                 runtime_qualified=False)
 
 
 def require(donor, candidate, tool):
     result = audit(donor, candidate, tool)
     if result['mismatches']:
-        raise ValueError('APFS vnode descriptor mismatch: ' + json.dumps(result['mismatches']))
+        raise ValueError('APFS vnode binding mismatch: ' + json.dumps(result['mismatches']))
     return {k: v for k, v in result.items() if k != 'rows'}
 
 

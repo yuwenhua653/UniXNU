@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the five known wrong bindings and exercise the new identity gate.
+"""Reproduce the known descriptor and I/O-dispatch misbindings and exercise the new identity gate.
 
 Uses the real, pinned donor and previously tested fileset. Corrected bytes below
 exist only as a temporary checker specimen, never as a boot package.
@@ -25,14 +25,18 @@ def main():
     p.add_argument('--device', type=Path, required=True)
     a = p.parse_args()
     raw = a.known_bad.read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == 'cc18aed64e75919aa68b5f8ddbe6ec93332f3dc2048e1d8872f9445174c578e3'
+    digest = hashlib.sha256(raw).hexdigest()
+    assert digest in {'cc18aed64e75919aa68b5f8ddbe6ec93332f3dc2048e1d8872f9445174c578e3',
+                      '76c9bba9ef6fb3b574770f84d2f5e1923433551ec32e2b04728b95c9f9980ed1'}
     result = audit(a.donor, a.known_bad, a.xnuprelink)
     bad = result['mismatches']
-    assert len(bad) == 5 and {r['symbol'] for r in bad} == {'_vnop_strategy_desc'}
+    expected = 6 if digest.startswith('cc18') else 1
+    assert len(bad) == expected
+    assert sum(r['symbol'] == '_VNOP_STRATEGY' for r in bad) == 1
     try:
         require(a.donor, a.known_bad, a.xnuprelink)
     except ValueError as error:
-        assert 'APFS vnode descriptor mismatch' in str(error)
+        assert 'APFS vnode binding mismatch' in str(error)
     else:
         raise AssertionError('Old broken artifact was accepted')
 
@@ -55,6 +59,20 @@ def main():
         assert record['native_symbol'] == row['symbol'] and record.get('addend', 0) == 0
         assert known[int(row['original'], 16)] == (int(row['expected'], 16), 'reviewed')
 
+    donor_raw = a.donor.read_bytes()
+    donor_outer = Image(donor_raw)
+    donor_kernel = Image(donor_raw, donor_outer.entries['com.apple.kernel'][1])
+    wrappers = [r for r in fixture['functions'] if r['native_symbol'] in ('_VNOP_STRATEGY', '_VNOP_BWRITE')]
+    assert len(wrappers) == 2
+    matcher.original = SimpleNamespace(image=donor_kernel, functions={
+        int(r['original'], 16): dict(end=int(r['original'], 16)+r['original_size']) for r in wrappers})
+    matcher.native.named_functions = {name: addr for addr, names in native.symbols().items() for name in names}
+    matcher.pairs, matcher.reverse, matcher.how, matcher.conflicts = {}, {}, {}, []
+    matcher.reviewed_records = lambda inputs: iter([dict(functions=wrappers)])
+    assert matcher.anchor_reviewed(fixture['inputs']) == 2
+    assert matcher.pairs[0xfffffff00a3b6830] == matcher.native.named_functions['_VNOP_STRATEGY']
+    assert matcher.pairs[0xfffffff00a3b6878] == matcher.native.named_functions['_VNOP_BWRITE']
+
     specimen = bytearray(raw)
     for row in bad:
         site = int(row['site'], 16)
@@ -74,7 +92,7 @@ def main():
         specimen[offset:offset+8] = raw[offset:offset+8]
         candidate.write_bytes(specimen)
         assert len(audit(a.donor, candidate, a.xnuprelink)['mismatches']) == 1
-    print('PASS: known-bad artifact rejected (5 sites); 56 reviewed identities resolve through actual matcher;')
+    print(f'PASS: known-bad artifact rejected ({expected} sites); 56 descriptors and 2 distinct dispatch wrappers resolve through actual matcher;')
     print('PASS: temporary corrected checker specimen passes 189 sites; single-site regression rejected.')
     print('No prelink rebuild or phone qualification performed.')
 

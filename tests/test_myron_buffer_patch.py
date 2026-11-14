@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory() as tmp:
  macro=re.search(r'\n#if defined\(MYRON_EARLY_PROGRESS\)\n#define MYRON_BUF_EVENT.*?#endif\n\n',restored,re.S).group()
  restored=restored.replace(macro,'',1)
  restored=restored.replace('\tbuf_t bp = alloc_io_buf(vp, is_vm_privileged());\n\tif (bp) { MYRON_BUF_EVENT(4, bp); }\n\treturn bp;', '\treturn alloc_io_buf(vp, is_vm_privileged());')
- for kind in (1,2,3,5,6,255):
+ for kind in (1,2,5,6):
   pattern=r'\t+MYRON_BUF_EVENT\('+str(kind)+r', bp\);\n'
   assert len(re.findall(pattern,restored))==1
   restored=re.sub(pattern,'',restored)
@@ -35,8 +35,12 @@ with tempfile.TemporaryDirectory() as tmp:
  assert s.count(callback)==1
  assert callback+'\t\t(*iodone_func)(bp, arg);' in s
  restored=restored.replace(callback,'',1)
- # Failed releases must not evict a prior successful release from the ring.
- assert s.index('MYRON_BUF_EVENT(255, bp)') < s.index('MYRON_BUF_EVENT(3, bp)')
+ # Capture the original caller on both paths before the panic-only block can
+ # be outlined into buf_brelse.cold.N with its own return address.
+ release_observer='\t/* Keep return-address capture outside the compiler-outlined panic block. */\n\tMYRON_BUF_EVENT((bp->b_whichq != -1 || !(bp->b_lflags & BL_BUSY)) ? 255 : 3, bp);\n\n'
+ assert s.count(release_observer)==1
+ assert release_observer+'\tif (bp->b_whichq != -1 || !(bp->b_lflags & BL_BUSY)) {' in s
+ restored=restored.replace(release_observer,'',1)
  restored=restored.replace('\n\n\t/* Record our progress. */','\n\t/* Record our progress. */',1)
  assert restored==before, ''.join(__import__('difflib').unified_diff(before.splitlines(True),restored.splitlines(True)))
  # Compile the exact injected macro with deliberately distinct fields. Verify

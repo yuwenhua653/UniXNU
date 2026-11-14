@@ -1,6 +1,21 @@
 """Read native definitions from com.apple.kernel, not the outer fileset header."""
 import struct
 
+BUFFER_TRACE_MARKER = b'MYRON BUFFER TRACE 4 - release / completion'
+BUFFER_TRACE_SYMBOLS = frozenset({
+    '_myron_buffer_event', '_myron_boot_progress_panic',
+    '_myron_boot_progress_fault', '_buf_brelse', '_buf_biodone',
+    '_buf_getblk', '_buf_geteblk', '_buf_alloc', '_buf_free',
+})
+
+def require_buffer_trace(data):
+    """Reject an old native payload even if its generic progress console exists."""
+    definitions = kernel_definitions(data)
+    missing = sorted(name for name in BUFFER_TRACE_SYMBOLS if not definitions.get(name))
+    if missing or BUFFER_TRACE_MARKER not in data:
+        raise ValueError(f'Buffer release/completion diagnostics missing: {missing}')
+    return {name: definitions[name] for name in sorted(BUFFER_TRACE_SYMBOLS)}
+
 def kernel_definitions(data):
     def need(ok,message):
         if not ok: raise ValueError(message)

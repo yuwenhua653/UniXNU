@@ -127,6 +127,44 @@ int main(void) {
  // Fault rows preserve both frame guards and padded scanline bytes.
  for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
  for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
+ // A failed release reports only this buffer's history, newest first, with
+ // the original ownership fields and call sites preserved across interleaving.
+ myron_buffer_event(1,0xa000,0x101,~0u,1,0x100,0x20);
+ myron_buffer_event(1,0xb000,0xb01,~0u,1,0x100,0x30);
+ myron_buffer_event(2,0xa000,0x202,~0u,1,0x20100,0x20);
+ myron_buffer_event(3,0xa000,0x303,0,0,0x20100,0x20);
+ busy=1;myron_buffer_event(255,0xa000,0x404,0,0,0x20100,0x20);
+ assert(panic_claimed && myron_panic_pc==0x404 && !buffer_busy);
+ assert(strstr(display.previous[28],"000000000000a000"));
+ assert(strstr(display.previous[29],"LF=0x0000000000000000"));
+ assert(strstr(display.previous[31],"00000303") && strstr(display.previous[34],"00000202"));
+ assert(strstr(display.previous[37],"00000101") && !display.previous[40][0]);
+ char first_row[BP_COLS];strcpy(first_row,display.previous[31]);
+ myron_boot_progress_panic("original panic",0x555);
+ test_clock+=1000;boot_progress_irq(9,8,7);busy=0;boot_progress_stage("late log");
+ assert(myron_panic_pc==0x404 && !strcmp(first_row,display.previous[31]));
+ // Contended capture cannot spin or pretend to have a complete history.
+ panic_claimed=0;buffer_busy=1;
+ myron_buffer_event(255,0xa000,0x505,~0u,0,0,0);
+ assert(myron_panic_pc==0x505 && buffer_busy && buffer_dropped==1);
+ assert(strstr(display.previous[30],"history omitted") && !display.previous[31][0]);
+ buffer_busy=0;panic_claimed=0;
+ // A callback taking ownership and a filter have different release contracts.
+ // The recorder labels their function targets separately from call sites.
+ myron_buffer_event(7,0xd000,0x707,~0u,1,0x200,0x40);
+ myron_buffer_event(8,0xd000,0x808,~0u,1,0x200,0x40);
+ myron_buffer_event(255,0xd000,0x909,0,0,0x200,0x40);
+ assert(strstr(display.previous[31],"CALLBACK=") && strstr(display.previous[31],"00000808"));
+ assert(strstr(display.previous[34],"CALLBACK=") && strstr(display.previous[34],"00000707"));
+ assert(!display.previous[37][0]);panic_claimed=0;
+ // Ring wrap discards old entries explicitly; unknown buffers produce no
+ // fabricated history. No record stores a dereferenceable pointer.
+ for(unsigned i=0;i<MYRON_BUFFER_HISTORY+3;i++)myron_buffer_event(1,0xc000,i,~0u,1,0,0);
+ myron_buffer_event(255,0xa000,0x606,0,0,0,0);
+ assert(strstr(display.previous[31],"No matching buffer"));
+ panic_claimed=0;
+ for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
+ for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
  // Release failure may retry; acknowledged scanout cannot resume console writes.
  release_result=-1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1);
  release_result=0;assert(myron_boot_progress_prepare_scanout());assert(scanout_state==2 && release_calls==2);
@@ -134,6 +172,7 @@ int main(void) {
  myron_boot_progress_cancel_scanout();boot_progress_stage("userspace owns display");boot_progress_putc('\n');
  myron_mount_event(1,"scanout active","apfs",0,0);test_clock+=1000;boot_progress_irq(0,0,0);
  myron_boot_progress_fault("scanout owns display",1,2,3,4);assert(!panic_claimed);
+ myron_buffer_event(255,0xa000,0x707,0,0,0,0);assert(!panic_claimed);
  assert(scanout_state==2 && !memcmp(saved,memory+32,bytes));
  boot_progress_exit(1,"launchd",9,3,0xdead);assert(myron_boot_progress_state.history_count>history);
  // Missing timer frequency must not turn the recorder or boot path off.
@@ -146,4 +185,4 @@ int main(void) {
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
-print('PASS lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+print('PASS typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

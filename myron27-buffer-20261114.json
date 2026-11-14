@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-14",
+  "base_commit": "33100b65e2c10630a44c0b7edd5a8ea4d4f60a9f",
+  "phone_observation": {
+    "source": "PXL_20261113_124742027.jpg",
+    "root_device": "disk5s1",
+    "last_mount_event": "APFS mount callback entered",
+    "ufs_last_event": "completion returned, status 0, bytes 4096",
+    "panic": "buf_brelse: bad buffer",
+    "root_mount_completed": false,
+    "desktop_reached": false
+  },
+  "change": [
+    "Recover the unpushed buffer-ownership observer from the previous workspace.",
+    "Capture queue, local flags, buffer flags, block and release caller without altering buffer lifecycle decisions.",
+    "Capture B_CALL ownership and B_FILTER callback targets before invoking them; do not inspect buffer after callback.",
+    "Keep failed release separate from successful-release history to retain useful previous events.",
+    "Require trace version 4 and all buffer diagnostic definitions in final nested com.apple.kernel; include their addresses in the final report."
+  ],
+  "validation_passed": [
+    "Source reconstruction and per-file digests",
+    "Pinned selected buffer patch stack, original lifecycle and panic condition preserved",
+    "Selected panic/IRQ and root-mount patch stacks",
+    "Recorder ASan/UBSan: callback targets, ring wrap, interleaving, lock contention, first-panic retention, framebuffer guard and scanout ownership",
+    "Staged production UFS request ASan/UBSan: completion outside lock, nested reads, read/integrity/short-copy failures and write refusal",
+    "Final fileset contract: six test cases including every missing buffer symbol and old marker",
+    "Previous real kernel rejected for missing new buffer diagnostics",
+    "Diagnostic collector existing regression",
+    "Python syntax and git diff whitespace"
+  ],
+  "limitations": [
+    "No native macOS kernel build executed locally; CI required.",
+    "This is targeted fault-localization work, not a demonstrated fix for the APFS panic.",
+    "No new device run; no confirmed root mount, launchd or desktop."
+  ],
+  "source_delta_sha256": "f48d4a1d787b1d46e946cc88f0880350e05e05e936f96434e18e757edf9c2bd4"
+}

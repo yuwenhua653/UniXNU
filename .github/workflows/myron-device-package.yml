@@ -37,6 +37,7 @@ jobs:
       - name: Reconstruct and execute exact capsule before the native build
         run: |
           python3 myron27-build.py --source-only
+          python3 -m unittest discover -s tests -p test_continuous_contract.py -v
           python3 tests/test_myron_progress.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang --target-cc clang
           python3 tests/test_myron_ufs_mount.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx clang++
           python3 tests/test_myron_bds.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang

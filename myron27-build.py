@@ -44,7 +44,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('stall-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_stall_patch.py'),
+  checks=[('buffer-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_buffer_patch.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
+   ('stall-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_stall_patch.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
    ('mount-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_mount_patch.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
@@ -148,6 +150,7 @@ allowed={
  'device/myron27/patches/xnu/myron-early-progress.patch',
  'device/myron27/patches/xnu/myron-root-mount-progress.patch',
  'device/myron27/patches/xnu/myron-stall-evidence.patch',
+ 'device/myron27/patches/xnu/myron-buffer-ownership.patch',
  'device/myron27/package/MyronBootProgress.c',
  'device/myron27/package/BootProgressCore.h',
  'device/myron27/package/BootProgressDisplay.h',

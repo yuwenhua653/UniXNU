@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from myron_continuous_contract import kernel_definitions
+from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, BUFFER_TRACE_MARKER
 class ContractTests(unittest.TestCase):
     def sample(self,name=b'com.apple.kernel'):
         data=bytearray(512)
@@ -25,4 +25,26 @@ class ContractTests(unittest.TestCase):
     def test_rejects_unterminated_name(self):
         raw=self.sample();struct.pack_into('<I',raw,180,8);raw[289:296]=b'abcdefg'
         with self.assertRaises(ValueError):kernel_definitions(raw)
+    def buffer_sample(self, missing=None, marker=True):
+        names=sorted(BUFFER_TRACE_SYMBOLS-{missing})
+        strings=b'\0';rows=[]
+        for i,name in enumerate(names):
+            rows.append((len(strings),0xf,1,0,0x3000+4*i))
+            strings+=name.encode()+b'\0'
+        string_offset=256+16*len(rows)
+        data=bytearray(string_offset+len(strings)+len(BUFFER_TRACE_MARKER)+1)
+        data[:184]=self.sample()[:184]
+        struct.pack_into('<6I',data,160,2,24,256,len(rows),string_offset,len(strings))
+        for i,row in enumerate(rows):struct.pack_into('<IBBHQ',data,256+16*i,*row)
+        data[string_offset:string_offset+len(strings)]=strings
+        if marker:data[-len(BUFFER_TRACE_MARKER)-1:-1]=BUFFER_TRACE_MARKER
+        return data
+    def test_buffer_hooks_required_in_final_nested_kernel(self):
+        self.assertEqual(set(require_buffer_trace(self.buffer_sample())),BUFFER_TRACE_SYMBOLS)
+        for name in BUFFER_TRACE_SYMBOLS:
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                require_buffer_trace(self.buffer_sample(missing=name))
+    def test_rejects_old_trace_even_with_correct_symbol_names(self):
+        with self.assertRaises(ValueError):require_buffer_trace(self.buffer_sample(marker=False))
+        with self.assertRaises(ValueError):require_buffer_trace(self.sample())
 if __name__=='__main__':unittest.main()

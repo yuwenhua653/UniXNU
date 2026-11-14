@@ -44,7 +44,11 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('buffer-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_buffer_patch.py'),
+  checks=[('exit-reason-preflight.log',[sys.executable,str(here/'tests/test_myron_exit_reason.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
+   ('shared-cache-carrier-preflight.log',[sys.executable,str(d/'tests/test_shared_cache_carrier.py'),
+   '--xnu-source',str(root/'references/xnu/bsd/vm/vm_unix.c'),'--upstream',str(u)]),
+   ('buffer-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_buffer_patch.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
    ('stall-patch-preflight.log',[sys.executable,str(here/'tests/test_myron_stall_patch.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
@@ -155,6 +159,7 @@ allowed={
  'device/myron27/patches/xnu/myron-stall-evidence.patch',
  'device/myron27/patches/xnu/myron-buffer-ownership.patch',
  'device/myron27/package/MyronBootProgress.c',
+ 'device/myron27/upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/patches/xnu/boot-progress.patch',
  'device/myron27/package/BootProgressCore.h',
  'device/myron27/package/BootProgressDisplay.h',
  'device/myron27/package/Font.h',
@@ -254,6 +259,7 @@ allowed={
  'device/myron27/tests/test_loader_boot.py',
  'device/myron27/tests/test_payload_transport.py',
  'device/myron27/tests/test_storage_boot.py',
+ 'device/myron27/tests/test_shared_cache_carrier.py',
  'device/myron27/tests/test_ufs_storage_abi.py',
  'device/myron27/tests/verify_firmware.py',
 }

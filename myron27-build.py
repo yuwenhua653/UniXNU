@@ -143,6 +143,9 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/fixtures/fileset-24A446-iphone12-1-symbols.json',
+ 'device/myron27/audit_vnode_bindings.py',
+ 'device/myron27/verify_reviewed_fixture.py',
  'device/myron27/configs/myron27_defconfig',
  'device/myron27/verify_native_artifact.py',
  'device/myron27/scripts/build-myron-progress.py',

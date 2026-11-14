@@ -14,10 +14,17 @@ import time
 import traceback
 import device_io as io
 
-RUN = 43544518065
-MANIFEST_SHA = 'a8b96f2b88fee710f03dd7c92fcab58d08921e1c5340a3c6faf8e6405bbb52f9'
-BOOT_SHA = '3e695357466baa38523b7673841d0125f1b035faba2292127e6de3d9f73b71c1'
-REPORT_SHA = '60f67ea7c62f45caeee9d0d6a6ffc9d66e9a0d7538c84663421b64a7c46e8051'
+RUN = 43567678297
+MANIFEST_SHA = 'c853b7f7713fc6e17492b43b3df47ec9bc795f52b87eaa3495ef4053e6640fd9'
+BOOT_SHA = '340df8af9efb51b30b7b0c9ee35289bab2256393cbe3c85afb4cf1390fb34fb2'
+REPORT_SHA = '19d4794d92075ace3d98965b59671cf802da5d60c16192e3e4dab70bf3e944c6'
+# Only the immediately preceding fresh-PC release is compatible. Its live
+# root regions and GPT match this release exactly (checked during packaging).
+# Never rewrite or relabel a prior backup/receipt as belonging to this run.
+BACKUP_MANIFESTS = {
+    RUN: MANIFEST_SHA,
+    43544518065: 'a8b96f2b88fee710f03dd7c92fcab58d08921e1c5340a3c6faf8e6405bbb52f9',
+}
 BOOT_BYTES = 95428608
 BASE = Path(__file__).resolve().parent.parent
 require = io.require
@@ -122,7 +129,8 @@ class Recovery(io.Recovery):
 def backup_state(state):
     state = Path(state)
     b = io.load(state/'backup.json')
-    require(b.get('format') == 1 and b.get('run') == RUN and b.get('device') == 'myron' and
+    require(b.get('format') == 1 and b.get('run') in BACKUP_MANIFESTS and
+            b.get('manifest_sha256') == BACKUP_MANIFESTS.get(b.get('run')) and b.get('device') == 'myron' and
             b.get('android_confirmed') is True and b.get('double_read_verified') is True, '没有本包重新采集的有效 Android boot 备份')
     require(b.get('slot') in ('a', 'b') and b.get('boot_name') == 'boot_'+b['slot'] and
             re.fullmatch('[A-Za-z0-9_-]+', b.get('serial', '')), '备份身份/槽位错误')
@@ -185,8 +193,8 @@ def prepare(package, state, device):
 
 def ready(package, state):
     m = verify_release(package); b = backup_state(state); r = io.load(Path(state)/'root-check.json')
-    require(b.get('manifest_sha256') == MANIFEST_SHA and b.get('layout') == m['layout'] and BOOT_BYTES <= b['boot_bytes'], '备份与当前镜像不匹配')
-    require(r.get('complete') is True and r.get('run') == RUN and
+    require(b.get('layout') == m['layout'] and BOOT_BYTES <= b['boot_bytes'], '备份与当前镜像不匹配')
+    require(r.get('complete') is True and r.get('run') == b['run'] and
             r.get('method') == 'live-recovery-full-region-sha256', '请先完成本次 Recovery 全量校验')
     for key in ('serial', 'slot', 'manifest_sha256', 'capture_binding', 'boot_sha256'):
         require(r.get(key) == b.get(key), '现场校验记录不属于当前备份：'+key)

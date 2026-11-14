@@ -17,7 +17,7 @@ TOOLS_SHA = '45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99'
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    for name in ('candidate','runtime','platform-tools','vnode-report','output'):
+    for name in ('candidate','previous-candidate','runtime','platform-tools','vnode-report','observer-report','output'):
         p.add_argument('--'+name,required=True,type=Path)
     a=p.parse_args();source=Path(__file__).resolve().parent
     helper.verify_release(a.candidate)
@@ -25,6 +25,16 @@ def main():
     continuous=json.loads((a.candidate/'continuous-report.json').read_text())
     assert report['candidate_sha256']==continuous['kernel_sha256']
     assert (report['sites_checked'],report['descriptors_checked'],report['mismatches'])==(189,56,[])
+    assert report['function_sites_checked']==1 and report['function_rows'][0]['symbol']=='_VNOP_STRATEGY'
+    observer=json.loads(a.observer_report.read_text())
+    assert observer['candidate_sha256']==continuous['kernel_sha256'] and observer['result']=='passed'
+    assert observer['original_lr_captured_before_observer'] and observer['ownership_paths_share_observer']
+    assert observer['cold_observer_calls']==[]
+    assert helper.io.sha(a.previous_candidate/'deployment.json')==helper.BACKUP_MANIFESTS[43544518065]
+    old=json.loads((a.previous_candidate/'deployment.json').read_text())
+    new=json.loads((a.candidate/'deployment.json').read_text())
+    assert old['layout']==new['layout'] and old['root_writes']==new['root_writes']
+    assert all(old['files'][x['file']]==new['files'][x['file']] for x in new['root_writes'])
     for path,expected in ((a.runtime,RUNTIME_SHA),(a.platform_tools,TOOLS_SHA)):
         assert helper.io.sha(path)==expected
     with tempfile.TemporaryDirectory(prefix='myron-fresh-package-') as tmp:
@@ -38,6 +48,7 @@ def main():
         for name in ('deployment.json','continuous-report.json','root-startup.img'):
             shutil.copyfile(a.candidate/name,payload/name)
         shutil.copyfile(a.vnode_report,proof/'apfs-vnode-bindings.json')
+        shutil.copyfile(a.observer_report,proof/'release-observer.json')
         with zipfile.ZipFile(a.runtime) as z:
             assert z.testzip() is None
             assert all(not Path(i.filename).is_absolute() and '..' not in Path(i.filename).parts for i in z.infolist())
@@ -51,8 +62,10 @@ def main():
             for name in names:(root/'platform-tools'/name).write_bytes(z.read('platform-tools/'+name))
         checks=dict(run=helper.RUN,source_commit=continuous['assembly_commit'],
                     final_boot_sha256=helper.BOOT_SHA,kernel_sha256=continuous['kernel_sha256'],
-                    apfs_vnode_sites=189,apfs_vnode_mismatches=0,buffer_hooks=9,
-                    fresh_pc_simulated_tests=13,reused_transport_regression_tests=19,
+                    apfs_vnode_sites=189,apfs_vnode_mismatches=0,apfs_strategy_import_verified=True,
+                    release_caller_verified=True,buffer_hooks=9,
+                    fresh_pc_simulated_tests=17,reused_transport_regression_tests=19,
+                    compatible_fresh_pc_backup_run=43544518065,root_region_identity_verified=True,
                     requires_old_pc_files=False,requires_existing_phone_unixnu=True,
                     backup_source='fresh connected device, current Android slot, double-read SHA256',
                     root_check='fresh full read-only root and carrier SHA256 on recovery',

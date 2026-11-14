@@ -138,5 +138,41 @@ class FreshTests(unittest.TestCase):
         with patch.object(f.io,'invoke',return_value=b'testphone fastboot\n'),patch.object(f.io.Fastboot,'get',variable):
             with self.assertRaisesRegex(ValueError,'slot changed'):f.io.Fastboot('fake-fastboot',b)
 
+    def previous_session(self):
+        self.prepared()
+        for name in ('backup.json','root-check.json'):
+            p=self.state/name;r=f.io.load(p)
+            r['run']=43544518065;r['manifest_sha256']=f.BACKUP_MANIFESTS[43544518065]
+            f.io.save(p,r)
+
+    def test_previous_fresh_pc_backup_and_receipt_work_without_relabeling(self):
+        self.previous_session()
+        before={p.name:p.read_bytes() for p in self.state.iterdir() if p.is_file()}
+        fb=FakeFastboot();f.start(PACKAGE,self.state,lambda b:fb)
+        self.assertEqual(fb.commands[0][1],'boot_a')
+        for name,data in before.items():self.assertEqual((self.state/name).read_bytes(),data)
+        (self.state/'root-check.json').unlink()
+        f.restore(self.state,lambda b:fb)
+        self.assertEqual(fb.commands[-2][2],str(self.state/'boot_a.img'))
+
+    def test_unrecognized_backup_run_cannot_flash_or_restore(self):
+        self.previous_session();p=self.state/'backup.json';b=f.io.load(p);b['run']=43395897855;f.io.save(p,b)
+        fb=FakeFastboot()
+        for op in (lambda:f.start(PACKAGE,self.state,lambda b:fb),lambda:f.restore(self.state,lambda b:fb)):
+            with self.assertRaises(ValueError):op()
+        self.assertEqual(fb.commands,[])
+
+    def test_previous_receipt_with_changed_root_blocks_start(self):
+        self.previous_session();p=self.state/'root-check.json';r=f.io.load(p);r['verified'][0]['sha256']='0'*64;f.io.save(p,r)
+        fb=FakeFastboot()
+        with self.assertRaises(ValueError):f.start(PACKAGE,self.state,lambda b:fb)
+        self.assertEqual(fb.commands,[])
+
+    def test_previous_receipt_cannot_mix_run_or_manifest(self):
+        self.previous_session();p=self.state/'root-check.json';original=f.io.load(p)
+        for key,value in [('run',f.RUN),('manifest_sha256',f.MANIFEST_SHA)]:
+            r=copy.deepcopy(original);r[key]=value;f.io.save(p,r)
+            with self.assertRaises(ValueError):f.ready(PACKAGE,self.state)
+
 
 if __name__ == '__main__': unittest.main(verbosity=2)

@@ -119,7 +119,23 @@ int main(void){
  free(mem);return 0;
 }
 '''
-    (w/'test.c').write_text(stubs+'\n'+code+'\n'+tests)
+    # Keep the upstream handler byte-for-byte intact. Its constant strlen-based
+    # array bound is a Clang extension; suppress only that diagnostic, only in
+    # this extracted function. Recorder, stubs and tests retain strict warnings.
+    handler_prefix='''
+#if defined(__clang__)
+#pragma clang diagnostic push
+#if __has_warning("-Wgnu-folding-constant")
+#pragma clang diagnostic ignored "-Wgnu-folding-constant"
+#endif
+#endif
+'''
+    handler_suffix='''
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+'''
+    (w/'test.c').write_text(stubs+'\n'+handler_prefix+code+handler_suffix+'\n'+tests)
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(w),'-I',str(a.device.resolve()/'package'),str(w/'test.c'),'-o',str(w/'test')],check=True)
     subprocess.run([str(w/'test')],check=True,timeout=20,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
     (w/'off.c').write_text('#include <kern/boot_progress.h>\nint main(void){int n=0;boot_progress_user_pac((void*)(long)++n);return n;}\n')

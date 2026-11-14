@@ -58,3 +58,21 @@ regressions also pass. Apple native compilation still awaits this CI run.
 Publication includes source, tests and this review only. No phone images,
 backups, device inputs, credentials or unrelated packaging changes are included.
 Existing root contents and partition geometry are unchanged.
+
+## Clang host-harness correction after run 43653017312
+
+The package job stopped at `user-pac-preflight.log`, before native compilation.
+Apple Clang rejects the original XNU handler's constant `strlen` array bound
+under the host test's `-Werror` (`-Wgnu-folding-constant`). The native-selector
+preflight passed; this failure is in the host harness, not a kernel build result.
+
+Wrap only the verbatim extracted handler in Clang diagnostic push/pop, ignoring
+that single diagnostic when supported. Recorder, stubs and test assertions keep
+strict warnings. The source-equality assertion, `-Wall -Wextra -Werror`, ASan,
+UBSan and exception behavior checks remain enabled. No kernel or device-overlay
+change is needed for this correction.
+
+Validation: Debian Clang 19.1.7 reproduces the same error on the original test.
+The corrected test passes with Clang 19.1.7 and GCC 14.2, including ASan/UBSan.
+The native-selector/slider and exit-reason tests also pass with Clang 19.1.7.
+Apple Clang and native compilation still require the next CI run.

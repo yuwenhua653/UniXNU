@@ -76,3 +76,25 @@ Validation: Debian Clang 19.1.7 reproduces the same error on the original test.
 The corrected test passes with Clang 19.1.7 and GCC 14.2, including ASan/UBSan.
 The native-selector/slider and exit-reason tests also pass with Clang 19.1.7.
 Apple Clang and native compilation still require the next CI run.
+
+## Mach/BSD header boundary after run 43655325624
+
+Apple Clang host qualification and the full firmware/PAC preflight passed.
+Native bootstrap compilation then failed in `sleh.o`: the PAC instrumentation's
+new `<sys/proc.h>` import mixed BSD and Mach-private definitions of `dev_t`,
+`daddr_t` and `clock_t`. These were the three compiler errors in the complete
+bootstrap log. Moving that header would not resolve the incompatible types.
+
+Remove that import and declare `extern int proc_selfpid(void);` beside the
+existing BSD bridge declaration in `sleh.c`. The signature matches the pinned
+`bsd/sys/proc.h` declaration and existing OSFMK usage such as `kern/exception.c`.
+The PAC selector changes, snapshot fields and exception behavior are unchanged.
+The earlier extracted-handler test did not inspect translation-unit imports;
+extend it to enforce the Mach header boundary and compile the real declaration
+with the host mock instead of supplying an independent static signature.
+
+Validation: fresh capsule reconstruction passes the updated test with Clang
+19.1.7 and GCC 14.2 under ASan/UBSan. The previous broken capsule is rejected
+by the new dependency check, naming `sys/proc.h`, before compilation. Native
+selector/slider and exit-reason tests also pass with Clang. A new native CI
+build is still required; these host checks do not establish device boot.

@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,7 +27,26 @@ with tempfile.TemporaryDirectory() as tmp:
             patch=(roots[prefix]/tail if sep else series.parent/line).resolve();text=patch.read_text()
             if not any('--- a/'+n in text or '+++ b/'+n in text for n in subjects):continue
             subprocess.run(['git','apply',*[f'--include={n}' for n in subjects],str(patch)],cwd=w,check=True)
-    code=handler(dest.read_text());original=handler((a.xnu/subjects[0]).read_text())
+    patched_source=dest.read_text();original_source=(a.xnu/subjects[0]).read_text()
+    # The handler-only harness cannot compile XNU's complete header graph.
+    # Check its newly introduced dependencies too: importing BSD proc.h into
+    # OSFMK collides with the Mach dev_t, daddr_t and clock_t definitions.
+    def includes(source):
+        return set(re.findall(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]',source,re.M))
+    added_headers=includes(patched_source)-includes(original_source)
+    removed_headers=includes(original_source)-includes(patched_source)
+    assert added_headers=={'kern/boot_progress.h'} and not removed_headers, (
+        f'Unexpected sleh.c header dependencies: added={sorted(added_headers)}, '
+        f'removed={sorted(removed_headers)}; do not import BSD process types into OSFMK')
+    def pid_declaration(source):
+        declarations=re.findall(r'^\s*extern[^;\n]*\bproc_selfpid\s*\([^;\n]*\)\s*;',source,re.M)
+        assert len(declarations)==1, 'Require one explicit proc_selfpid prototype'
+        return declarations[0].strip()
+    pid_decl=pid_declaration(patched_source)
+    signature=lambda declaration:re.sub(r'\s+','',declaration)
+    assert signature(pid_decl)==signature(pid_declaration((a.xnu/'bsd/sys/proc.h').read_text()))
+    assert signature(pid_decl)==signature(pid_declaration((a.xnu/'osfmk/kern/exception.c').read_text()))
+    code=handler(patched_source);original=handler(original_source)
     start=code.index('#if (defined(XNU_BOOT_PROGRESS) && XNU_BOOT_PROGRESS) || defined(MYRON_EARLY_PROGRESS)\n')
     end=code.index('#endif\n\n',start)+len('#endif\n\n')
     assert code[:start]+code[end:]==original, 'Exception decisions changed'
@@ -77,7 +97,7 @@ static const char *ptrauth_key_to_string(ptrauth_key k){(void)k;return "IA";}
 static void autxx_instruction_extract_reg(uint32_t i,char r[4]){(void)i;strcpy(r,"x0");}
 static const char *autix_system_instruction_extract_reg(uint32_t i){(void)i;return "lr";}
 static void bxrax_instruction_extract_reg(uint32_t i,char r[4]){(void)i;strcpy(r,"x0");}
-static int proc_selfpid(void){return pid;}
+int proc_selfpid(void){return pid;}
 __attribute__((noreturn)) static void panic(const char *s,...){(void)s;longjmp(escape,2);}
 __attribute__((noreturn)) static void panic_with_thread_kernel_state(const char *s,arm_saved_state_t *p){(void)s;(void)p;longjmp(escape,3);}
 __attribute__((noreturn)) static void exception_triage(exception_type_t e,mach_exception_data_type_t *c,mach_msg_type_number_t n){delivered_exception=e;delivered_num=n;memcpy(delivered_codes,c,sizeof delivered_codes);longjmp(escape,1);}
@@ -135,10 +155,10 @@ int main(void){
 #pragma clang diagnostic pop
 #endif
 '''
-    (w/'test.c').write_text(stubs+'\n'+handler_prefix+code+handler_suffix+'\n'+tests)
+    (w/'test.c').write_text(pid_decl+'\n'+stubs+'\n'+handler_prefix+code+handler_suffix+'\n'+tests)
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(w),'-I',str(a.device.resolve()/'package'),str(w/'test.c'),'-o',str(w/'test')],check=True)
     subprocess.run([str(w/'test')],check=True,timeout=20,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
     (w/'off.c').write_text('#include <kern/boot_progress.h>\nint main(void){int n=0;boot_progress_user_pac((void*)(long)++n);return n;}\n')
     subprocess.run([a.cc,'-std=c11','-I',str(w),str(w/'off.c'),'-o',str(w/'off')],check=True)
     subprocess.run([str(w/'off')],check=True)
-print('PASS exact PAC patch stack, unchanged handler and exception policy, PID 1 first snapshot, all 29 GPRs, bounded 60-column render, IRQ/mount/exit/panic retention, ownership guards and disabled hook; ASan/UBSan host execution')
+print('PASS exact PAC patch stack, OSFMK header boundary and original proc_selfpid prototype, unchanged handler and exception policy, PID 1 first snapshot, all 29 GPRs, bounded 60-column render, IRQ/mount/exit/panic retention, ownership guards and disabled hook; ASan/UBSan host execution')

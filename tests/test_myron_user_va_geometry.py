@@ -96,7 +96,9 @@ def geometry_program(work):
 #include <stdbool.h>
 #include <assert.h>
 #include <stdio.h>
+#ifndef __unused
 #define __unused __attribute__((unused))
+#endif
 typedef uint64_t vm_offset_t;
 typedef uint64_t vm_map_address_t;
 typedef uint64_t pmap_paddr_t;
@@ -230,6 +232,16 @@ def main():
         binary = work / 'geometry'
         subprocess.run([*common, str(probe), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True, timeout=10)
+        # Darwin sys/cdefs.h already defines this macro, with a different token
+        # spelling. Exercise that case on Linux too; keep -Werror enabled.
+        darwin_macro = work / 'darwin-macro.h'
+        darwin_macro.write_text('#ifndef __unused\n'
+                               '#define __unused __attribute__((__unused__))\n'
+                               '#endif\n')
+        darwin_binary = work / 'geometry-existing-unused'
+        subprocess.run([*common, '-include', str(darwin_macro), str(probe),
+                        '-o', str(darwin_binary)], check=True)
+        subprocess.run([str(darwin_binary)], check=True, timeout=10)
         # Confirm the same actual private layout for the arm64e ABI as well as
         # the executable host model. Only compiler-owned C headers are needed.
         arm64e = work / 'arm64e-layout.c'
@@ -259,6 +271,7 @@ def main():
             run = subprocess.run([*common, '-fsyntax-only', str(test)], text=True, capture_output=True)
             assert run.returncode and 'Native user VA43 requires' in run.stderr, (name, run.stderr)
         check_transition_sources(work)
+        print('PASS existing Darwin-style __unused macro with -Werror retained')
         print('PASS arm64e private table layout matches compiled native artifact offsets')
         print('PASS actual selected headers: boot 26/26, runtime 21/26; 12 invalid configurations rejected')
         print('PASS 3 source transitions after invalid TTBR0, bootstrap unchanged, runtime PAC-width consumers')

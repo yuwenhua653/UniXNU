@@ -44,7 +44,11 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('native-pac-preflight.log',[sys.executable,str(here/'tests/test_myron_native_pac.py'),
+  checks=[('user-va-geometry-preflight.log',[sys.executable,str(here/'tests/test_myron_user_va_geometry.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
+   ('user-va-native-verifier-preflight.log',[sys.executable,str(here/'tests/test_myron_user_va_native.py'),
+   '--device',str(d)]),
+   ('native-pac-preflight.log',[sys.executable,str(here/'tests/test_myron_native_pac.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
    ('user-pac-preflight.log',[sys.executable,str(here/'tests/test_myron_user_pac.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu')]),
@@ -167,6 +171,7 @@ allowed={
  'device/myron27/patches/xnu/myron-stall-evidence.patch',
  'device/myron27/patches/xnu/myron-buffer-ownership.patch',
  'device/myron27/patches/xnu/myron-native-pac-user-abi.patch',
+ 'device/myron27/patches/xnu/myron-user-pac-va43.patch',
  'device/myron27/package/MyronBootProgress.c',
  'device/myron27/upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/patches/xnu/boot-progress.patch',
  'device/myron27/package/BootProgressCore.h',

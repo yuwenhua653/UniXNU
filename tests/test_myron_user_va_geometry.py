@@ -8,6 +8,7 @@ Only unrelated kernel services and pmap fields are replaced by host scaffolding.
 This checks source geometry and ordering; it does not execute the XNU MMU path.
 """
 import argparse
+import os
 from pathlib import Path
 import re
 import shutil
@@ -248,8 +249,22 @@ def main():
         layout = program[:program.index('#if ARM_PARAMETERIZED_PMAP')]
         layout = layout.replace('#include <assert.h>\n', '').replace('#include <stdio.h>\n', '')
         arm64e.write_text(layout)
+        # Apple Clang otherwise inherits the runner's MacOSX SDK even for an
+        # explicit iPhone triple. This layout probe needs only compiler-owned
+        # stdint/stddef/stdbool headers, not either platform's SDK.
+        resource = Path(subprocess.check_output(
+            [args.cc, '-print-resource-dir'], text=True).strip()).resolve()
+        if not (resource / 'include/stdint.h').is_file():
+            raise RuntimeError('Missing Clang compiler-owned stdint.h')
+        sysroot = work / 'freestanding-sysroot'
+        sysroot.mkdir()
+        target_env = os.environ.copy()
+        for key in ('SDKROOT', 'MACOSX_DEPLOYMENT_TARGET', 'IPHONEOS_DEPLOYMENT_TARGET'):
+            target_env.pop(key, None)
         subprocess.run([*common, '--target=arm64e-apple-ios18.0', '-ffreestanding',
-                        '-fsyntax-only', str(arm64e)], check=True)
+                        '-isysroot', str(sysroot), '-nostdinc',
+                        '-isystem', str(resource / 'include'),
+                        '-fsyntax-only', str(arm64e)], check=True, env=target_env)
         # Override after the real board header so guards cannot be hidden by redefines.
         negatives = {
             '16k': '#define __ARM_16K_PG__ 1',

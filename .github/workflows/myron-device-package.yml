@@ -18,6 +18,54 @@ concurrency:
   group: myron-device-package
   cancel-in-progress: false
 jobs:
+  macos-geometry:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
+    runs-on: macos-26
+    timeout-minutes: 10
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Reconstruct source and fetch only pinned geometry references
+        shell: python
+        run: |
+          import json, os, subprocess, sys
+          from pathlib import Path
+          subprocess.run([sys.executable, 'myron27-build.py', '--source-only'], check=True)
+          snapshot = json.loads(Path('myron27-inputs.json').read_text())
+          xnu = [s for s in snapshot['sources'] if s['path'] == 'references/xnu']
+          assert len(xnu) == 1
+          for item in [snapshot['upstream'], xnu[0]]:
+              path = Path(os.environ['RUNNER_TEMP'])/'myron-iphone27'/item['path']
+              path.mkdir(parents=True, exist_ok=True)
+              subprocess.run(['git', 'init', '-q', str(path)], check=True)
+              subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
+              subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
+              assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check native macOS host and freestanding arm64e geometry
+        run: |
+          mkdir -p "$RUNNER_TEMP/geometry-check"
+          set -o pipefail
+          python3 tests/test_myron_user_va_geometry.py \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
+            --upstream "$RUNNER_TEMP/myron-iphone27/upstream" \
+            --xnu "$RUNNER_TEMP/myron-iphone27/references/xnu" --cc clang \
+            2>&1 | tee "$RUNNER_TEMP/geometry-check/geometry.log"
+          python3 tests/test_myron_user_va_native.py \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
+            2>&1 | tee "$RUNNER_TEMP/geometry-check/native-verifier.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: myron-macos-geometry-check
+          path: ${{ runner.temp }}/geometry-check
+          if-no-files-found: warn
+          retention-days: 7
   handoff:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
     runs-on: ubuntu-24.04
@@ -98,7 +146,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/myron-private-inputs"
           rm -f "$RUNNER_TEMP/device-inputs.zip"
   package:
-    needs: [inputs, handoff]
+    needs: [inputs, handoff, macos-geometry]
     permissions:
       contents: read
     runs-on: macos-26

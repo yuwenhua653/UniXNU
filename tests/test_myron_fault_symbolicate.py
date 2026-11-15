@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Synthetic cache bounds/identity/address checks; no original Apple bytes."""
 import importlib.util
+import contextlib
+import io
+import json
 from pathlib import Path
 import struct
 import sys
 import tempfile
+import tracemalloc
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('fault_symbolicate', ROOT/'myron27-fault-symbolicate.py')
@@ -233,6 +238,111 @@ class CacheTests(unittest.TestCase):
         c=self.write(self.with_exports(b'\0\1_cycle\0\0'))
         with self.assertRaisesRegex(m.Error,'cyclic'):
             c.symbol_for(BASE+0x1224,c.image_for(BASE+0x1224))
+
+    def sparse_large_strings(self):
+        """A cache-global string pool larger than64MiB with onlytwo live names."""
+        b=cache_bytes();string_offset=0x4000;string_size=65*1024*1024
+        total=string_offset+string_size
+        struct.pack_into('<Q',b,40,total)
+        struct.pack_into('<Q',b,232,total)
+        struct.pack_into('<Q',b,0x200+8,total)
+        struct.pack_into('<Q',b,0x240+8,total)
+        linkedit=0x1020+152
+        struct.pack_into('<Q',b,linkedit+32,total-0x2000)
+        struct.pack_into('<Q',b,linkedit+48,total-0x2000)
+        symtab=0x1020+152+72+16
+        struct.pack_into('<4I',b,symtab+8,0x2900,2,string_offset,string_size)
+        struct.pack_into('<IBBHQ',b,0x2900,1,0xf,1,0,BASE+0x1200)
+        struct.pack_into('<IBBHQ',b,0x2910,string_size-16,0xf,1,0,BASE+0x1220)
+        with self.main.open('wb') as f:
+            f.write(b);f.truncate(total)
+            f.seek(string_offset+1);f.write(b'_low\0')
+            f.seek(string_offset+string_size-16);f.write(b'_high\0')
+        c=m.CacheSet(self.directory);self.addCleanup(c.close)
+        return c
+
+    def test_large_global_string_pool_uses_bounded_reads(self):
+        c=self.sparse_large_strings();im=c.image_for(BASE+0x1224)
+        original=c.read;reads=[]
+        def bounded_read(va,size,*args,**kwargs):
+            reads.append(size)
+            self.assertLessEqual(size,1024*1024,'whole global pool copied through read')
+            return original(va,size,*args,**kwargs)
+        tracemalloc.start()
+        try:
+            with patch.object(c,'read',side_effect=bounded_read):
+                low=c.symbol_for(BASE+0x1204,im)
+                high=c.symbol_for(BASE+0x1224,im)
+            _,peak=tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(low['name'],'_low')
+        self.assertEqual(high['name'],'_high')
+        self.assertLess(peak,4*1024*1024,'large metadata range allocated instead of mapped')
+        self.assertTrue(reads)
+
+    def test_large_valid_nlist_count_is_bounded_by_actual_file(self):
+        b=cache_bytes();count=2_000_001;nlist_offset=0x4000
+        strings_offset=nlist_offset+count*16;total=(strings_offset+16+4095)&~4095
+        struct.pack_into('<Q',b,40,total);struct.pack_into('<Q',b,232,total)
+        struct.pack_into('<Q',b,0x200+8,total);struct.pack_into('<Q',b,0x240+8,total)
+        linkedit=0x1020+152
+        struct.pack_into('<Q',b,linkedit+32,total-0x2000)
+        struct.pack_into('<Q',b,linkedit+48,total-0x2000)
+        symtab=0x1020+152+72+16
+        struct.pack_into('<4I',b,symtab+8,nlist_offset,count,strings_offset,16)
+        with self.main.open('wb') as f:
+            f.write(b);f.truncate(total)
+            f.seek(nlist_offset+(count-1)*16)
+            f.write(struct.pack('<IBBHQ',1,0xf,1,0,BASE+0x1200))
+            f.seek(strings_offset+1);f.write(b'_last\0')
+        c=m.CacheSet(self.directory);self.addCleanup(c.close)
+        original=c.read
+        def bounded_read(va,size,*args,**kwargs):
+            self.assertLessEqual(size,1024*1024,'whole nlist table copied')
+            return original(va,size,*args,**kwargs)
+        with patch.object(c,'read',side_effect=bounded_read):
+            row=c.symbol_for(BASE+0x1204,c.image_for(BASE+0x1204))
+        self.assertEqual(row['name'],'_last')
+
+    def bad_nlist_good_export(self):
+        b=self.with_exports(b'\0\1_export\0\x0b'+b'\x03\0\xa0\x04\0')
+        struct.pack_into('<I',b,0x2900,0xffffffff)
+        return b
+
+    def test_bad_nlist_preserves_export_in_optional_mode(self):
+        c=self.write(self.bad_nlist_good_export());im=c.image_for(BASE+0x1224)
+        with self.assertRaises(m.Error):c.symbol_for(BASE+0x1224,im)
+        row=c.symbol_for(BASE+0x1224,im,strict=False)
+        self.assertEqual((row['name'],row['source']),('_export','exports_trie'))
+        self.assertIn('warning',json.dumps(row).lower())
+
+    def test_bad_nlist_preserves_pc_disassembly(self):
+        c=self.write(self.bad_nlist_good_export())
+        row=c.describe(BASE+0x1204,window=4)
+        hit=next(x for x in row['instructions'] if x['is_observed_pc'])
+        self.assertEqual((hit['mnemonic'],hit['operands']),('ldr','x8, [x0]'))
+        self.assertIn('warning',json.dumps(row).lower())
+
+    def test_main_checkpoints_pc_before_optional_symbol_failure(self):
+        self.main.write_bytes(cache_bytes())
+        output=self.directory/'fault-report.json';seen=[]
+        def optional_failure(cache,va,image,*args,**kwargs):
+            self.assertTrue(output.is_file(),'core report missing before optional symbol work')
+            partial=json.loads(output.read_text())
+            hit=next(row for row in partial['pc']['instructions'] if row['is_observed_pc'])
+            self.assertEqual((hit['mnemonic'],hit['operands']),('ldr','x8, [x0]'))
+            seen.append(partial)
+            raise m.Error('injected optional symbol failure')
+        argv=['myron27-fault-symbolicate.py','--cache-dir',str(self.directory),'--output',str(output),
+              '--pc',hex(BASE+0x1204),'--lr','0','--slide','0','--fault','0']
+        with patch.object(sys,'argv',argv),patch.object(m.CacheSet,'symbol_for',autospec=True,side_effect=optional_failure),contextlib.redirect_stdout(io.StringIO()):
+            m.main()
+        self.assertTrue(seen)
+        final=json.loads(output.read_text())
+        self.assertEqual(final['result'],'passed')
+        self.assertFalse(final['optional_analysis_complete'])
+        self.assertIn('injected optional symbol failure',json.dumps(final))
 
     def test_disassembly_rejects_unaligned_pc(self):
         c=self.write()

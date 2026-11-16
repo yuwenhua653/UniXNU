@@ -14,7 +14,9 @@ def load(name):
  spec=importlib.util.spec_from_file_location(name.replace('-','_'),ROOT/(name+'.py'))
  module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 def selected(path):
- return path.startswith('/usr/lib/') or path in (
+ return path.startswith('/usr/lib/system/') or path in (
+  '/usr/lib/libobjc.A.dylib', '/usr/lib/libc++abi.dylib',
+  '/usr/lib/libc++.1.dylib', '/usr/lib/libSystem.B.dylib',
   '/System/Library/Frameworks/Foundation.framework/Foundation',
   '/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
 def write_index(cache,path):
@@ -22,7 +24,10 @@ def write_index(cache,path):
   region_start=hex(cache.region_start),max_slide=hex(cache.max_slide),images=cache.images,selected=[])
  for image in cache.images:
   if not selected(image['path']):continue
-  meta=cache.macho(image);symbols=cache.symbols(image,strict=False)
+  meta=cache.macho(image);symbols=[];seen=set()
+  for address,name,source in cache.symbols(image,strict=False):
+   if name in ('<redacted>','') or (address,name) in seen:continue
+   seen.add((address,name));symbols.append((address,name,source))
   row=dict(path=image['path'],uuid=image['uuid'],address=hex(image['address']),size=image['size'],
    starts=meta['starts'],symbols=symbols,warnings=meta.get('symbol_warnings',[]))
   # One named ABI compatibility query, independent of any device observation.
@@ -30,7 +35,7 @@ def write_index(cache,path):
   row['lockdown_query']=[cache.describe(address,128) for address in sorted(set(targets))]
   result['selected'].append(row)
  encoded=json.dumps(result,separators=(',',':')).encode()
- if len(encoded)>MAX_BYTES:raise ValueError('Symbol index exceeds bounded output limit')
+ if len(encoded)>MAX_BYTES:raise ValueError(f'Symbol index {len(encoded)} bytes exceeds {MAX_BYTES} byte limit')
  Path(path).write_bytes(encoded)
  return dict(images=len(result['images']),indexed=len(result['selected']),bytes=len(encoded))
 def main():

@@ -14,7 +14,7 @@ p.add_argument('--cc', default='clang')
 a = p.parse_args()
 roots = dict(device=a.device.resolve(), arch=a.upstream.resolve()/'profiles/arch/arm64e',
              os=a.device.resolve()/'upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1')
-subjects = ('bsd/kern/kern_exit.c', 'osfmk/kern/boot_progress.h')
+subjects = ('bsd/kern/kern_exit.c', 'osfmk/kern/boot_progress.h', 'osfmk/kern/task.c')
 with tempfile.TemporaryDirectory() as tmp:
     w = Path(tmp)
     for name in subjects:
@@ -43,7 +43,12 @@ with tempfile.TemporaryDirectory() as tmp:
     assert code.index('ut = get_bsdthread_info(self);', code.index('proc_prepareexit(proc_t p')) < start
     assert end < code.index('proc_handle_critical_exit(p, rv);', end)
     assert 'backtrace_user(' in hook and 'copyin(' not in hook
+    assert 'task->' not in hook
+    assert 'boot_progress_current_cache_slide()' in hook
     assert 'backtrace_user(bt, 2, NULL, &btinfo)' in before
+    mach_source = (w/subjects[2]).read_text()
+    accessor = 'uint32_t\nboot_progress_current_cache_slide(void)\n{' + mach_source.split(
+        'uint32_t\nboot_progress_current_cache_slide(void)\n{', 1)[1].split('\n}\n', 1)[0] + '\n}\n'
     (w/'kern').mkdir()
     (w/'kern/boot_progress.h').write_text((w/subjects[1]).read_text())
     (w/'pexpert').mkdir()
@@ -66,12 +71,13 @@ with tempfile.TemporaryDirectory() as tmp:
 #define TASK_NULL NULL
 struct proc { int pid; };
 typedef struct proc *proc_t;
-struct task { uint32_t task_shared_region_slide; };
+/* Match the BSD compilation boundary: the layout is unavailable here. */
+struct task;
 typedef struct task *task_t;
 struct thread { task_t task; };
 typedef struct thread *thread_t;
 static struct proc init={1}, other={2};
-static struct task own={0x02e3c000}, foreign={0};
+extern struct task own, foreign;
 static struct thread th={&own};
 static proc_t current=&init;
 static unsigned reads, frames_to_return=20, trace_error, trace_flags=3;
@@ -141,12 +147,41 @@ int main(void){
  free(mem);return 0;
 }
 '''
-    (w/'test.c').write_text(stubs+hook+tests)
+    # Compile the real accessor in a separate Mach-side translation unit.
+    # Its layout is deliberately not visible to the BSD hook above.
+    (w/'mach.c').write_text('''#include <assert.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <kern/boot_progress.h>
+struct task { uint32_t task_shared_region_slide; };
+typedef struct task *task_t;
+#define TASK_NULL NULL
+struct task own={0x02e3c000}, foreign={0};
+static task_t active_task=&own;
+static task_t current_task(void){return active_task;}
+''' + accessor + '''
+void check_accessor(void){
+ assert(boot_progress_current_cache_slide()==0x02e3c000);
+ active_task=NULL;assert(boot_progress_current_cache_slide()==UINT32_MAX);
+ active_task=&foreign;assert(boot_progress_current_cache_slide()==0);
+ active_task=&own;
+}
+''')
+    (w/'test.c').write_text(stubs+hook+tests.replace(' boot_progress_init();',' extern void check_accessor(void);check_accessor();\n boot_progress_init();',1))
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1',
                     '-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(w),
-                    '-I',str(a.device.resolve()/'package'),str(w/'test.c'),'-o',str(w/'test')],check=True)
+                    '-I',str(a.device.resolve()/'package'),str(w/'test.c'),str(w/'mach.c'),'-o',str(w/'test')],check=True)
+    # Negative control: the exact old private-field access must fail to compile
+    # with the opaque BSD task, on Linux and macOS alike.
+    bad = (w/'test.c').read_text().replace('snapshot.cache_slide = boot_progress_current_cache_slide();',
+                                        'snapshot.cache_slide = task->task_shared_region_slide;')
+    assert bad != (w/'test.c').read_text()
+    (w/'bad.c').write_text(bad)
+    result=subprocess.run([a.cc,'-std=c11','-DMYRON_EARLY_PROGRESS=1','-I',str(w),
+                          '-I',str(a.device.resolve()/'package'),'-fsyntax-only',str(w/'bad.c')],capture_output=True,text=True)
+    assert result.returncode != 0 and ('incomplete' in result.stderr or 'undefined type' in result.stderr), result.stderr
     subprocess.run([str(w/'test')],check=True,timeout=20,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
     (w/'off.c').write_text('#include <kern/boot_progress.h>\nint main(void){int n=0;boot_progress_exit_trace((void*)(long)++n);return n;}\n')
     subprocess.run([a.cc,'-std=c11','-I',str(w),str(w/'off.c'),'-o',str(w/'off')],check=True)
     subprocess.run([str(w/'off')],check=True)
-print('PASS exact exit hook: PID/task/thread/signal guards, unsafe-context skip, bounded/partial/empty trace, first snapshot, framebuffer bounds, panic persistence, full reason and fault priority, disabled-board no evaluation')
+print('PASS opaque BSD task boundary and private Mach accessor, old field-access negative control; exact exit hook guards, bounded/partial/empty trace, first snapshot, framebuffer bounds, panic persistence, full reason and fault priority, disabled-board no evaluation')

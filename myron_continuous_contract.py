@@ -8,7 +8,7 @@ BUFFER_TRACE_SYMBOLS = frozenset({
     '_buf_getblk', '_buf_geteblk', '_buf_alloc', '_buf_free',
 })
 EXIT_TRACE_MARKER = b'SIGABRT: PID 1 exiting thread user backtrace'
-EXIT_TRACE_SYMBOLS = frozenset({'_boot_progress_exit_trace', '_backtrace_user'})
+EXIT_TRACE_SYMBOLS = frozenset({'_boot_progress_exit_trace', '_backtrace_user', '_boot_progress_current_cache_slide'})
 
 def require_exit_trace(data):
     """Require the new SIGABRT recorder in the final nested kernel payload."""

@@ -58,11 +58,11 @@ with tempfile.TemporaryDirectory() as tmp:
     stubs = r'''
 #include <assert.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include "recorder.c"
-#define SIGABRT 6
-#define WTERMSIG(rv) ((rv)&0x7f)
 #define TASK_NULL NULL
 struct proc { int pid; };
 typedef struct proc *proc_t;

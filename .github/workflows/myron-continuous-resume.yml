@@ -16,6 +16,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   firmware:
+    # This recovery workflow pins an older native artifact. Ordinary source
+    # pushes must use the device-bound build, never rebuild that old payload.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

@@ -12,14 +12,24 @@ p.add_argument('--cc', default='cc')
 p.add_argument('--target-cc', help='Optional Clang binary for an independent arm64e compile')
 a=p.parse_args()
 source=a.device/'package/MyronBootProgress.c'
-patch=(a.device/'upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/patches/xnu/boot-progress.patch').read_text()
-header=patch.split('+++ b/osfmk/kern/boot_progress.h\n',1)[1].split('diff --git',1)[0]
-header='\n'.join(l[1:] for l in header.splitlines() if l.startswith('+'))+'\n'
-header=header.replace('#if defined(XNU_BOOT_PROGRESS) && XNU_BOOT_PROGRESS','#if defined(MYRON_EARLY_PROGRESS)')
 with tempfile.TemporaryDirectory() as tmp:
     root=Path(tmp)
     (root/'pexpert').mkdir();(root/'kern').mkdir()
-    (root/'kern/boot_progress.h').write_text(header)
+    # Compile against the actual header after board patches, not a stale
+    # extraction of only the OS profile's initial header definition.
+    header_path='osfmk/kern/boot_progress.h'
+    patches=[a.device/'upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/patches/xnu/boot-progress.patch']
+    series=a.device/'patches/xnu/series'
+    for line in series.read_text().splitlines():
+        line=line.strip()
+        if not line or line.startswith('#'):continue
+        assert ':' not in line, 'Resolve scoped board patch before testing'
+        patches.append(series.parent/line)
+    for patch in patches:
+        text=patch.read_text()
+        if '--- a/'+header_path in text or '+++ b/'+header_path in text:
+            subprocess.run(['git','apply','--include='+header_path,str(patch.resolve())],cwd=root,check=True)
+    (root/'kern/boot_progress.h').write_bytes((root/header_path).read_bytes())
     (root/'pexpert/pexpert.h').write_text('''#include <stddef.h>
 #define kPEReleaseScreen 3
 int PE_parse_boot_argn(const char *,void *,int);

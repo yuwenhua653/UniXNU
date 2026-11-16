@@ -65,6 +65,8 @@ need(required<=definitions.keys(),'Continuous recorder missing from final prelin
 buffer_definitions=require_buffer_trace(kernel)
 exit_trace_definitions=require_exit_trace(kernel)
 lockdown_state_definitions=require_lockdown_state(kernel)
+from audit_amfi_stack import require_final as require_amfi_stack
+amfi_stack_binding=require_amfi_stack(kernel,definitions)
 need(b'MYRON iOS27 - CONTINUOUS XNU BOOT' in kernel,'Wrong final recorder implementation')
 menu=tomllib.loads(read('unixnu.toml').decode());entries=[e for e in menu['entry'] if e['id']==menu['boot']['default']]
 need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']==0,'Manual menu policy changed')
@@ -78,7 +80,7 @@ header=(f'#define MYRON_KERNEL_FAT_BYTES 0x{len(fat):x}ULL\n#define MYRON_KERNEL
 proof=dict(result='passed',bytes=len(fat),sha256=sha(fat),crc32=f'{zlib.crc32(fat):08x}',transport_header_sha256=sha(header.encode()),
     kernel_sha256=h('kernel.macho'),adt_sha256=h('kernel.macho.adt'),kernel_args=e['args'],root_volume_enabled=True,
     boot_assets=dict(initrd=e['initrd'],data_sha256=h('scratch-data.img'),trust_bundle_sha256=h('kernel.macho.trustcache'),dyld_startup_probe_enabled=True),
-    producer=producer,phone_tested=False)
+    producer=producer,amfi_stack_binding=amfi_stack_binding,phone_tested=False)
 save(payload/'payload.json',proof)
 prepare(a.work/'mu')
 subprocess.run(['make','-C',str(a.work/'mu/Mu_Basecore/BaseTools/Source/C'),'-j4','CLANG=1','CC=clang','CXX=clang++'],env=env,check=True)

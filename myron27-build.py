@@ -44,7 +44,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('user-va-geometry-preflight.log',[sys.executable,str(here/'tests/test_myron_user_va_geometry.py'),
+  checks=[('amfi-stack-preflight.log',[sys.executable,str(here/'tests/test_myron_amfi_stack.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
+   ('user-va-geometry-preflight.log',[sys.executable,str(here/'tests/test_myron_user_va_geometry.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
    ('user-va-native-verifier-preflight.log',[sys.executable,str(here/'tests/test_myron_user_va_native.py'),
    '--device',str(d)]),
@@ -165,6 +167,8 @@ delta=json.loads((here/'myron27-storage-delta.json').read_text())
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/audit_amfi_stack.py',
+ 'device/myron27/patches/xnu/myron-amfi-stack-alignment.patch',
  'device/myron27/fixtures/fileset-24A446-iphone12-1-symbols.json',
  'device/myron27/audit_vnode_bindings.py',
  'device/myron27/verify_reviewed_fixture.py',

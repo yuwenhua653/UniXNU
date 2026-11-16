@@ -3,7 +3,7 @@ import struct
 
 BUFFER_TRACE_MARKER = b'MYRON BUFFER TRACE 4 - release / completion'
 BUFFER_TRACE_SYMBOLS = frozenset({
-    '_myron_buffer_event', '_myron_boot_progress_panic',
+    '_myron_buffer_event', '_myron_boot_progress_panic', '_myron_boot_progress_panic_formatted', '_myron_boot_object_failure',
     '_myron_boot_progress_fault', '_buf_brelse', '_buf_biodone',
     '_buf_getblk', '_buf_geteblk', '_buf_alloc', '_buf_free',
 })

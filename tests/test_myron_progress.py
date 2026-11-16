@@ -58,7 +58,30 @@ int PE_initialize_console(void *,int);
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+static int format_calls, nested_format, fail_format;
+#define vsnprintf observed_vsnprintf
 #include "recorder.c"
+#undef vsnprintf
+int observed_vsnprintf(char *out,size_t size,const char *fmt,va_list args) {
+ ++format_calls;
+ assert(panic_claimed && myron_panic_pc==0xabc123);
+ assert(strstr(display.previous[45],"EARLY PANIC"));
+ if(nested_format) {
+  myron_boot_progress_fault("nested while formatting",0xbad,1,2,3);
+  assert(myron_panic_pc==0xabc123);
+ }
+ if(fail_format)return -1;
+ return vsnprintf(out,size,fmt,args);
+}
+static void format_panic(const char *fmt,...) {
+ va_list args;va_start(args,fmt);
+ myron_boot_progress_panic_formatted(fmt,0xabc123,&args);
+ // Check that the recorder copied, rather than consumed, original arguments.
+ char after[1024];vsnprintf(after,sizeof(after),fmt,args);
+ assert(strstr(after,"test-error=14") || strlen(after)==900);
+ va_end(args);
+}
 static int option=2,release_result,release_calls;
 int PE_parse_boot_argn(const char *key,void *out,int size) {
  assert(!strcmp(key,"boot-progress") && size==sizeof(unsigned));
@@ -137,6 +160,43 @@ int main(void) {
  // Fault rows preserve both frame guards and padded scanline bytes.
  for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
  for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
+
+ // Formatted panic keeps actual error/source values, original varargs and
+ // first-fault fallback even if its formatter faults recursively.
+ panic_claimed=0;
+ myron_boot_object_failure(1,2,0,0xff1234);
+ assert(object_failure.count==1 && object_failure.requested==0);
+ nested_format=1;format_panic("test-error=%u source=%s:%d",14u,"AMFI",863);
+ assert(format_calls==1 && strstr(display.previous[1],"test-error=14 source=AMFI:863"));
+ assert(strstr(display.previous[10],"may be unrelated"));
+ assert(strstr(display.previous[11],"kind=0x01 stage=0x02"));
+ assert(strstr(display.previous[12],"0000000000ff1234"));
+ myron_boot_object_failure(2,1,999,0xbad);assert(object_failure.count==1);
+ format_panic("test-error=%u",14u);assert(format_calls==1);
+ panic_claimed=0;nested_format=0;object_failure_busy=1;
+ format_panic("test-error=%u",14u);
+ assert(strstr(display.previous[10],"snapshot busy") && object_failure_busy);
+ object_failure_busy=0;panic_claimed=0;
+ char long_message[901];memset(long_message,'A',900);long_message[900]=0;
+ format_panic("%s",long_message);
+ assert(strstr(display.previous[0],"truncated") && strlen(display.previous[9])==31);
+ panic_claimed=0;fail_format=1;format_panic("test-error=%u",14u);
+ assert(strstr(display.previous[0],"formatter failed"));
+ fail_format=0;panic_claimed=0;myron_boot_progress_panic_formatted(NULL,0xabc123,NULL);
+ assert(panic_claimed && strstr(display.previous[45],"no format string"));
+ panic_claimed=0;display.bound=0;unsigned calls_before=format_calls;
+ format_panic("test-error=%u",14u);assert(!panic_claimed && format_calls==(int)calls_before);
+ display.bound=1;enabled=0;
+ format_panic("test-error=%u",14u);assert(!panic_claimed && format_calls==(int)calls_before);
+ unsigned long long count_before=object_failure.count;
+ myron_boot_object_failure(2,1,123,456);assert(object_failure.count==count_before);
+ enabled=1;
+ object_failure_busy=1;myron_boot_object_failure(2,1,123,456);
+ assert(object_failure.count==count_before && object_failure_busy);object_failure_busy=0;
+ myron_boot_object_failure(5,1,64,0x777);
+ assert(object_failure.kind==5 && object_failure.stage==1 && object_failure.requested==64);
+ for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
+ for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
  // A failed release reports only this buffer's history, newest first, with
  // the original ownership fields and call sites preserved across interleaving.
  myron_buffer_event(1,0xa000,0x101,~0u,1,0x100,0x20);
@@ -195,4 +255,4 @@ int main(void) {
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
-print('PASS typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+print('PASS formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

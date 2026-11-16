@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory() as tmp:
    subprocess.run(['git','apply',*[f'--include={n}' for n in subjects],str(patch)],cwd=work,check=True)
  assert before
  debug=(work/subjects[0]).read_text()
- call='\tmyron_boot_progress_panic(panic_format_str, (uint64_t)panic_caller);\n'
+ call='\tmyron_boot_progress_panic_formatted(panic_format_str, (uint64_t)panic_caller, panic_args);\n'
  assert debug.count(call)==1
  assert debug.index(call)<debug.index('if (PE_kputc == NULL)',debug.index(call))<debug.index('ml_panic_trap_to_debugger(panic_format_str',debug.index(call))
  assert debug.removeprefix('#include <kern/boot_progress.h>\n').replace(call,'')==before[subjects[0]]
@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory() as tmp:
  assert sleh.count(call)==1 and sleh.count('myron_boot_progress_irq_return();')==1
  assert sleh.replace(call,'').replace('\tmyron_boot_progress_irq_return();\n','')==before[subjects[1]]
  header=(work/subjects[2]).read_text()
- for name in ('panic','fault','irq_return'):
+ for name in ('panic','panic_formatted','fault','irq_return'):
   assert 'void myron_boot_progress_'+name+'(' in header
   assert '#define myron_boot_progress_'+name+'(...) ((void)0)' in header
 print('PASS selected patch stack; early panic precedes platform handlers; original panic/IRQ code unchanged; board-off hooks are no-ops')

@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, BUFFER_TRACE_MARKER
+from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, BUFFER_TRACE_MARKER, require_exit_trace, EXIT_TRACE_SYMBOLS, EXIT_TRACE_MARKER
 class ContractTests(unittest.TestCase):
     def sample(self,name=b'com.apple.kernel'):
         data=bytearray(512)
@@ -25,19 +25,19 @@ class ContractTests(unittest.TestCase):
     def test_rejects_unterminated_name(self):
         raw=self.sample();struct.pack_into('<I',raw,180,8);raw[289:296]=b'abcdefg'
         with self.assertRaises(ValueError):kernel_definitions(raw)
-    def buffer_sample(self, missing=None, marker=True):
-        names=sorted(BUFFER_TRACE_SYMBOLS-{missing})
+    def buffer_sample(self, missing=None, marker=True, symbols=BUFFER_TRACE_SYMBOLS, text=BUFFER_TRACE_MARKER):
+        names=sorted(symbols-{missing})
         strings=b'\0';rows=[]
         for i,name in enumerate(names):
             rows.append((len(strings),0xf,1,0,0x3000+4*i))
             strings+=name.encode()+b'\0'
         string_offset=256+16*len(rows)
-        data=bytearray(string_offset+len(strings)+len(BUFFER_TRACE_MARKER)+1)
+        data=bytearray(string_offset+len(strings)+len(text)+1)
         data[:184]=self.sample()[:184]
         struct.pack_into('<6I',data,160,2,24,256,len(rows),string_offset,len(strings))
         for i,row in enumerate(rows):struct.pack_into('<IBBHQ',data,256+16*i,*row)
         data[string_offset:string_offset+len(strings)]=strings
-        if marker:data[-len(BUFFER_TRACE_MARKER)-1:-1]=BUFFER_TRACE_MARKER
+        if marker:data[-len(text)-1:-1]=text
         return data
     def test_buffer_hooks_required_in_final_nested_kernel(self):
         self.assertEqual(set(require_buffer_trace(self.buffer_sample())),BUFFER_TRACE_SYMBOLS)
@@ -47,4 +47,11 @@ class ContractTests(unittest.TestCase):
     def test_rejects_old_trace_even_with_correct_symbol_names(self):
         with self.assertRaises(ValueError):require_buffer_trace(self.buffer_sample(marker=False))
         with self.assertRaises(ValueError):require_buffer_trace(self.sample())
+    def test_exit_trace_required_in_final_nested_kernel(self):
+        sample=lambda **kw:self.buffer_sample(symbols=EXIT_TRACE_SYMBOLS,text=EXIT_TRACE_MARKER,**kw)
+        self.assertEqual(set(require_exit_trace(sample())),EXIT_TRACE_SYMBOLS)
+        for name in EXIT_TRACE_SYMBOLS:
+            with self.subTest(name=name),self.assertRaises(ValueError):require_exit_trace(sample(missing=name))
+        with self.assertRaises(ValueError):require_exit_trace(sample(marker=False))
+        with self.assertRaises(ValueError):require_exit_trace(self.buffer_sample())
 if __name__=='__main__':unittest.main()

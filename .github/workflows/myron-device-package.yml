@@ -59,6 +59,14 @@ jobs:
           python3 tests/test_myron_user_va_native.py \
             --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
             2>&1 | tee "$RUNNER_TEMP/geometry-check/native-verifier.log"
+      - name: Check SIGABRT trace before the full kernel build
+        run: |
+          set -o pipefail
+          python3 tests/test_myron_exit_trace.py \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
+            --upstream "$RUNNER_TEMP/myron-iphone27/upstream" \
+            --xnu "$RUNNER_TEMP/myron-iphone27/references/xnu" --cc clang \
+            2>&1 | tee "$RUNNER_TEMP/geometry-check/exit-trace.log"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

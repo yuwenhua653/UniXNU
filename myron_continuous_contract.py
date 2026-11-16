@@ -7,6 +7,16 @@ BUFFER_TRACE_SYMBOLS = frozenset({
     '_myron_boot_progress_fault', '_buf_brelse', '_buf_biodone',
     '_buf_getblk', '_buf_geteblk', '_buf_alloc', '_buf_free',
 })
+EXIT_TRACE_MARKER = b'SIGABRT: PID 1 exiting thread user backtrace'
+EXIT_TRACE_SYMBOLS = frozenset({'_boot_progress_exit_trace', '_backtrace_user'})
+
+def require_exit_trace(data):
+    """Require the new SIGABRT recorder in the final nested kernel payload."""
+    definitions = kernel_definitions(data)
+    missing = sorted(name for name in EXIT_TRACE_SYMBOLS if not definitions.get(name))
+    if missing or EXIT_TRACE_MARKER not in data:
+        raise ValueError(f'SIGABRT exit backtrace diagnostics missing: {missing}')
+    return {name: definitions[name] for name in sorted(EXIT_TRACE_SYMBOLS)}
 
 def require_buffer_trace(data):
     """Reject an old native payload even if its generic progress console exists."""

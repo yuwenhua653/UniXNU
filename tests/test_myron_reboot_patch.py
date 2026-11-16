@@ -51,10 +51,14 @@ with tempfile.TemporaryDirectory() as td:
 #define DEVELOPMENT 1
 #define DEBUG 0
 #define CONFIG_MACF 1
+#ifndef __unused
 #define __unused __attribute__((unused))
+#endif
 #define kPanicStringMaxLen 1024
 #define RB_PANIC 0x100
+#ifndef USER_ADDR_NULL
 #define USER_ADDR_NULL 0
+#endif
 #define Z_WAITOK 1
 #define Z_ZERO 2
 #define P_REBOOT 0x1000
@@ -122,8 +126,32 @@ int main(void){
  return 0;
 }
 '''
-    (w/'test.c').write_text(shim+source+tests)
-    subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',
-                    '-I',str(w),str(w/'test.c'),'-o',str(w/'test')],check=True)
-    subprocess.run([str(w/'test')],check=True,timeout=20)
+    # Model Darwin SDK definitions after system headers, including on Linux.
+    predefined=r'''
+#ifndef __unused
+#define __unused __attribute__((__unused__))
+#endif
+#ifndef USER_ADDR_NULL
+typedef uint64_t user_addr_t;
+#define USER_ADDR_NULL ((user_addr_t) 0)
+#endif
+'''
+    sdk_shim=shim.replace('#define MYRON_EARLY_PROGRESS 1',
+                          predefined+'\n#define MYRON_EARLY_PROGRESS 1')
+    for label,host_shim in (('host',shim),('sdk-macros',sdk_shim)):
+        (w/'test.c').write_text(host_shim+source+tests)
+        subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',
+                        '-I',str(w),str(w/'test.c'),'-o',str(w/'test')],check=True)
+        subprocess.run([str(w/'test')],check=True,timeout=20)
+        print('PASS reboot entry with '+label+' definitions')
+    old=sdk_shim
+    for macro,value in (('__unused','__attribute__((unused))'),('USER_ADDR_NULL','0')):
+        old=old.replace('#ifndef '+macro+'\n#define '+macro+' '+value+'\n#endif',
+                        '#define '+macro+' '+value)
+    (w/'old.c').write_text(old+source+tests)
+    rejected=subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-fsyntax-only',
+                             '-I',str(w),str(w/'old.c')],capture_output=True,text=True)
+    assert rejected.returncode and all(n in rejected.stderr for n in
+                                      ('__unused','USER_ADDR_NULL','redefined')), rejected.stderr
+    print('PASS old duplicate SDK macro definitions rejected with -Werror retained')
 print('PASS selected shutdown patch chain; timeout/policy preserved; BSD authorization, MAC denial, copied reason, bounded unwind/context guard, and original return propagation')

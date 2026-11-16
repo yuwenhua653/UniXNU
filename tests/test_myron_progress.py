@@ -241,6 +241,53 @@ int main(void) {
  panic_claimed=0;
  for(size_t i=0;i<32;i++)assert(memory[i]==0xa5 && memory[bytes+32+i]==0xa5);
  for(size_t y=0;y<1500;y++)for(size_t x=720*4;x<736*4;x++)assert(memory[32+y*736*4+x]==0xa5);
+ // A contending refresh must not overwrite another reboot renderer.
+ reboot_draw_busy=1;
+ strcpy(first_row,display.previous[10]);draw_reboot();
+ assert(!strcmp(first_row,display.previous[10])&&reboot_draw_busy);
+ reboot_draw_busy=0;
+ // Reboot provenance must survive shutdown churn and the later timer panic.
+ boot_progress_stage("before-reboot marker");
+ assert(myron_boot_reboot_request(1,1,"launchd",0x80,0,0x123456,"reason text")==1);
+ assert(reboot_visible() && reboot_first==1 && reboot_history_available && !reboot_draw_busy);
+ reboot_draw_busy=1;strcpy(first_row,display.previous[10]);draw_reboot();
+ assert(!strcmp(first_row,display.previous[10])&&reboot_draw_busy);reboot_draw_busy=0;
+ assert(reboot_requests[0].pid==1 && reboot_requests[0].options==0x80);
+ assert(strstr(display.previous[10],"FIRST REBOOT REQUEST"));
+ assert(strstr(display.previous[12],"launchd"));
+ char retained[sizeof(reboot_history)];memcpy(retained,reboot_history,sizeof(retained));
+ assert(myron_boot_reboot_request(1,77,"overwrite",0xff,1,0xbad,"overwrite")==0);
+ assert(reboot_requests[0].caller==0x123456 && !strcmp(reboot_requests[0].message,"reason text"));
+ myron_boot_reboot_request(3,-1,"host_reboot",4,0,0x234567,NULL);
+ myron_boot_reboot_request(4,-1,"PEHaltRestartInternal",1,7,0x345678,NULL);
+ assert(reboot_first==1 && reboot_ready[2] && reboot_ready[3]);
+ struct boot_progress_exit_trace reboot_bt={0};reboot_bt.count=20;reboot_bt.cache_slide=0x9000;
+ for(unsigned i=0;i<20;++i)reboot_bt.frames[i]=0x1000+4*i;
+ myron_boot_reboot_trace(&reboot_bt);assert(reboot_trace.count==8);
+ assert(strstr(display.previous[32],"000000000000101c"));
+ myron_boot_shutdown_stage("driver ack wait","TestDriver",0x999,0x888);
+ assert(strstr(display.previous[18],"driver ack wait"));
+ for(unsigned i=0;i<30;++i) {boot_progress_stage("shutdown churn");boot_progress_putc('\n');}
+ assert(!memcmp(retained,reboot_history,sizeof(retained)));
+ test_clock+=1000;boot_progress_irq(0x101,0x202,0x303);
+ assert(strstr(display.previous[18],"driver ack wait"));
+ format_panic("test-error=14 Halt/Restart Timed Out");
+ assert(strstr(display.previous[0],"PANIC DETAIL"));
+ assert(strstr(display.previous[10],"FIRST REBOOT REQUEST"));
+ assert(strstr(display.previous[44],"reason text"));
+ myron_boot_shutdown_stage("panic overwrites","wrong",1,1);
+ assert(!strcmp(shutdown_phase,"driver ack wait"));
+ panic_claimed=0;reboot_first=0;
+ memset(reboot_claimed,0,sizeof(reboot_claimed));memset(reboot_ready,0,sizeof(reboot_ready));
+ reboot_history_ready=0;reboot_history_available=0;busy=1;
+ myron_boot_reboot_request(2,0,NULL,0,0,0,NULL);
+ assert(reboot_visible() && !reboot_history_available && busy==1);
+ assert(strstr(display.previous[33],"unavailable"));busy=0;
+ shutdown_busy=1;myron_boot_shutdown_stage("must not wait","",1,1);
+ assert(shutdown_busy==1 && !strcmp(shutdown_phase,"driver ack wait"));shutdown_busy=0;
+ reboot_first=0;memset(reboot_claimed,0,sizeof(reboot_claimed));memset(reboot_ready,0,sizeof(reboot_ready));
+ myron_boot_reboot_request(0,0,NULL,0,0,0,NULL);myron_boot_reboot_request(5,0,NULL,0,0,0,NULL);
+ assert(!reboot_first);
  // Release failure may retry; acknowledged scanout cannot resume console writes.
  release_result=-1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1);
  release_result=0;assert(myron_boot_progress_prepare_scanout());assert(scanout_state==2 && release_calls==2);
@@ -249,6 +296,9 @@ int main(void) {
  myron_mount_event(1,"scanout active","apfs",0,0);test_clock+=1000;boot_progress_irq(0,0,0);
  myron_boot_progress_fault("scanout owns display",1,2,3,4);assert(!panic_claimed);
  myron_buffer_event(255,0xa000,0x707,0,0,0,0);assert(!panic_claimed);
+ myron_boot_reboot_request(1,1,"scanout",0,0,0,NULL);
+ myron_boot_shutdown_stage("scanout","",0,0);
+ assert(!reboot_first);
  assert(scanout_state==2 && !memcmp(saved,memory+32,bytes));
  boot_progress_exit(1,"launchd",9,3,0xdead);assert(myron_boot_progress_state.history_count>history);
  // Missing timer frequency must not turn the recorder or boot path off.
@@ -261,4 +311,4 @@ int main(void) {
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
-print('PASS formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+print('PASS first reboot source/options/history/user trace, shutdown phases and timeout retention; formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

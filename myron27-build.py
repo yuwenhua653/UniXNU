@@ -26,7 +26,8 @@ if options.original_root and not options.desktop:parser.error('--original-root r
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
-  'source_overlay':here/'myron27-storage-delta.json','build_entry':Path(__file__).resolve(),
+  'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
+  'build_entry':Path(__file__).resolve(),
   'root_bundle':fixture/'bundle/root-bundle.json',
   'data_seed_contract':fixture/'bundle/data-seed.json',
   'data_volume_proof':fixture.parent/'data-volume/report.json'}.items()}
@@ -44,7 +45,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('amfi-stack-preflight.log',[sys.executable,str(here/'tests/test_myron_amfi_stack.py'),
+  checks=[('reboot-evidence-preflight.log',[sys.executable,str(here/'tests/test_myron_reboot_patch.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
+   ('amfi-stack-preflight.log',[sys.executable,str(here/'tests/test_myron_amfi_stack.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
    ('user-va-geometry-preflight.log',[sys.executable,str(here/'tests/test_myron_user_va_geometry.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
@@ -163,7 +166,14 @@ snapshot_bytes=(here/'myron27-inputs.json').read_bytes()
 snapshot=json.loads(snapshot_bytes)
 # This small overlay contains source changes only. Keep the public base
 # snapshot unchanged instead of uploading historical verification records.
-delta=json.loads((here/'myron27-storage-delta.json').read_text())
+storage_bytes=(here/'myron27-storage-delta.json').read_bytes()
+delta=json.loads(storage_bytes)
+reboot=json.loads((here/'myron27-reboot-delta.json').read_text())
+if hashlib.sha256(storage_bytes).hexdigest()!=reboot['base_storage_sha256']:
+ raise SystemExit('Reboot source delta requires the reviewed storage snapshot')
+reboot_paths={'device/myron27/patches/xnu/series', 'device/myron27/scripts/build-myron-progress.py', 'device/myron27/package/MyronRebootEvidence.h', 'device/myron27/patches/xnu/myron-reboot-evidence.patch', 'device/myron27/package/MyronBootProgress.c', 'device/myron27/verify_native_artifact.py'}
+if set(reboot['files'])!=reboot_paths:raise SystemExit('Unexpected reboot source delta paths')
+delta['files'].update(reboot['files'])
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
@@ -186,6 +196,8 @@ allowed={
  'device/myron27/patches/xnu/myron-lockdown-public-state.patch',
  'device/myron27/patches/xnu/myron-panic-object-evidence.patch',
  'device/myron27/package/MyronBootProgress.c',
+ 'device/myron27/package/MyronRebootEvidence.h',
+ 'device/myron27/patches/xnu/myron-reboot-evidence.patch',
  'device/myron27/upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/patches/xnu/boot-progress.patch',
  'device/myron27/package/BootProgressCore.h',
  'device/myron27/package/BootProgressDisplay.h',

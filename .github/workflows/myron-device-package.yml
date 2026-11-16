@@ -78,6 +78,14 @@ jobs:
           python3 tests/test_myron_progress.py \
             --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang --target-cc clang \
             2>&1 | tee "$RUNNER_TEMP/geometry-check/panic-format.log"
+      - name: Check first reboot capture and preserved shutdown policy before the full build
+        run: |
+          set -o pipefail
+          python3 tests/test_myron_reboot_patch.py \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
+            --upstream "$RUNNER_TEMP/myron-iphone27/upstream" \
+            --xnu "$RUNNER_TEMP/myron-iphone27/references/xnu" --cc clang \
+            2>&1 | tee "$RUNNER_TEMP/geometry-check/reboot-evidence.log"
       - name: Check public Lockdown Mode state before the full kernel build
         run: |
           set -o pipefail

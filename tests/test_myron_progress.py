@@ -39,9 +39,15 @@ int PE_initialize_console(void *,int);
         import struct
         (root/'cross').mkdir()
         (root/'cross/string.h').write_text('#include <stddef.h>\nvoid *memset(void *,int,size_t);\nint strcmp(const char *,const char *);\nsize_t strlen(const char *);\n')
+        # Xcode clang otherwise injects the host macOS SDK into an iPhone target.
+        # Use only compiler builtin headers and explicit test fixtures on every host.
+        resource=Path(subprocess.check_output([a.target_cc,'-print-resource-dir'],text=True).strip()).resolve()
+        assert (resource/'include/stdint.h').is_file()
+        sysroot=root/'freestanding-sysroot';sysroot.mkdir()
         obj=root/'progress.o'
         subprocess.run([a.target_cc,'-target','arm64e-apple-ios27.0','-ffreestanding','-mkernel',
-            '-mgeneral-regs-only','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1',
+            '-mgeneral-regs-only','-isysroot',str(sysroot),'-nostdinc','-isystem',str(resource/'include'),
+            '-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1',
             '-I',str(root),'-I',str(root/'cross'),'-c',str(source.resolve()),'-o',str(obj)],check=True)
         raw=obj.read_bytes();magic,cpu,subtype,kind=struct.unpack_from('<4I',raw)
         assert (magic,cpu,subtype & 0xffffff,kind)==(0xfeedfacf,0x100000c,2,1)

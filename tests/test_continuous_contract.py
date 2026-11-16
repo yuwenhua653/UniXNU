@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, BUFFER_TRACE_MARKER, require_exit_trace, EXIT_TRACE_SYMBOLS, EXIT_TRACE_MARKER
+from myron_continuous_contract import require_lockdown_state, LOCKDOWN_STATE_SYMBOLS
 class ContractTests(unittest.TestCase):
     def sample(self,name=b'com.apple.kernel'):
         data=bytearray(512)
@@ -54,4 +55,11 @@ class ContractTests(unittest.TestCase):
             with self.subTest(name=name),self.assertRaises(ValueError):require_exit_trace(sample(missing=name))
         with self.assertRaises(ValueError):require_exit_trace(sample(marker=False))
         with self.assertRaises(ValueError):require_exit_trace(self.buffer_sample())
+    def test_public_lockdown_state_requires_oid_and_handler(self):
+        sample=lambda **kw:self.buffer_sample(symbols=LOCKDOWN_STATE_SYMBOLS,**kw)
+        self.assertEqual(set(require_lockdown_state(sample())),LOCKDOWN_STATE_SYMBOLS)
+        for name in LOCKDOWN_STATE_SYMBOLS:
+            with self.subTest(name=name),self.assertRaises(ValueError):require_lockdown_state(sample(missing=name))
+        # A diagnostic string is not an implemented sysctl registration.
+        with self.assertRaises(ValueError):require_lockdown_state(self.buffer_sample(text=b'lockdown_mode_state_public'))
 if __name__=='__main__':unittest.main()

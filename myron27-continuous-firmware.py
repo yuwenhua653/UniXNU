@@ -50,7 +50,7 @@ subprocess.run([sys.executable,str(repo/'myron27-build.py'),'--source-only'],env
 device=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27/device/myron27';sys.path.insert(0,str(device))
 from prepare_firmware_source import prepare
 from prepare_loader import prepare as loader
-from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, require_exit_trace
+from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, require_exit_trace, require_lockdown_state
 up=a.work/'upstream'
 bp.checkout('https://github.com/UniXNU/UniXNU.git','04573c510c5fd4892ca6948739389141cc9e05f5',up)
 bp.checkout('https://github.com/UniXNU/DarwinBoot.git','3c75734014cdab0acd9541e88057b7606ee7ae08',up/'drivers/DarwinBoot')
@@ -64,6 +64,7 @@ required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_b
 need(required<=definitions.keys(),'Continuous recorder missing from final prelinked kernel')
 buffer_definitions=require_buffer_trace(kernel)
 exit_trace_definitions=require_exit_trace(kernel)
+lockdown_state_definitions=require_lockdown_state(kernel)
 need(b'MYRON iOS27 - CONTINUOUS XNU BOOT' in kernel,'Wrong final recorder implementation')
 menu=tomllib.loads(read('unixnu.toml').decode());entries=[e for e in menu['entry'] if e['id']==menu['boot']['default']]
 need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']==0,'Manual menu policy changed')
@@ -100,7 +101,7 @@ image=raw[:bp.FD_OFFSET]+fd+fat
 need(len(image)==len(raw) and image[:bp.FD_OFFSET]==raw[:bp.FD_OFFSET] and image[bp.FAT_OFFSET:]==raw[bp.FAT_OFFSET:],'Non-FD bytes changed')
 a.output.mkdir();(a.output/'root-startup.img').write_bytes(image)
 report=dict(result='passed',kind='continuous-xnu-source-boot',producer=producer,assembly_commit=os.environ['GITHUB_SHA'],assembly_run=os.environ['GITHUB_RUN_ID'],intentional_stop=False,
-    required_symbols=sorted(required),buffer_trace_definitions=buffer_definitions,exit_trace_definitions=exit_trace_definitions,kernel_sha256=h('kernel.macho'),firmware_verification=fv,root_handoff=host,
+    required_symbols=sorted(required),buffer_trace_definitions=buffer_definitions,exit_trace_definitions=exit_trace_definitions,lockdown_state_definitions=lockdown_state_definitions,kernel_sha256=h('kernel.macho'),firmware_verification=fv,root_handoff=host,
     boot_sha256=sha(image),elapsed_seconds=round(time.monotonic()-start,1),root_install_reusable=True,phone_tested=False,desktop_reached=False)
 save(a.output/'continuous-report.json',report)
 m=copy.deepcopy(m);m['files']['root-startup.img']=dict(bytes=len(image),sha256=sha(image))

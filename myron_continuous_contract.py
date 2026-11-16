@@ -9,6 +9,16 @@ BUFFER_TRACE_SYMBOLS = frozenset({
 })
 EXIT_TRACE_MARKER = b'SIGABRT: PID 1 exiting thread user backtrace'
 EXIT_TRACE_SYMBOLS = frozenset({'_boot_progress_exit_trace', '_backtrace_user', '_boot_progress_current_cache_slide'})
+LOCKDOWN_STATE_SYMBOLS = frozenset({'_sysctl__security_mac_lockdown_mode_state_public',
+    '_sysctl_lockdown_mode_state_public', '_get_lockdown_mode_state'})
+
+def require_lockdown_state(data):
+    """Require the public state OID and implementation in the final kernel."""
+    definitions = kernel_definitions(data)
+    missing = sorted(name for name in LOCKDOWN_STATE_SYMBOLS if not definitions.get(name))
+    if missing:
+        raise ValueError(f'Public Lockdown Mode state ABI missing: {missing}')
+    return {name: definitions[name] for name in sorted(LOCKDOWN_STATE_SYMBOLS)}
 
 def require_exit_trace(data):
     """Require the new SIGABRT recorder in the final nested kernel payload."""

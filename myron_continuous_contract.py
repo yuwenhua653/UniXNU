@@ -6,6 +6,7 @@ REBOOT_TRACE_MARKER = b'FIRST REBOOT REQUEST'
 # append_text() is inlined by Apple clang: the heading can become MOVK/STP
 # instructions rather than a contiguous C string. Require the actual matcher,
 # retained state and its reason strings instead of depending on literal layout.
+CONSOLE_ROUTE_MARKER = b'BUFFERED CONSOLE ROUTE 1'
 SHUTDOWN_LOG_MARKER = b'EARLY SHUTDOWN LOGS (unverified)'
 SHUTDOWN_LOG_REASON_MARKERS = (
     b'system reboot initiated by:', b'system shutdown initiated by:',
@@ -17,6 +18,8 @@ SHUTDOWN_LOG_SYMBOLS = frozenset({
     '_shutdown_log_line', '_shutdown_log_overflow', '_draw_reboot',
 })
 BUFFER_TRACE_SYMBOLS = frozenset({
+    '_myron_boot_console_write', '_myron_console_route_calls',
+    '_myron_console_route_bytes', '_myron_console_route_muted', '_myron_console_route_dropped',
     '_myron_boot_reboot_request', '_myron_boot_reboot_trace', '_myron_boot_shutdown_stage',
     '_myron_buffer_event', '_myron_boot_progress_panic', '_myron_boot_progress_panic_formatted', '_myron_boot_object_failure',
     '_myron_boot_progress_fault', '_buf_brelse', '_buf_biodone',
@@ -47,7 +50,7 @@ def require_buffer_trace(data):
     """Reject an old native payload even if its generic progress console exists."""
     definitions = kernel_definitions(data)
     missing = sorted(name for name in BUFFER_TRACE_SYMBOLS if not definitions.get(name))
-    markers = (BUFFER_TRACE_MARKER, REBOOT_TRACE_MARKER, *SHUTDOWN_LOG_REASON_MARKERS)
+    markers = (BUFFER_TRACE_MARKER, REBOOT_TRACE_MARKER, CONSOLE_ROUTE_MARKER, *SHUTDOWN_LOG_REASON_MARKERS)
     missing_markers = [marker.decode('ascii') for marker in markers if marker not in data]
     if missing or missing_markers:
         raise ValueError(f'Buffer/reboot diagnostics missing: symbols={missing}; markers={missing_markers}')

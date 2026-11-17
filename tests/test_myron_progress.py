@@ -99,6 +99,7 @@ int PE_initialize_console(void *p,int op) {
 }
 int main(void) {
  option=0;boot_progress_init();assert(!boot_progress_active());
+ assert(!myron_boot_console_write("inactive",8,1));
  option=2;boot_progress_init();assert(boot_progress_active());
  // Boot milestones remain writable beyond both historical timeouts.
  boot_progress_stage("C initialized");test_clock=1000000;boot_progress_poll();
@@ -249,14 +250,21 @@ int main(void) {
  // Reboot provenance must survive shutdown churn and the later timer panic.
  // Preserve full logical lines across the 119-column console-ring wrapping.
  const char *plain="service started normally\nFeature disabled, device would have rebooted due to critical process crashes: example\n";
- for(const char *p=plain;*p;++p)boot_progress_putc(*p);
+ assert(myron_boot_console_write(NULL,0,1)==1);
+ assert(myron_boot_console_write(plain,-1,1)==1);
+ assert(myron_console_route_calls==0);
+ assert(myron_boot_console_write(plain,(int)strlen(plain),1)==1);
+ assert(myron_console_route_calls==1 && myron_console_route_bytes==strlen(plain));
+ assert(myron_console_route_muted==strlen(plain) && !myron_console_route_dropped);
+ busy=1;assert(myron_boot_console_write("busy",4,1)==1);assert(busy);
+ assert(myron_console_route_dropped==4);busy=0;
  assert(!shutdown_log_count);
  for(unsigned i=0;i<140;i++)boot_progress_putc('p');
  const char *why=" SYSTEM REBOOT initiated by: test-service (pid 41)\n";
  for(const char *p=why;*p;++p)boot_progress_putc(*p);
  assert(shutdown_log_count==1 && strstr(shutdown_log_rows[0][1],"test-service"));
  const char *why2="launchd: committing to system shutdown\n";
- for(const char *p=why2;*p;++p)boot_progress_putc(*p);
+ assert(myron_boot_console_write(why2,(int)strlen(why2),1)==1);
  assert(shutdown_log_count==2);
  // Inputs are bounded; a missing newline cannot overrun static storage.
  const char *why3="rebooting due to fixture: ";
@@ -275,6 +283,11 @@ int main(void) {
  assert(reboot_requests[0].pid==1 && reboot_requests[0].options==0x80);
  assert(strstr(display.previous[10],"FIRST REBOOT REQUEST"));
  assert(strstr(display.previous[12],"launchd"));
+ assert(strstr(display.previous[2],"BUFFERED CONSOLE ROUTE 1"));
+ assert(strstr(display.previous[4],"muted=") && strstr(display.previous[4],"dropped="));
+ uint64_t frozen_console_bytes=myron_console_route_bytes;
+ myron_boot_console_write("after request\n",14,1);
+ assert(myron_console_route_bytes==frozen_console_bytes);
  assert(strstr(display.previous[33],"EARLY SHUTDOWN LOGS"));
  assert(strstr(display.previous[35],"test-service"));
  // Freeze is independent of capacity: late messages cannot fill an empty slot.

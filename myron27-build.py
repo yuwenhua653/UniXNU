@@ -45,7 +45,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('reboot-evidence-preflight.log',[sys.executable,str(here/'tests/test_myron_reboot_patch.py'),
+  checks=[('console-route-preflight.log',[sys.executable,str(here/'tests/test_myron_console_route.py'),
+   '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
+   ('reboot-evidence-preflight.log',[sys.executable,str(here/'tests/test_myron_reboot_patch.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
    ('amfi-stack-preflight.log',[sys.executable,str(here/'tests/test_myron_amfi_stack.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
@@ -171,12 +173,13 @@ delta=json.loads(storage_bytes)
 reboot=json.loads((here/'myron27-reboot-delta.json').read_text())
 if hashlib.sha256(storage_bytes).hexdigest()!=reboot['base_storage_sha256']:
  raise SystemExit('Reboot source delta requires the reviewed storage snapshot')
-reboot_paths={'device/myron27/boot_assets.py', 'device/myron27/tests/test_boot_assets.py', 'device/myron27/patches/xnu/series', 'device/myron27/scripts/build-myron-progress.py', 'device/myron27/package/MyronRebootEvidence.h', 'device/myron27/patches/xnu/myron-reboot-evidence.patch', 'device/myron27/package/MyronBootProgress.c', 'device/myron27/verify_native_artifact.py'}
+reboot_paths={'device/myron27/patches/xnu/myron-console-route.patch', 'device/myron27/boot_assets.py', 'device/myron27/tests/test_boot_assets.py', 'device/myron27/patches/xnu/series', 'device/myron27/scripts/build-myron-progress.py', 'device/myron27/package/MyronRebootEvidence.h', 'device/myron27/patches/xnu/myron-reboot-evidence.patch', 'device/myron27/package/MyronBootProgress.c', 'device/myron27/verify_native_artifact.py'}
 if set(reboot['files'])!=reboot_paths:raise SystemExit('Unexpected reboot source delta paths')
 delta['files'].update(reboot['files'])
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
  raise SystemExit('Storage source delta requires the reviewed base snapshot')
 allowed={
+ 'device/myron27/patches/xnu/myron-console-route.patch',
  'device/myron27/audit_amfi_stack.py',
  'device/myron27/patches/xnu/myron-amfi-stack-alignment.patch',
  'device/myron27/fixtures/fileset-24A446-iphone12-1-symbols.json',

@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, BUFFER_TRACE_MARKER, require_exit_trace, EXIT_TRACE_SYMBOLS, EXIT_TRACE_MARKER
-from myron_continuous_contract import require_lockdown_state, LOCKDOWN_STATE_SYMBOLS, REBOOT_TRACE_MARKER, SHUTDOWN_LOG_MARKER
+from myron_continuous_contract import require_lockdown_state, LOCKDOWN_STATE_SYMBOLS, REBOOT_TRACE_MARKER, SHUTDOWN_LOG_MARKER, SHUTDOWN_LOG_REASON_MARKERS, SHUTDOWN_LOG_SYMBOLS
 class ContractTests(unittest.TestCase):
     def sample(self,name=b'com.apple.kernel'):
         data=bytearray(512)
@@ -26,7 +26,7 @@ class ContractTests(unittest.TestCase):
     def test_rejects_unterminated_name(self):
         raw=self.sample();struct.pack_into('<I',raw,180,8);raw[289:296]=b'abcdefg'
         with self.assertRaises(ValueError):kernel_definitions(raw)
-    def buffer_sample(self, missing=None, marker=True, symbols=BUFFER_TRACE_SYMBOLS, text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER+b"\0"+SHUTDOWN_LOG_MARKER):
+    def buffer_sample(self, missing=None, marker=True, symbols=BUFFER_TRACE_SYMBOLS, text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER+b"\0"+b"\0".join(SHUTDOWN_LOG_REASON_MARKERS)):
         names=sorted(symbols-{missing})
         strings=b'\0';rows=[]
         for i,name in enumerate(names):
@@ -51,6 +51,20 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):require_buffer_trace(self.buffer_sample(text=BUFFER_TRACE_MARKER))
         with self.assertRaises(ValueError):require_buffer_trace(self.buffer_sample(text=REBOOT_TRACE_MARKER))
         with self.assertRaises(ValueError):require_buffer_trace(self.buffer_sample(text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER))
+    def test_accepts_inlined_heading_with_real_recorder(self):
+        raw=self.buffer_sample()
+        self.assertNotIn(SHUTDOWN_LOG_MARKER, raw)
+        self.assertEqual(set(require_buffer_trace(raw)), BUFFER_TRACE_SYMBOLS)
+    def test_reason_strings_and_retained_state_are_mandatory(self):
+        text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER+b"\0"+b"\0".join(SHUTDOWN_LOG_REASON_MARKERS)
+        for marker in SHUTDOWN_LOG_REASON_MARKERS:
+            with self.subTest(marker=marker),self.assertRaisesRegex(ValueError,'markers='):
+                require_buffer_trace(self.buffer_sample(text=text.replace(marker,b'X'*len(marker))))
+        # A heading appended to an old kernel must not qualify a new recorder.
+        old=self.buffer_sample(symbols=BUFFER_TRACE_SYMBOLS-SHUTDOWN_LOG_SYMBOLS,
+                               text=text+b"\0"+SHUTDOWN_LOG_MARKER)
+        with self.assertRaisesRegex(ValueError, '_shutdown_log_match'):
+            require_buffer_trace(old)
     def test_exit_trace_required_in_final_nested_kernel(self):
         sample=lambda **kw:self.buffer_sample(symbols=EXIT_TRACE_SYMBOLS,text=EXIT_TRACE_MARKER,**kw)
         self.assertEqual(set(require_exit_trace(sample())),EXIT_TRACE_SYMBOLS)

@@ -1,0 +1,86 @@
+name: Myron persistent log test package
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - .github/workflows/myron-log-test-package.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Verify successful source run and immutable artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import json, os, urllib.request
+          base='https://api.github.com/repos/yuwenhua653/UniXNU/'
+          def get(path):
+              req=urllib.request.Request(base+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(req) as response:return json.load(response)
+          run=get('actions/runs/44072104309')
+          assert run['conclusion']=='success' and run['head_sha']=='6bff87efbed43588581556880aa8280040ab049c'
+          for aid,digest in [
+              (14327235708,'776e8e9337e7209133e6355496844fbe3657b657d33a156f7cc3f90509011cd9'),
+              (14326707028,'8c39e0f2a85f2d2174ae7b4300d7eba82aa1fef462ddb9c921aefb20f2bc8751')]:
+              a=get('actions/artifacts/'+str(aid))
+              assert not a['expired'] and a['workflow_run']['id']==44072104309
+              assert a['digest']=='sha256:'+digest
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          run-id: 44072104309
+          artifact-ids: '14327235708'
+          path: candidate
+          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          run-id: 44072104309
+          artifact-ids: '14326707028'
+          path: prior-ready
+          merge-multiple: true
+      - name: Package existing boot image with checked recovery log reader
+        run: |
+          python3 myron27-package-continuous.py \
+            --candidate candidate --run 44072104309 \
+            --output ready/myron-ios27-persistent-log-44072104309.zip
+      - name: Verify every boot file against the successful CI package
+        shell: python
+        run: |
+          import ast, hashlib, json, subprocess, sys, zipfile
+          from pathlib import Path
+          output=Path('ready/myron-ios27-persistent-log-44072104309.zip')
+          with zipfile.ZipFile(output) as z, zipfile.ZipFile('prior-ready/myron-ios27-continuous-44072104309.zip') as old:
+              assert z.testzip() is None and old.testzip() is None
+              folder='continuous-boot-44072104309/'
+              for name in old.namelist():
+                  if name.startswith(folder):
+                      assert z.read(name)==old.read(name),name
+              assert hashlib.sha256(z.read(folder+'root-startup.img')).hexdigest()=='99b032d6a2bc63539a19141078b73cb90c9dc8e4b41d0dd16ff1997716556aeb'
+              for name in z.namelist():
+                  if name.endswith('.py'):ast.parse(z.read(name),filename=name)
+              assert 'log-capture-44072104309' in z.read('READ-IOS27-LOG.cmd').decode()
+              assert z.read('log-capture-44072104309/deployment.json')==z.read(folder+'deployment.json')
+              z.extractall('checked')
+          subprocess.run([sys.executable,'checked/log-capture-44072104309/myron_read_log.py','--help'],check=True)
+          report=json.loads(output.with_suffix('.json').read_text())
+          assert report['source_commit']=='6bff87efbed43588581556880aa8280040ab049c'
+          print('PASS: all boot files unchanged; log reader included; packaged Python parses.')
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-ios27-persistent-log-ready-44072104309
+          path: ready/*
+          if-no-files-found: error
+          retention-days: 30

@@ -20,6 +20,7 @@ SHUTDOWN_LOG_SYMBOLS = frozenset({
 BUFFER_TRACE_SYMBOLS = frozenset({
     '_myron_boot_console_write', '_myron_console_route_calls',
     '_myron_console_route_bytes', '_myron_console_route_muted', '_myron_console_route_dropped',
+    '_myron_boot_log_snapshot', '_myron_log_state', '_myron_log_rounds', '_myron_log_errors', '_myron_log_first_lba',
     '_myron_boot_reboot_request', '_myron_boot_reboot_trace', '_myron_boot_shutdown_stage',
     '_myron_buffer_event', '_myron_boot_progress_panic', '_myron_boot_progress_panic_formatted', '_myron_boot_object_failure',
     '_myron_boot_progress_fault', '_buf_brelse', '_buf_biodone',

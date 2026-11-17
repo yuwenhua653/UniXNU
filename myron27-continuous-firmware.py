@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -72,7 +73,7 @@ menu=tomllib.loads(read('unixnu.toml').decode());entries=[e for e in menu['entry
 need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']==0,'Manual menu policy changed')
 e=entries[0]
 need(e['type']=='xnu' and e['path']=='Payloads/kernel.macho' and e['initrd']=='Payloads/scratch-data.img','Unexpected boot entry')
-need({'boot-progress=2','myron27-dyld-startup=1','cpus=1','launchd_log_serial=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
+need({'boot-progress=2','myron27-dyld-startup=1','cpus=1','launchd_log_serial=1','log=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
 h=lambda n:hashes['EFI/UniXNU/Payloads/'+n]
 header=(f'#define MYRON_KERNEL_FAT_BYTES 0x{len(fat):x}ULL\n#define MYRON_KERNEL_FAT_CRC32 0x{zlib.crc32(fat):08x}U\n'
         f'#define MYRON_KERNEL_FAT_SHA256 "{sha(fat)}"\n#define MYRON_R46_KERNEL_SHA256 "{h("kernel.macho")}"\n')
@@ -110,4 +111,13 @@ m=copy.deepcopy(m);m['files']['root-startup.img']=dict(bytes=len(image),sha256=s
 r=m['image_reports']['root-startup.img'];r.update(sha256=sha(image),fd_sha256=sha(fd),firmware_report_sha256=sha((a.output/'continuous-report.json').read_bytes()),firmware_report_scope='continuous-xnu-linux-firmware')
 m['continuous_boot']=dict(intentional_stop=False,kernel_sha256=h('kernel.macho'),source_commit=commit)
 save(a.output/'deployment.json',m)
+from myron_read_log import window as log_window
+first=log_window(m)
+reader_files=('myron_read_log.py','device_layout.py','READ-IOS27-LOG.cmd','LOG-CAPTURE.md')
+for name in reader_files:shutil.copyfile(device/name,a.output/name)
+save(a.output/'persistent-log.json',dict(format=1,source_commit=commit,writer='SHLOG001-v5-myron-1',
+    first_lba=first,blocks=128,block_bytes=4096,partition='unixnu',
+    carrier_gap_bytes=(first-m['layout']['first'])*4096-m['geometry']['carrierOffset']-m['geometry']['carrierCapacity'],
+    root_install_reusable=True,phone_tested=False,
+    files={name:sha((a.output/name).read_bytes()) for name in reader_files}))
 print('PASS: continuous source kernel with Linux firmware; phone/desktop execution remains unverified')

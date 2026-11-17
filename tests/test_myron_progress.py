@@ -331,6 +331,23 @@ int main(void) {
  reboot_first=0;memset(reboot_claimed,0,sizeof(reboot_claimed));memset(reboot_ready,0,sizeof(reboot_ready));
  myron_boot_reboot_request(0,0,NULL,0,0,0,NULL);myron_boot_reboot_request(5,0,NULL,0,0,0,NULL);
  assert(!reboot_first);
+ // Persistent snapshot keeps the console tail across shutdown and bounds every destination.
+ persist_console_head=0;panic_claimed=0;reboot_first=0;
+ const char *reason="system reboot initiated by: test-persist\n";
+ myron_boot_console_write(reason,(int)strlen(reason),1);
+ char snap[65536];size_t used=myron_boot_log_snapshot(snap,sizeof snap);
+ assert(used<sizeof snap && strstr(snap,"test-persist"));
+ uint64_t saved_head=persist_console_head;reboot_first=1;
+ myron_boot_console_write("cleanup must not overwrite",26,0);
+ assert(persist_console_head==saved_head);
+ used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"test-persist"));
+ char small[4]={1,2,3,4};assert(myron_boot_log_snapshot(small,3)<=2 && small[3]==4 && small[2]==0);
+ assert(!myron_boot_log_snapshot(NULL,1));
+ busy=1;used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"snapshot busy")&&busy==1);busy=0;
+ reboot_first=0;persist_console_head=0;
+ for(unsigned i=0;i<40000;++i)shutdown_log_char((i%26)+'A');
+ used=myron_boot_log_snapshot(snap,sizeof snap);assert(used<sizeof snap);
+ assert(persist_console_head==40000 && strstr(snap,"[console before"));
  // Release failure may retry; acknowledged scanout cannot resume console writes.
  release_result=-1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1);
  release_result=0;assert(myron_boot_progress_prepare_scanout());assert(scanout_state==2 && release_calls==2);

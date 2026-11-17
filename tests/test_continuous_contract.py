@@ -1,4 +1,6 @@
 import struct
+import ast
+import json
 import sys
 from pathlib import Path
 import unittest
@@ -65,6 +67,27 @@ class ContractTests(unittest.TestCase):
                                text=text+b"\0"+SHUTDOWN_LOG_MARKER)
         with self.assertRaisesRegex(ValueError, '_shutdown_log_match'):
             require_buffer_trace(old)
+    def test_log_driver_is_checked_only_after_its_link_stage(self):
+        # The early native kernel contains the recorder but not the later UFS object.
+        # Inspect the actual early verifier definition, not a duplicated symbol list.
+        root=Path(__file__).resolve().parents[1]
+        delta=json.loads((root/'myron27-reboot-delta.json').read_text())
+        source=delta['files']['device/myron27/verify_native_artifact.py']['content']
+        verify=next(n for n in ast.parse(source).body if isinstance(n,ast.FunctionDef) and n.name=='verify')
+        assignments=[n for n in ast.walk(verify) if isinstance(n,ast.Assign) and
+                     any(isinstance(t,ast.Name) and t.id=='required' for t in n.targets)]
+        self.assertEqual(len(assignments),1)
+        expression=ast.Expression(body=assignments[0].value)
+        native=eval(compile(expression,'native-required','eval'),{'__builtins__':{},'USER_VA_SYMBOLS':frozenset()})
+        driver={'_myron_log_state','_myron_log_rounds','_myron_log_errors','_myron_log_first_lba'}
+        self.assertFalse(native & driver, 'UFS log driver is not linked in native-prelink-input')
+        self.assertIn('_myron_boot_log_snapshot',native)
+        self.assertTrue(driver <= BUFFER_TRACE_SYMBOLS)
+        # The final product must still refuse every missing driver definition.
+        for name in driver:
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                require_buffer_trace(self.buffer_sample(missing=name))
+
     def test_exit_trace_required_in_final_nested_kernel(self):
         sample=lambda **kw:self.buffer_sample(symbols=EXIT_TRACE_SYMBOLS,text=EXIT_TRACE_MARKER,**kw)
         self.assertEqual(set(require_exit_trace(sample())),EXIT_TRACE_SYMBOLS)
@@ -80,3 +103,4 @@ class ContractTests(unittest.TestCase):
         # A diagnostic string is not an implemented sysctl registration.
         with self.assertRaises(ValueError):require_lockdown_state(self.buffer_sample(text=b'lockdown_mode_state_public'))
 if __name__=='__main__':unittest.main()
+

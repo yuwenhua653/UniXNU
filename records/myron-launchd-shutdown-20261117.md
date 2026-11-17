@@ -41,8 +41,11 @@ post-reboot churn, panic and framebuffer handoff are bounded. Explicit
 `Feature disabled, device would have rebooted` messages do not consume slots.
 If no matching text is observed, the previous history fallback remains.
 
-Final firmware assembly requires both the new kernel marker and the boot
-argument. It rejects the earlier recorder even when generic symbols match.
+Final firmware assembly requires the new retained-recorder definitions, reason
+strings and the boot argument. It rejects the earlier recorder even when
+generic progress symbols match. The optimized display heading is assembled
+with immediate stores rather than a contiguous C string; the exact native
+block was emulated and its output verified (see compiled-recorder record).
 There is no reboot suppression, timer extension, service-disable rule,
 signature change, or reset callback modification in this change.
 
@@ -55,7 +58,23 @@ and timer-panic retention, contention and scanout ownership. Eight final-image
 contract tests pass, including rejection of the old payload. The startup
 boot-argument test and unchanged reboot authorization/return-path tests pass.
 
-Native CI and actual console routing must still be verified. Console text can
+Native CI and final firmware verification passed. Actual phone console routing
+must still be verified. Console text can
 interleave or be dropped, and is not authenticated attribution. The first
 shutdown trigger and desktop boot remain unresolved; this fixes an evidence
 gap, not a proven operating-system boot root cause. No new phone test yet.
+
+## Native build and firmware resumption
+
+Native producer run `44014423552` succeeded at source `899b248`. The last
+Linux job failed only at the contiguous heading check. Commit `289430f`
+corrects that assumption, adds negative regressions, and pins resume run
+`44036554616` to the same artifact, source checkout and image hashes. Ten
+contract tests and checks against the downloaded CI kernel passed.
+
+Firmware resume run `44036554616` completed successfully. The final packaged
+helper passed 14 simulated-device tests. Offline extraction confirmed the
+native FAT payload is unchanged, the final firmware hash matches its report,
+and launchd serial logging and retained-reason definitions are present. The
+phone test ZIP hash and exact identities are in `shutdown-reason-package-44036554616.json`.
+No new phone result has been received.

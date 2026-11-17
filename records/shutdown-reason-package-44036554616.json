@@ -1,0 +1,21 @@
+{
+  "file": "myron-ios27-shutdown-reason-44036554616.zip",
+  "bytes": 26859440,
+  "sha256": "781446bd768ee459bd802f8c7f3cddea15aee41193d691ccfbbc09ec21953646",
+  "ci_package_sha256": "436ffe8aa35b7b69571c1effab49362d55cb69a954aff7ed596aee8b9fa2cfe5",
+  "assembly_run": 44036554616,
+  "changes_from_ci": "Updated Chinese guide and added offline verification report; every other member byte-identical",
+  "verification": {
+    "result": "passed",
+    "native_run": "44014423552",
+    "assembly_run": "44036554616",
+    "boot_sha256": "cf007e492d5a2be1b5d05c56753d31426d3ae785a1415ef07a0dd399754dc291",
+    "kernel_sha256": "bd3194597f13f90c4df3684c41550424ffe31945eeeb83a778ecc30de500c549",
+    "native_payload_preserved": true,
+    "installed_root_reusable": true,
+    "launchd_console_enabled": true,
+    "retained_reason_definitions_checked": true,
+    "phone_tested": false,
+    "desktop_reached": false
+  }
+}

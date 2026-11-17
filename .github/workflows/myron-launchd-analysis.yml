@@ -1,0 +1,46 @@
+name: Myron original launchd reboot analysis
+on:
+  push:
+    branches: [codex/myron-iphone27]
+permissions:
+  contents: read
+concurrency:
+  group: myron-launchd-analysis
+  cancel-in-progress: false
+jobs:
+  analyze:
+    if: github.event.head_commit.message == 'Analyze original myron launchd reboot'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Validate decoder and reconstruct pinned source
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_myron_launchd_analysis.py -v
+          python3 myron27-fault-extract.py --self-test
+          python3 myron27-build.py --source-only
+          git init -q "$RUNNER_TEMP/launchd-upstream"
+          git -C "$RUNNER_TEMP/launchd-upstream" fetch -q --depth 1 https://github.com/UniXNU/UniXNU.git 04573c510c5fd4892ca6948739389141cc9e05f5
+          git -C "$RUNNER_TEMP/launchd-upstream" checkout -q --detach FETCH_HEAD
+          brew install blacktop/tap/ipsw
+      - name: Analyze signed original launchd without rebuilding the phone kernel
+        run: |
+          set -euo pipefail
+          analysis_python="$(python3 -c 'import sys; print(sys.executable)')"
+          analysis_ipsw="$(python3 -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("ipsw")).resolve())')"
+          sudo -n env GITHUB_SHA="$GITHUB_SHA" "$analysis_python" myron27-launchd-analysis.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --upstream "$RUNNER_TEMP/launchd-upstream" --work "$RUNNER_TEMP/launchd-private" --output "$RUNNER_TEMP/launchd-public" --archive-tool "$analysis_ipsw"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-launchd-reboot-analysis
+          path: ${{ runner.temp }}/launchd-public/*.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove original image workspace
+        if: always()
+        run: sudo -n rm -rf "$RUNNER_TEMP/launchd-private"

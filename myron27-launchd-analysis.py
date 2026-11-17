@@ -204,6 +204,14 @@ def shutdown_context(exe,owners):
     # Add immediate helpers, including log formatting and final reboot wrappers.
     chosen.update(int(e['target'],16) for e in edges if int(e['owner'],16) in set(owners)
                   and int(e['target'],16) in descriptions)
+    # The phone still has no serial reasons. Inspect the actual boolean parser,
+    # log routing and /dev/console open/fcntl wrappers, not just their callers.
+    console_roots={0x10004b268,0x1000444c0,0x10004d420,0x10004d560,0x10004dd98}
+    console_helpers={a for a in console_roots if a in descriptions}
+    console_helpers.update(int(e['target'],16) for e in edges
+                           if int(e['owner'],16) in console_roots
+                           and int(e['target'],16) in descriptions)
+    chosen.update(console_helpers)
     require(len(chosen)<=256,'Shutdown context exceeds bound')
     literals=[]
     for s in exe.sections:
@@ -214,7 +222,7 @@ def shutdown_context(exe,owners):
             if len(part)<=512 and pattern.search(value):
                 literals.append(dict(address=hex(s['address']+off),text=value))
             off+=len(part)+1
-    return dict(caller_levels=levels,keyword_functions=[hex(a) for a in keyword_functions],
+    return dict(console_helpers=[hex(a) for a in sorted(console_helpers)],caller_levels=levels,keyword_functions=[hex(a) for a in keyword_functions],
                 relevant_literals=literals,edges=edges,
                 functions=[descriptions[a] for a in sorted(chosen)],
                 all_string_references=[dict(owner=hex(a),references=d['string_references'])

@@ -11,6 +11,7 @@ import importlib.util
 import itertools
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -126,6 +127,12 @@ class Executable:
         if w&0xfffff800==0xd73f0800 or w&0xfffffc1f in (0xd63f081f,0xd63f0c1f):return dict(kind='authenticated indirect call',target=None)
         return None
 
+    def branch(self,pc):
+        w=self.word(pc)
+        if w&0xfc000000==0x14000000:
+            return pc+signed(w&0x3ffffff,26)*4
+        return None
+
     def string(self,addr):
         for s in self.sections:
             if s['flags']&255==2 and s['address']<=addr<s['address']+s['size']:
@@ -172,7 +179,66 @@ def candidates(exe,frames=FRAMES):
     result.sort(key=lambda r:(r['first_import'] in ('_reboot','___reboot','_reboot_np'),r['matched_edges']),reverse=True)
     return result
 
-def inspect(path,info):
+def shutdown_context(exe,owners):
+    """Static callers include tail branches; none are claimed to have executed."""
+    descriptions={a:exe.describe(a) for a in exe.starts}
+    edges=[]
+    for pc in range(exe.low,exe.high,4):
+        call=exe.call(pc);target=call['target'] if call else exe.branch(pc)
+        owner=exe.owner(pc)
+        if target is not None and owner is not None:
+            # Intra-function B edges are not tail-call relationships.
+            if call or exe.owner(target)!=owner:
+                edges.append(dict(pc=hex(pc),owner=hex(owner),target=hex(target),
+                                  kind='call' if call else 'tail_branch',
+                                  import_name=exe.stubs.get(target)))
+    chosen=set(owners);levels=[]
+    for _ in range(6):
+        new={int(e['owner'],16) for e in edges if int(e['target'],16) in chosen}-chosen
+        levels.append([hex(a) for a in sorted(new)]);chosen|=new
+        require(len(chosen)<=256,'Caller traversal exceeds bound')
+        if not new:break
+    pattern=re.compile(r'reboot|shut.?down|watchdog|critical|console|launchd.*log|log.*launchd',re.I)
+    keyword_functions=[a for a,d in descriptions.items() if any(pattern.search(s['text']) for s in d['string_references'])]
+    chosen.update(keyword_functions)
+    # Add immediate helpers, including log formatting and final reboot wrappers.
+    chosen.update(int(e['target'],16) for e in edges if int(e['owner'],16) in set(owners)
+                  and int(e['target'],16) in descriptions)
+    require(len(chosen)<=256,'Shutdown context exceeds bound')
+    literals=[]
+    for s in exe.sections:
+        if s['flags']&255!=2:continue
+        raw=take(exe.data,s['offset'],s['size']);off=0
+        for part in raw.split(b'\0'):
+            value=part.decode(errors='replace')
+            if len(part)<=512 and pattern.search(value):
+                literals.append(dict(address=hex(s['address']+off),text=value))
+            off+=len(part)+1
+    return dict(caller_levels=levels,keyword_functions=[hex(a) for a in keyword_functions],
+                relevant_literals=literals,edges=edges,
+                functions=[descriptions[a] for a in sorted(chosen)],
+                all_string_references=[dict(owner=hex(a),references=d['string_references'])
+                                       for a,d in descriptions.items() if d['string_references']])
+
+def parse_disassembly(text,exe,functions):
+    """Only address-indexed instructions in audited function ranges are exported."""
+    wanted={pc for f in functions for pc in range(int(f['start'],16),int(f['end'],16),4)}
+    require(len(wanted)<=20000,'Disassembly exceeds instruction bound')
+    rows={}
+    for line in text.splitlines():
+        match=re.match(r'^\s*([0-9a-fA-F]{16})\s+(.+)$',line)
+        if not match:continue
+        pc=int(match[1],16)
+        if pc not in wanted:continue
+        instruction=match[2].strip()
+        require(pc not in rows and len(instruction)<=1024,'Invalid disassembly row')
+        # otool -tvV displays mnemonics, not binary words. Fail closed on other formats.
+        require(re.match(r'^[A-Za-z_.][A-Za-z0-9_.]*\b',instruction) is not None,'Unexpected disassembly format')
+        rows[pc]=instruction
+    require(set(rows)==wanted,'Incomplete original launchd disassembly')
+    return [dict(address=hex(pc),instruction=rows[pc]) for pc in sorted(rows)]
+
+def inspect(path,info,disassemble=False):
     raw=Path(path).read_bytes();require(hashlib.sha256(raw).hexdigest()==info['sha256'],'Executable changed after audit')
     exe=Executable(take(raw,info['slice_offset'],info['slice_bytes']),info);cs=candidates(exe)
     chosen=cs[:8];owners=sorted({o for c in chosen for o in c['owners']})
@@ -183,12 +249,18 @@ def inspect(path,info):
     for pc in range(exe.low,exe.high,4):
         call=exe.call(pc)
         if call:call_index.append([pc,call['target'],exe.owner(pc)])
-    report=dict(format=1,photo='1000149643.jpg',tested_run='43975218126',launchd=info,uuid=exe.uuid,
+    context=shutdown_context(exe,owners)
+    if disassemble:
+        result=subprocess.run(['/usr/bin/otool','-tvV',str(path)],capture_output=True,text=True)
+        require(result.returncode==0,'Original launchd disassembly failed')
+        context['instructions']=parse_disassembly(result.stdout,exe,context['functions'])
+    report=dict(format=2,photo='1000149643.jpg',tested_run='43975218126',launchd=info,uuid=exe.uuid,
                 static_index=dict(text_range=[exe.low,exe.high],function_starts=exe.starts,
                                   symbols=exe.symbols,import_stubs=exe.stubs,
                                   callsite_target_owner=call_index),
                 executable_slide_observed=False,candidate_count=len(cs),candidates=chosen,
                 functions=[exe.describe(o) for o in owners],
+                shutdown_context=context,
                 limitations=['Candidate slide is inferred, not a recorded runtime load address.',
                  'Uncertain photographed digits are enumerated; return addresses are decremented by four.',
                  'Direct-call matches do not establish the runtime branch condition.',
@@ -232,7 +304,7 @@ def main():
     with volume.attached(image,work/'mount',True) as mounted:
         require(mounted['uuid']==ROOT_PINS['OS'][0],'Wrong OS volume UUID')
         launchd=volume.regular(mounted['path']/'sbin/launchd');info=audit.macho(launchd,trust,2)
-        report=inspect(launchd,info)
+        report=inspect(launchd,info,disassemble=True)
     report.update(source_volume=raw,source_commit=os.environ.get('GITHUB_SHA'),result='passed',
                   phone_accessed=False,kernel_built=False,original_files_modified=False)
     payload=(json.dumps(report,indent=2)+'\n').encode();require(len(payload)<=MAX_REPORT,'Report exceeds bound')

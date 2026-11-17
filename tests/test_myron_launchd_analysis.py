@@ -68,4 +68,29 @@ class Tests(unittest.TestCase):
             p=Path(td)/'launchd';p.write_bytes(data+b'x')
             with self.assertRaisesRegex(ValueError,'changed after audit'):m.inspect(p,info)
 
+    def test_shutdown_context_includes_callers_and_tail_calls(self):
+        data,info=fixture();data=bytearray(data)
+        # Replace caller's BL with B; the earlier report missed tail calls.
+        struct.pack_into('<I',data,0x44c,0x14000000|(((0x420-0x44c)//4)&0x3ffffff))
+        e=m.Executable(data,info);c=m.shutdown_context(e,[B+0x400])
+        self.assertEqual(c['caller_levels'][:2],[[hex(B+0x420)],[hex(B+0x440)]])
+        self.assertIn(hex(B+0x440),c['keyword_functions'])
+        self.assertTrue(any(row['kind']=='tail_branch' and row['target']==hex(B+0x420) for row in c['edges']))
+        self.assertEqual(c['relevant_literals'],[dict(address=hex(B+0x600),text='reboot reason')])
+        # An internal branch cannot create a fake inter-function caller.
+        struct.pack_into('<I',data,0x44c,0x14000001)
+        c=m.shutdown_context(m.Executable(data,info),[B+0x400])
+        self.assertNotIn(hex(B+0x440),c['caller_levels'][1])
+
+    def test_disassembly_is_complete_and_bounded(self):
+        data,info=fixture();e=m.Executable(data,info)
+        functions=[dict(start=hex(B+0x400),end=hex(B+0x408))]
+        text='launchd:\n0000000100000400\tnop\n0000000100000404\tret\n0000000100000500\tbr x16\n'
+        rows=m.parse_disassembly(text,e,functions)
+        self.assertEqual(len(rows),2)
+        self.assertEqual(rows[1]['instruction'],'ret')
+        for malformed in (text.replace('0000000100000404','label'),text+text,
+                          text.replace('nop','94000000 bl')):
+            with self.assertRaises(ValueError):m.parse_disassembly(malformed,e,functions)
+
 if __name__=='__main__':unittest.main()

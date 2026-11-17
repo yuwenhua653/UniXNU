@@ -72,7 +72,7 @@ menu=tomllib.loads(read('unixnu.toml').decode());entries=[e for e in menu['entry
 need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']==0,'Manual menu policy changed')
 e=entries[0]
 need(e['type']=='xnu' and e['path']=='Payloads/kernel.macho' and e['initrd']=='Payloads/scratch-data.img','Unexpected boot entry')
-need({'boot-progress=2','myron27-dyld-startup=1','cpus=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
+need({'boot-progress=2','myron27-dyld-startup=1','cpus=1','launchd_log_serial=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
 h=lambda n:hashes['EFI/UniXNU/Payloads/'+n]
 header=(f'#define MYRON_KERNEL_FAT_BYTES 0x{len(fat):x}ULL\n#define MYRON_KERNEL_FAT_CRC32 0x{zlib.crc32(fat):08x}U\n'
         f'#define MYRON_KERNEL_FAT_SHA256 "{sha(fat)}"\n#define MYRON_R46_KERNEL_SHA256 "{h("kernel.macho")}"\n')
@@ -111,4 +111,3 @@ r=m['image_reports']['root-startup.img'];r.update(sha256=sha(image),fd_sha256=sh
 m['continuous_boot']=dict(intentional_stop=False,kernel_sha256=h('kernel.macho'),source_commit=commit)
 save(a.output/'deployment.json',m)
 print('PASS: continuous source kernel with Linux firmware; phone/desktop execution remains unverified')
-

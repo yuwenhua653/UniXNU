@@ -171,7 +171,7 @@ delta=json.loads(storage_bytes)
 reboot=json.loads((here/'myron27-reboot-delta.json').read_text())
 if hashlib.sha256(storage_bytes).hexdigest()!=reboot['base_storage_sha256']:
  raise SystemExit('Reboot source delta requires the reviewed storage snapshot')
-reboot_paths={'device/myron27/patches/xnu/series', 'device/myron27/scripts/build-myron-progress.py', 'device/myron27/package/MyronRebootEvidence.h', 'device/myron27/patches/xnu/myron-reboot-evidence.patch', 'device/myron27/package/MyronBootProgress.c', 'device/myron27/verify_native_artifact.py'}
+reboot_paths={'device/myron27/boot_assets.py', 'device/myron27/tests/test_boot_assets.py', 'device/myron27/patches/xnu/series', 'device/myron27/scripts/build-myron-progress.py', 'device/myron27/package/MyronRebootEvidence.h', 'device/myron27/patches/xnu/myron-reboot-evidence.patch', 'device/myron27/package/MyronBootProgress.c', 'device/myron27/verify_native_artifact.py'}
 if set(reboot['files'])!=reboot_paths:raise SystemExit('Unexpected reboot source delta paths')
 delta['files'].update(reboot['files'])
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
@@ -379,5 +379,3 @@ shutil.copyfile(root/'qualification/firmware-tools/report.json',root/'reports/fi
 print('PASS full firmware compile/unpack and PAC preflight before native build',flush=True)
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
-
-

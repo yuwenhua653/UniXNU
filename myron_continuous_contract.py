@@ -3,6 +3,7 @@ import struct
 
 BUFFER_TRACE_MARKER = b'MYRON BUFFER TRACE 4 - release / completion'
 REBOOT_TRACE_MARKER = b'FIRST REBOOT REQUEST'
+SHUTDOWN_LOG_MARKER = b'EARLY SHUTDOWN LOGS (unverified)'
 BUFFER_TRACE_SYMBOLS = frozenset({
     '_myron_boot_reboot_request', '_myron_boot_reboot_trace', '_myron_boot_shutdown_stage',
     '_myron_buffer_event', '_myron_boot_progress_panic', '_myron_boot_progress_panic_formatted', '_myron_boot_object_failure',
@@ -34,7 +35,7 @@ def require_buffer_trace(data):
     """Reject an old native payload even if its generic progress console exists."""
     definitions = kernel_definitions(data)
     missing = sorted(name for name in BUFFER_TRACE_SYMBOLS if not definitions.get(name))
-    if missing or BUFFER_TRACE_MARKER not in data or REBOOT_TRACE_MARKER not in data:
+    if missing or any(marker not in data for marker in (BUFFER_TRACE_MARKER, REBOOT_TRACE_MARKER, SHUTDOWN_LOG_MARKER)):
         raise ValueError(f'Buffer/reboot diagnostics or display markers missing: {missing}')
     return {name: definitions[name] for name in sorted(BUFFER_TRACE_SYMBOLS)}
 

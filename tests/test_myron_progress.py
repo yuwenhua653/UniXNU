@@ -247,6 +247,26 @@ int main(void) {
  assert(!strcmp(first_row,display.previous[10])&&reboot_draw_busy);
  reboot_draw_busy=0;
  // Reboot provenance must survive shutdown churn and the later timer panic.
+ // Preserve full logical lines across the 119-column console-ring wrapping.
+ const char *plain="service started normally\nFeature disabled, device would have rebooted due to critical process crashes: example\n";
+ for(const char *p=plain;*p;++p)boot_progress_putc(*p);
+ assert(!shutdown_log_count);
+ for(unsigned i=0;i<140;i++)boot_progress_putc('p');
+ const char *why=" SYSTEM REBOOT initiated by: test-service (pid 41)\n";
+ for(const char *p=why;*p;++p)boot_progress_putc(*p);
+ assert(shutdown_log_count==1 && strstr(shutdown_log_rows[0][1],"test-service"));
+ const char *why2="launchd: committing to system shutdown\n";
+ for(const char *p=why2;*p;++p)boot_progress_putc(*p);
+ assert(shutdown_log_count==2);
+ // Inputs are bounded; a missing newline cannot overrun static storage.
+ const char *why3="rebooting due to fixture: ";
+ for(const char *p=why3;*p;++p)boot_progress_putc(*p);
+ for(unsigned i=0;i<1200;i++)boot_progress_putc('z');
+ boot_progress_putc('\n');assert(shutdown_log_count==3);
+ assert(strstr(shutdown_log_rows[2][1],"..."));
+ char original_logs[sizeof(shutdown_log_rows)];memcpy(original_logs,shutdown_log_rows,sizeof original_logs);
+ for(const char *p=why;*p;++p)boot_progress_putc(*p);
+ assert(!memcmp(original_logs,shutdown_log_rows,sizeof original_logs));
  boot_progress_stage("before-reboot marker");
  assert(myron_boot_reboot_request(1,1,"launchd",0x80,0,0x123456,"reason text")==1);
  assert(reboot_visible() && reboot_first==1 && reboot_history_available && !reboot_draw_busy);
@@ -255,6 +275,12 @@ int main(void) {
  assert(reboot_requests[0].pid==1 && reboot_requests[0].options==0x80);
  assert(strstr(display.previous[10],"FIRST REBOOT REQUEST"));
  assert(strstr(display.previous[12],"launchd"));
+ assert(strstr(display.previous[33],"EARLY SHUTDOWN LOGS"));
+ assert(strstr(display.previous[35],"test-service"));
+ // Freeze is independent of capacity: late messages cannot fill an empty slot.
+ shutdown_log_count=1;
+ for(const char *p=why2;*p;++p)boot_progress_putc(*p);
+ assert(shutdown_log_count==1);shutdown_log_count=3;
  char retained[sizeof(reboot_history)];memcpy(retained,reboot_history,sizeof(retained));
  assert(myron_boot_reboot_request(1,77,"overwrite",0xff,1,0xbad,"overwrite")==0);
  assert(reboot_requests[0].caller==0x123456 && !strcmp(reboot_requests[0].message,"reason text"));
@@ -275,9 +301,13 @@ int main(void) {
  assert(strstr(display.previous[0],"PANIC DETAIL"));
  assert(strstr(display.previous[10],"FIRST REBOOT REQUEST"));
  assert(strstr(display.previous[44],"reason text"));
+ assert(strstr(display.previous[35],"test-service"));
+ assert(!memcmp(original_logs,shutdown_log_rows,sizeof original_logs));
  myron_boot_shutdown_stage("panic overwrites","wrong",1,1);
  assert(!strcmp(shutdown_phase,"driver ack wait"));
  panic_claimed=0;reboot_first=0;
+ // The no-matching-log fallback remains honest, including contended capture.
+ shutdown_log_count=0;
  memset(reboot_claimed,0,sizeof(reboot_claimed));memset(reboot_ready,0,sizeof(reboot_ready));
  reboot_history_ready=0;reboot_history_available=0;busy=1;
  myron_boot_reboot_request(2,0,NULL,0,0,0,NULL);
@@ -311,4 +341,4 @@ int main(void) {
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
-print('PASS first reboot source/options/history/user trace, shutdown phases and timeout retention; formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+print('PASS earliest shutdown console reasons, wrapping/truncation/non-reboot control and freeze; first reboot source/options/history/user trace, shutdown phases and timeout retention; formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

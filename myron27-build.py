@@ -45,7 +45,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('persistent-log-preflight.log',[sys.executable,str(here/'tests/test_myron_persistent_log.py'),'--device',str(d),'--cc','clang++']),
+  checks=[('systemos-libraries-preflight.log',[sys.executable,str(here/'tests/test_myron_systemos_libraries.py'),
+   '--device',str(d)]),
+   ('persistent-log-preflight.log',[sys.executable,str(here/'tests/test_myron_persistent_log.py'),'--device',str(d),'--cc','clang++']),
    ('log-worker-preflight.log',[sys.executable,str(here/'tests/test_myron_log_worker.py'),'--device',str(d),'--cc','clang++']),
    ('console-route-preflight.log',[sys.executable,str(here/'tests/test_myron_console_route.py'),
    '--device',str(d),'--upstream',str(u),'--xnu',str(root/'references/xnu'),'--cc','clang']),
@@ -176,6 +178,7 @@ reboot=json.loads((here/'myron27-reboot-delta.json').read_text())
 if hashlib.sha256(storage_bytes).hexdigest()!=reboot['base_storage_sha256']:
  raise SystemExit('Reboot source delta requires the reviewed storage snapshot')
 reboot_paths={'device/myron27/patches/xnu/myron-reboot-evidence.patch', 'device/sm8850/drivers/NativeUfs/MyronBootLog.h', 'device/myron27/boot_assets.py', 'device/myron27/READ-IOS27-LOG.cmd', 'device/sm8850/drivers/NativeUfs/MyronBootLogCore.h', 'device/myron27/package/MyronRebootEvidence.h', 'device/myron27/myron_read_log.py', 'device/myron27/tests/test_boot_assets.py', 'device/myron27/LOG-CAPTURE.md', 'device/myron27/verify_native_artifact.py', 'device/myron27/package/MyronLogSnapshot.h', 'device/sm8850/drivers/NativeUfs/MyronRootBoot.h', 'device/myron27/patches/xnu/myron-console-route.patch', 'device/myron27/patches/xnu/series', 'device/myron27/package/MyronBootProgress.c', 'device/sm8850/drivers/NativeUfs/MyronUfsProbe.cpp', 'device/myron27/scripts/build-myron-progress.py'}
+reboot_paths |= {'device/myron27/package/MyronSystemOSLibraries.h', 'device/myron27/root_runtime.py'}
 if set(reboot['files'])!=reboot_paths:raise SystemExit('Unexpected reboot source delta paths')
 delta['files'].update(reboot['files'])
 if hashlib.sha256(snapshot_bytes).hexdigest()!=delta['base_snapshot_sha256']:
@@ -308,6 +311,7 @@ allowed={
  'device/myron27/tests/verify_firmware.py',
 }
 allowed |= {'device/sm8850/drivers/NativeUfs/MyronBootLog.h', 'device/myron27/LOG-CAPTURE.md', 'device/myron27/package/MyronLogSnapshot.h', 'device/sm8850/drivers/NativeUfs/MyronRootBoot.h', 'device/sm8850/drivers/NativeUfs/MyronUfsProbe.cpp', 'device/myron27/READ-IOS27-LOG.cmd', 'device/sm8850/drivers/NativeUfs/MyronBootLogCore.h', 'device/myron27/myron_read_log.py'}
+allowed.add('device/myron27/package/MyronSystemOSLibraries.h')
 if set(delta['files'])!=allowed:raise SystemExit('Unexpected storage source delta paths')
 snapshot['files'].update(delta['files'])
 for name,item in snapshot['files'].items():
@@ -385,3 +389,4 @@ shutil.copyfile(root/'qualification/firmware-tools/report.json',root/'reports/fi
 print('PASS full firmware compile/unpack and PAC preflight before native build',flush=True)
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
+

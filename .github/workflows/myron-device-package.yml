@@ -49,6 +49,12 @@ jobs:
               subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
               subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
               assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check display arm64e bindings and CPU fence policy before the full build
+        run: |
+          mkdir -p "$RUNNER_TEMP/geometry-check"
+          set -o pipefail
+          python3 "$RUNNER_TEMP/myron-iphone27/device/myron27/display/test_display_abi.py" \
+            --cc clang -v 2>&1 | tee "$RUNNER_TEMP/geometry-check/display-bindings.log"
       - name: Check native macOS host and freestanding arm64e geometry
         run: |
           mkdir -p "$RUNNER_TEMP/geometry-check"
@@ -353,6 +359,7 @@ jobs:
           path: ${{ runner.temp }}/continuous-output
           if-no-files-found: error
           retention-days: 7
+
 
 
 

@@ -8,7 +8,8 @@ import shutil
 
 EXCLUDED = {'private-userland', 'root-media', 'device-package', '.cache', '.git',
             'references', 'refer', 'node_modules', 'myron-private-inputs'}
-NAMES = {'desktop-integration.json', 'native-link.log', 'build-report.json'}
+NAMES = {'desktop-integration.json', 'native-link.log', 'build-report.json',
+         'root-preflight.json', 'display-abi.json', 'display-build.json'}
 def collect(temp, output):
     temp, output = Path(temp), Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -39,3 +40,4 @@ def collect(temp, output):
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--temp',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     a=p.parse_args();collect(a.temp,a.output)
+

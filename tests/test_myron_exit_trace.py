@@ -39,7 +39,11 @@ with tempfile.TemporaryDirectory() as tmp:
     start = code.rfind('#if ', 0, code.index(marker))
     end = code.index('#endif\n', start) + len('#endif\n')
     hook = code[start:end]
-    assert (code[:start] + code[end:]).replace('#include <machine/machine_routines.h>\n', '') == before
+    # Both board probes are additive. Removing both must restore the exact baseline.
+    board_start = code.index('#if defined(MYRON_EARLY_PROGRESS)\n\t/* Keep the first SpringBoard')
+    board_end = code.index('#endif\n', board_start) + len('#endif\n')
+    assert board_end <= start
+    assert (code[:board_start] + code[board_end:start] + code[end:]).replace('#include <machine/machine_routines.h>\n', '') == before
     assert code.index('ut = get_bsdthread_info(self);', code.index('proc_prepareexit(proc_t p')) < start
     assert end < code.index('proc_handle_critical_exit(p, rv);', end)
     assert 'backtrace_user(' in hook and 'copyin(' not in hook

@@ -343,6 +343,14 @@ int main(void) {
  used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"test-persist"));
  char small[4]={1,2,3,4};assert(myron_boot_log_snapshot(small,3)<=2 && small[3]==4 && small[2]==0);
  assert(!myron_boot_log_snapshot(NULL,1));
+ assert(!strstr(snap,"[first SpringBoard exit]"));
+ const char desc_bytes[]={'b','a','d','\n','x','z'};
+ struct boot_progress_exit_trace sb_trace={0};
+ sb_trace.count=1;sb_trace.frames[0]=0x1234;
+ myron_springboard_exit(29,6,2,6,0,0,0,desc_bytes,5,&sb_trace);
+ used=myron_boot_log_snapshot(snap,sizeof snap);
+ assert(used<sizeof snap && strstr(snap,"[first SpringBoard exit]") &&
+        strstr(snap,"description=bad x\n") && strstr(snap,"exit_frame=0x0000000000001234"));
  busy=1;used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"snapshot busy")&&busy==1);busy=0;
  reboot_first=0;persist_console_head=0;
  for(unsigned i=0;i<40000;++i)shutdown_log_char((i%26)+'A');

@@ -19,6 +19,7 @@ fixture = r'''
 #include <stdio.h>
 #include <string.h>
 #define dev_t test_dev_t
+#define user_addr_t test_user_addr_t
 typedef int dev_t;
 typedef int proc_t;
 typedef uintptr_t user_addr_t;

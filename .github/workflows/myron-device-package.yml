@@ -32,7 +32,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Check staged symbol contracts before building
-        run: python3 tests/test_continuous_contract.py
+        run: |
+          python3 tests/test_continuous_contract.py
+          python3 tests/test_native_diagnostics.py
       - name: Reconstruct source and fetch only pinned geometry references
         shell: python
         run: |

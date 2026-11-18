@@ -85,3 +85,10 @@ Compile test-only guard/failure support and test both explicitly disabled and
 fully enabled stack protection. Verify that removing runtime support exposes
 the two stack imports and removing the board provider still fails. No runtime
 allowlist, kernel protection flag, or production import check is changed.
+
+
+## Run 44297756043: missing prelink exception evidence
+
+The full root compilation, display ABI checks and native link passed. The root fileset prelink exited before writing kernel.json. Its detailed log was incorrectly omitted from diagnostics, so the exception is not yet identified. This change repairs evidence collection; it does not claim to fix the underlying prelink failure.
+
+All desktop stage logs and prelink reports are now preserved. A failing subprocess prints its actual log tail before propagating its exit status. Only the source-built root native kernel and RELEASE LTO reference are retained for offline replay, with SHA256 and size; donor kernels, root images and private inputs remain excluded. Collector inclusion/exclusion and a real subprocess failure before JSON creation are tested before the expensive build.

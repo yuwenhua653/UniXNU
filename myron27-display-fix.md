@@ -69,3 +69,11 @@ fence method for absent/unknown/pending/completed GPU states and a new request.
 All three production display objects also reject authenticated weak imports
 immediately after compilation. This is build/fence-policy validation, not phone
 display qualification.
+
+SDK follow-up (run 44273521900): the extracted production fence test passed,
+but the new arm64e binding test inherited the macOS host SDK and stopped on
+`-Werror,-Wincompatible-sysroot` before compiling the consumer. Select the
+installed iPhoneOS SDK through xcrun and pass its explicit sysroot to both
+target tests and production display adapter assembly. Keep warnings as errors;
+missing device SDKs fail rather than falling back to the host SDK. Host-native
+request/fence execution continues using the host compiler configuration.

@@ -77,3 +77,11 @@ installed iPhoneOS SDK through xcrun and pass its explicit sysroot to both
 target tests and production display adapter assembly. Keep warnings as errors;
 missing device SDKs fail rather than falling back to the host SDK. Host-native
 request/fence execution continues using the host compiler configuration.
+
+Runtime-fixture follow-up (run 44275591028): device SDK selection and the real
+fence method now pass. The standalone interface test compiled successfully but
+mistook compiler-inserted stack-protector imports for missing board interfaces.
+Compile test-only guard/failure support and test both explicitly disabled and
+fully enabled stack protection. Verify that removing runtime support exposes
+the two stack imports and removing the board provider still fails. No runtime
+allowlist, kernel protection flag, or production import check is changed.

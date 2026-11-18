@@ -43,3 +43,12 @@ display units against the real kernel recipe before reference/prelink work.
 Final package assembly rejects kernels missing the backend or its activation
 arguments. Compilation and these checks do not establish successful phone boot,
 desktop rendering, touch, brightness control or GPU acceleration.
+
+Build follow-up (run 44258848872): all three display C++ units compiled, but
+root import preflight passed their MH_OBJECT files to the linked-image reader,
+which requires a mapped header segment and raised StopIteration. Read external
+N_ABS definitions directly from the bounded Mach-O symbol table instead; keep
+absolute addresses separate from section symbols and exclude local/debug names
+from import resolution. Regression cases cover sectionless objects, malformed
+entries, unresolved imports, and the production address assembly compiled with
+the real arm64e assembler in macOS CI. Full link and prelink checks remain required.

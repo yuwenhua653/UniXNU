@@ -27,7 +27,7 @@ here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron
 def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
-  'build_entry':Path(__file__).resolve(),
+  'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
   'root_bundle':fixture/'bundle/root-bundle.json',
   'data_seed_contract':fixture/'bundle/data-seed.json',
   'data_volume_proof':fixture.parent/'data-volume/report.json'}.items()}
@@ -45,7 +45,8 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('systemos-libraries-preflight.log',[sys.executable,str(here/'tests/test_myron_systemos_libraries.py'),
+  checks=[('display-header-preflight.log',[sys.executable,str(d/'display/test_display_abi.py'),'--cc','clang','-v']),
+   ('systemos-libraries-preflight.log',[sys.executable,str(here/'tests/test_myron_systemos_libraries.py'),
    '--device',str(d)]),
    ('persistent-log-preflight.log',[sys.executable,str(here/'tests/test_myron_persistent_log.py'),'--device',str(d),'--cc','clang++']),
    ('log-worker-preflight.log',[sys.executable,str(here/'tests/test_myron_log_worker.py'),'--device',str(d),'--cc','clang++']),
@@ -314,6 +315,12 @@ allowed |= {'device/sm8850/drivers/NativeUfs/MyronBootLog.h', 'device/myron27/LO
 allowed.add('device/myron27/package/MyronSystemOSLibraries.h')
 if set(delta['files'])!=allowed:raise SystemExit('Unexpected storage source delta paths')
 snapshot['files'].update(delta['files'])
+display=json.loads((here/'myron27-display-delta.json').read_text())
+if display['base_reboot_sha256']!=hashlib.sha256((here/'myron27-reboot-delta.json').read_bytes()).hexdigest():
+ raise SystemExit('Display delta requires the reviewed mount/reboot snapshot')
+display_paths=set(['device/myron27/MyronStorageBoot.cpp', 'device/myron27/audit_ufs_storage_abi.py', 'device/myron27/boot_assets.py', 'device/myron27/build_ufs_dormant.py', 'device/myron27/display/LICENSE', 'device/myron27/display/LegacyDisplaySurface.cpp', 'device/myron27/display/MyronDisplayProbe.cpp', 'device/myron27/display/NativeGOPWire.h', 'device/myron27/display/NativeGpuTrace.h', 'device/myron27/display/NativeHalfCodes.h', 'device/myron27/display/NativeLegacyDisplay.cpp', 'device/myron27/display/NativeLegacyRequest.h', 'device/myron27/display/Test/request-state.c', 'device/myron27/display/display_abi.py', 'device/myron27/display/display_build.py', 'device/myron27/display/legacy-display-24A446-iphone12-1.json', 'device/myron27/display/test_display_abi.py', 'device/myron27/prepare_desktop.py', 'device/myron27/root_runtime.py', 'device/myron27/tests/test_root_runtime.py', 'device/sm8850/drivers/NativeUfs/MyronBootLog.h'])
+if set(display['files'])!=display_paths:raise SystemExit('Unexpected display source delta paths')
+snapshot['files'].update(display['files'])
 for name,item in snapshot['files'].items():
  relative=Path(name)
  if relative.is_absolute() or '..' in relative.parts:raise SystemExit('Invalid source path')

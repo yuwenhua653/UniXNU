@@ -31,6 +31,19 @@ EXIT_TRACE_SYMBOLS = frozenset({'_boot_progress_exit_trace', '_backtrace_user', 
 LOCKDOWN_STATE_SYMBOLS = frozenset({'_sysctl__security_mac_lockdown_mode_state_public',
     '_sysctl_lockdown_mode_state_public', '_get_lockdown_mode_state'})
 
+DISPLAY_SYMBOLS = frozenset({'_myron_display_start','_myron_display_snapshot',
+    '__ZTV19NativeLegacyDisplay','_native_legacy_display_allocate',
+    '_native_legacy_default_surface_create','_native_legacy_prepare_scanout'})
+DISPLAY_ARGUMENTS = frozenset({'myron27-display=1','offline-legacy-phase=4',
+    'offline-legacy-register=1','offline-legacy-gop=1','offline-legacy-validate=1',
+    'offline-legacy-transfer=1','offline-legacy-retire=1','offline-legacy-cpu-present=1'})
+
+def require_cpu_display(data):
+    definitions=kernel_definitions(data)
+    missing=sorted(DISPLAY_SYMBOLS-definitions.keys())
+    if missing:raise ValueError(f'CPU GOP display backend missing from final payload: {missing}')
+    return {name:definitions[name] for name in sorted(DISPLAY_SYMBOLS)}
+
 def require_lockdown_state(data):
     """Require the public state OID and implementation in the final kernel."""
     definitions = kernel_definitions(data)
@@ -97,3 +110,4 @@ def kernel_definitions(data):
         need(stop>=0,'Unterminated native symbol name')
         result[data[strings+ix:stop].decode()]=value
     return result
+

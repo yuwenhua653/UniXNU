@@ -51,7 +51,7 @@ subprocess.run([sys.executable,str(repo/'myron27-build.py'),'--source-only'],env
 device=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27/device/myron27';sys.path.insert(0,str(device))
 from prepare_firmware_source import prepare
 from prepare_loader import prepare as loader
-from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, require_exit_trace, require_lockdown_state
+from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, require_exit_trace, require_lockdown_state, require_cpu_display, DISPLAY_ARGUMENTS
 up=a.work/'upstream'
 bp.checkout('https://github.com/UniXNU/UniXNU.git','04573c510c5fd4892ca6948739389141cc9e05f5',up)
 bp.checkout('https://github.com/UniXNU/DarwinBoot.git','3c75734014cdab0acd9541e88057b7606ee7ae08',up/'drivers/DarwinBoot')
@@ -66,6 +66,7 @@ need(required<=definitions.keys(),'Continuous recorder missing from final prelin
 buffer_definitions=require_buffer_trace(kernel)
 exit_trace_definitions=require_exit_trace(kernel)
 lockdown_state_definitions=require_lockdown_state(kernel)
+display_definitions=require_cpu_display(kernel)
 from audit_amfi_stack import require_final as require_amfi_stack
 amfi_stack_binding=require_amfi_stack(kernel,definitions)
 need(b'MYRON iOS27 - CONTINUOUS XNU BOOT' in kernel,'Wrong final recorder implementation')
@@ -74,6 +75,7 @@ need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']=
 e=entries[0]
 need(e['type']=='xnu' and e['path']=='Payloads/kernel.macho' and e['initrd']=='Payloads/scratch-data.img','Unexpected boot entry')
 need({'boot-progress=2','myron27-dyld-startup=1','cpus=1','launchd_log_serial=1','log=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
+need(DISPLAY_ARGUMENTS<=set(e['args'].split()),'Continuous CPU-display arguments missing')
 h=lambda n:hashes['EFI/UniXNU/Payloads/'+n]
 header=(f'#define MYRON_KERNEL_FAT_BYTES 0x{len(fat):x}ULL\n#define MYRON_KERNEL_FAT_CRC32 0x{zlib.crc32(fat):08x}U\n'
         f'#define MYRON_KERNEL_FAT_SHA256 "{sha(fat)}"\n#define MYRON_R46_KERNEL_SHA256 "{h("kernel.macho")}"\n')
@@ -104,6 +106,7 @@ image=raw[:bp.FD_OFFSET]+fd+fat
 need(len(image)==len(raw) and image[:bp.FD_OFFSET]==raw[:bp.FD_OFFSET] and image[bp.FAT_OFFSET:]==raw[bp.FAT_OFFSET:],'Non-FD bytes changed')
 a.output.mkdir();(a.output/'root-startup.img').write_bytes(image)
 report=dict(result='passed',kind='continuous-xnu-source-boot',producer=producer,assembly_commit=os.environ['GITHUB_SHA'],assembly_run=os.environ['GITHUB_RUN_ID'],intentional_stop=False,
+    display_definitions=display_definitions,display_arguments=sorted(DISPLAY_ARGUMENTS),display_runtime_qualified=False,
     required_symbols=sorted(required),buffer_trace_definitions=buffer_definitions,exit_trace_definitions=exit_trace_definitions,lockdown_state_definitions=lockdown_state_definitions,kernel_sha256=h('kernel.macho'),firmware_verification=fv,root_handoff=host,
     boot_sha256=sha(image),elapsed_seconds=round(time.monotonic()-start,1),root_install_reusable=True,phone_tested=False,desktop_reached=False)
 save(a.output/'continuous-report.json',report)
@@ -121,3 +124,4 @@ save(a.output/'persistent-log.json',dict(format=1,source_commit=commit,writer='S
     root_install_reusable=True,phone_tested=False,
     files={name:sha((a.output/name).read_bytes()) for name in reader_files}))
 print('PASS: continuous source kernel with Linux firmware; phone/desktop execution remains unverified')
+

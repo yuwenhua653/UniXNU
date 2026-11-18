@@ -1,0 +1,45 @@
+# Myron iPhone 24A446 CPU GOP display candidate
+
+The tested 44233840545 image reaches userspace but SpringBoard repeatedly exits.
+The retained first-exit trace resolves to
+`-[FBSDisplayMonitor _initWithDisplays:mainDisplay:bookendObserver:transformer:].cold.6`
+at unslid `0x1a8a6c63c`. The failing assertion is `[displays count] > 0`.
+The caller tests the display array count before reaching this trap. The later
+halt/restart timeout and persona warnings do not explain that first failure.
+
+This candidate adds a real firmware-backed `IOMobileFramebufferLegacy` subclass:
+
+- Uses the maintained UniXNU/GopFramebuffer CPU backend at
+  `b0d812d578efa2acb005b66f73168891719af09a`. Source/license are included unchanged.
+- Derives the ABI header from UniXNU-sheng's 27 adapter at
+  `6c42e1055ffb3b335fda991190ad221edaa7af3c`, with independently relocated iPhone
+  addresses. The iPhone donor SHA-256 is
+  `813be26ab6bd1d8de211904eca413a1a2ebf79989f90c33a48ff0f2fcff99036`.
+- Checks all 379 original vtable entries, compiled PAC metadata, native inherited
+  identities, original constructors/metaclass, IOSurface accessors, final
+  adapters, fixed GOT imports and final prelinked dispatch slots. The three
+  abstract entries retain their reviewed caller diversities separately from
+  the original pure-virtual target's raw signing.
+- Reads geometry and memory extent from the actual GOP handoff; registers the
+  provider under the real `arm-io` device-tree parent; waits for IOSurface and
+  allocates its default surface using the original factory. The void slot 316
+  is never treated as an object-returning API.
+- Performs CPU copies and uses the existing console-release handshake before
+  presenting a frame. GPU, DPU direct scanout and unmeasured refresh overrides
+  are refused. No SM8550 register values or panel calibration are transplanted.
+- Keeps SystemOS library mounting and the bounded persistent log path. Each
+  committed log round now includes display registration, client status,
+  accepted/rejected swaps, copied bytes and retirement counts.
+
+The driver is compiled with the root candidate. It is only activated by the
+explicit startup arguments. Other retained/dormant storage variants do not
+register it. Full native compilation runs in the existing macOS CI; original
+donor images and device logs are not added to this repository.
+
+Validation: actual pinned donor checks and negative controls cover wrong donor,
+slide, slot target, PAC key, code anchor, metaclass and generated method names.
+CI also runs the upstream request-state/cancellation test and compiles all
+display units against the real kernel recipe before reference/prelink work.
+Final package assembly rejects kernels missing the backend or its activation
+arguments. Compilation and these checks do not establish successful phone boot,
+desktop rendering, touch, brightness control or GPU acceleration.

@@ -18,6 +18,12 @@ sys.path.insert(0,str(source));import myron_boot_update as old
 sha=lambda x:hashlib.sha256(x).hexdigest()
 mraw=(a.candidate/'deployment.json').read_bytes();m=json.loads(mraw)
 r=json.loads((a.candidate/'continuous-report.json').read_text());image=(a.candidate/'root-startup.img').read_bytes()
+from myron_continuous_contract import DISPLAY_SYMBOLS,DISPLAY_ARGUMENTS
+assert all(r['display_definitions'].get(name) for name in DISPLAY_SYMBOLS)
+assert set(r['display_arguments'])==DISPLAY_ARGUMENTS and r['display_runtime_qualified'] is False
+display_delta=json.loads((Path(__file__).resolve().parent/'myron27-display-delta.json').read_text())
+display_license=display_delta['files']['device/myron27/display/LICENSE']
+assert sha(display_license['content'].encode())==display_license['sha256']
 assert r['result']=='passed' and r['kind']=='continuous-xnu-source-boot' and r['intentional_stop'] is False
 assert m['continuous_boot']['intentional_stop'] is False and 'entry_observer' not in m
 assert sha(image)==r['boot_sha256']==m['files']['root-startup.img']['sha256']
@@ -55,8 +61,9 @@ folder='continuous-boot-'+str(a.run)
 menu=(source/'UPDATE-BOOT.cmd').read_text().replace('boot-update-'+str(old.RUN),folder).replace(str(old.RUN),str(a.run)).replace('Linux/Clang 18 boot comparison','continuous XNU boot').replace('START-IOS27-LINUX-README-CN.txt','START-IOS27-CONTINUOUS-README-CN.txt')
 guide='''myron iOS27 连续启动版
 
-本版包含 UFS 持久日志保存与 recovery 只读导出。
-编译及装配检查通过；真机日志保存和进入桌面尚未验证。
+本版补入 CPU 帧缓冲显示服务，保留 UFS 持久日志保存与 recovery 只读导出。
+编译及装配检查通过；新显示链路和进入桌面仍需真机验证。
+日志新增显示注册、客户端连接、帧拷贝和提交计数。GPU 加速尚未接入。
 复用已安装的 unixnu，只更新原备份对应槽位的 boot。
 
 将本包解压到原测试目录，START-IOS27-CONTINUOUS.cmd 与原 package、state 同层。
@@ -87,6 +94,7 @@ with tempfile.TemporaryDirectory() as temp:
     u=importlib.util.module_from_spec(spec);spec.loader.exec_module(u);u.verify_release(a.candidate)
     a.output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(a.output,'w',compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr('LICENSE-GopFramebuffer.txt',display_license['content'].encode())
         for name,text in [('START-IOS27-CONTINUOUS.cmd',menu),('START-IOS27-CONTINUOUS-README-CN.txt',guide),('READ-IOS27-LOG.cmd',log_menu)]:
             z.writestr(name,text.replace('\r\n','\n').replace('\n','\r\n').encode())
         z.writestr(folder+'/myron_boot_update.py',code)
@@ -105,3 +113,4 @@ result=dict(file=a.output.name,bytes=a.output.stat().st_size,sha256=sha(a.output
             persistent_log=log_report,phone_tested=False,desktop_reached=False)
 a.output.with_suffix('.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))
+

@@ -95,6 +95,10 @@ with tempfile.TemporaryDirectory() as temp:
     a.output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(a.output,'w',compression=zipfile.ZIP_DEFLATED) as z:
         z.writestr('LICENSE-GopFramebuffer.txt',display_license['content'].encode())
+        for name,path in [('AppleKeyStoreState','device/myron27/display/AppleKeyStoreState/LICENSE'),('ProcessTrace','device/myron27/package/LICENSE-ProcessTrace.txt')]:
+            license_entry=display_delta['files'][path]
+            assert sha(license_entry['content'].encode())==license_entry['sha256']
+            z.writestr('LICENSE-'+name+'.txt',license_entry['content'].encode())
         for name,text in [('START-IOS27-CONTINUOUS.cmd',menu),('START-IOS27-CONTINUOUS-README-CN.txt',guide),('READ-IOS27-LOG.cmd',log_menu)]:
             z.writestr(name,text.replace('\r\n','\n').replace('\n','\r\n').encode())
         z.writestr(folder+'/myron_boot_update.py',code)
@@ -113,4 +117,5 @@ result=dict(file=a.output.name,bytes=a.output.stat().st_size,sha256=sha(a.output
             persistent_log=log_report,phone_tested=False,desktop_reached=False)
 a.output.with_suffix('.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))
+
 

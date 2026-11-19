@@ -31,6 +31,8 @@ using wait_result_t=int;using thread_t=void *;
 #define kIOReturnSuccess 0
 #define MYRON_ROOT_POLICY 1
 static int displaySnapshots,keystoreSnapshots;
+extern "C" void boot_process_start(){}
+extern "C" size_t myron_process_snapshot(char *p,size_t n){assert(n==24576);strcpy(p,"process snapshot\n");return strlen(p);}
 static int scenario,writes,syncs,locked,sleeps,gptCalls;static unsigned logArg;
 static constexpr unsigned kDataMax=131072;
 static struct {bool ready,poisoned;} gHost;

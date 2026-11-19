@@ -45,7 +45,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('display-header-preflight.log',[sys.executable,str(d/'display/test_display_abi.py'),'--cc','clang','-v']),
+  checks=[('display-lifecycle-preflight.log',[sys.executable,str(here/'tests/test_myron_display_lifecycle.py'),
+   '--device',str(d),'--cc','clang++','--sanitize']),
+   ('display-header-preflight.log',[sys.executable,str(d/'display/test_display_abi.py'),'--cc','clang','-v']),
    ('systemos-libraries-preflight.log',[sys.executable,str(here/'tests/test_myron_systemos_libraries.py'),
    '--device',str(d)]),
    ('persistent-log-preflight.log',[sys.executable,str(here/'tests/test_myron_persistent_log.py'),'--device',str(d),'--cc','clang++']),
@@ -396,4 +398,5 @@ shutil.copyfile(root/'qualification/firmware-tools/report.json',root/'reports/fi
 print('PASS full firmware compile/unpack and PAC preflight before native build',flush=True)
 run([sys.executable,d/'check_compiler.py','--out',root/'reports'])
 run([sys.executable,d/'build_native.py','--upstream',u,'--references',root/'references','--xnu',root/'references/xnu','--out',out,'-j','3'])
+
 

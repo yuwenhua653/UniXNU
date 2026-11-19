@@ -368,7 +368,37 @@ int main(void) {
   used=myron_boot_log_snapshot(snap,cap);
   assert(used<cap && snap[used]==0 && snap[cap]==0x5a);
  }
- busy=1;used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"snapshot busy")&&busy==1);busy=0;
+ // Regression: a long-running framebuffer writer must not prevent capture
+ // or snapshot publication. Both buffered output and putc bypass that lock.
+ reboot_first=0;panic_claimed=0;persist_console_head=0;busy=1;
+ myron_boot_console_write("saved while drawing\n",20,1);
+ boot_progress_putc('X');boot_progress_putc('\n');
+ used=myron_boot_log_snapshot(snap,sizeof snap);
+ assert(busy==1 && !strstr(snap,"snapshot busy"));
+ assert(strstr(snap,"saved while drawing\nX\n") && persist_console_head==22);
+ busy=0;
+ // A contended text producer/snapshot remains nonblocking and never releases
+ // somebody else's lock. Interrupted lines cannot invent a shutdown reason.
+ shutdown_log_count=0;shutdown_log_used=0;shutdown_log_overflow=0;
+ myron_boot_console_write("system reboot ",14,0);
+ console_capture_busy=1;uint64_t capture_before=persist_console_head;
+ uint64_t lost_before=console_capture_dropped;
+ myron_boot_console_write("DROP",4,0);boot_progress_putc('!');
+ assert(console_capture_busy==1 && persist_console_head==capture_before);
+ assert(console_capture_dropped==lost_before+5 && console_capture_gap);
+ used=myron_boot_log_snapshot(snap,sizeof snap);
+ assert(strstr(snap,"snapshot busy") && console_capture_busy==1);
+ console_capture_busy=0;
+ myron_boot_console_write("initiated by: false reason\n",27,0);
+ assert(!shutdown_log_count && !console_capture_gap);
+ // One draw per second, not one full framebuffer redraw per input newline.
+ console_draw_ready=0;uint64_t draws=console_draw_count;
+ myron_boot_console_write("a\nb\nc\n",6,0);
+ assert(console_draw_count==draws+1);
+ myron_boot_console_write("d\ne\n",4,0);boot_progress_putc('\n');
+ assert(console_draw_count==draws+1);
+ test_clock+=1000;boot_progress_putc('\n');
+ assert(console_draw_count==draws+2);
  reboot_first=0;persist_console_head=0;
  for(unsigned i=0;i<40000;++i)shutdown_log_char((i%26)+'A');
  used=myron_boot_log_snapshot(snap,sizeof snap);assert(used<sizeof snap);
@@ -396,4 +426,4 @@ int main(void) {
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
-print('PASS earliest shutdown console reasons, wrapping/truncation/non-reboot control and freeze; first reboot source/options/history/user trace, shutdown phases and timeout retention; formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')
+print('PASS capture and snapshots independent of framebuffer lock, nonblocking text contention and line reset, one console draw per second; earliest shutdown console reasons, wrapping/truncation/non-reboot control and freeze; first reboot source/options/history/user trace, shutdown phases and timeout retention; formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

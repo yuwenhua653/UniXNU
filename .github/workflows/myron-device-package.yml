@@ -16,10 +16,10 @@ permissions:
   contents: read
 concurrency:
   group: myron-device-package
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event.head_commit.message == 'Check myron AppleKeyStore integration before full build' }}
 jobs:
   macos-geometry:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package' || github.event.head_commit.message == 'Check myron AppleKeyStore integration before full build'
     runs-on: macos-26
     timeout-minutes: 10
     env:
@@ -59,6 +59,13 @@ jobs:
             --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
             --xnu "$RUNNER_TEMP/myron-iphone27/references/xnu" --cc clang \
             2>&1 | tee "$RUNNER_TEMP/geometry-check/kqworkloop-limits.log"
+      - name: Check AppleKeyStore service and selector boundaries before the full build
+        run: |
+          mkdir -p "$RUNNER_TEMP/geometry-check"
+          set -o pipefail
+          python3 tests/test_myron_keystore.py \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cc clang++ --sanitize \
+            2>&1 | tee "$RUNNER_TEMP/geometry-check/keystore.log"
       - name: Check display arm64e bindings and CPU fence policy before the full build
         run: |
           mkdir -p "$RUNNER_TEMP/geometry-check"

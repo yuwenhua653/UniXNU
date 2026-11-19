@@ -45,7 +45,9 @@ def qualify_root_inputs():
   sys.path.insert(0,str(d))
   from prepare_loader import prepare
   prepare(u/'drivers/DarwinBoot',qualification/'loader-source')
-  checks=[('display-lifecycle-preflight.log',[sys.executable,str(here/'tests/test_myron_display_lifecycle.py'),
+  checks=[('keystore-preflight.log',[sys.executable,str(here/'tests/test_myron_keystore.py'),
+   '--device',str(d),'--cc','clang++','--sanitize']),
+   ('display-lifecycle-preflight.log',[sys.executable,str(here/'tests/test_myron_display_lifecycle.py'),
    '--device',str(d),'--cc','clang++','--sanitize']),
    ('display-header-preflight.log',[sys.executable,str(d/'display/test_display_abi.py'),'--cc','clang','-v']),
    ('systemos-libraries-preflight.log',[sys.executable,str(here/'tests/test_myron_systemos_libraries.py'),
@@ -320,7 +322,7 @@ snapshot['files'].update(delta['files'])
 display=json.loads((here/'myron27-display-delta.json').read_text())
 if display['base_reboot_sha256']!=hashlib.sha256((here/'myron27-reboot-delta.json').read_bytes()).hexdigest():
  raise SystemExit('Display delta requires the reviewed mount/reboot snapshot')
-display_paths=set(['device/myron27/MyronStorageBoot.cpp', 'device/myron27/audit_ufs_storage_abi.py', 'device/myron27/boot_assets.py', 'device/myron27/build_ufs_dormant.py', 'device/myron27/display/LICENSE', 'device/myron27/display/LegacyDisplaySurface.cpp', 'device/myron27/display/MyronDisplayProbe.cpp', 'device/myron27/display/MyronDisplayTransport.h', 'device/myron27/display/NativeGOPWire.h', 'device/myron27/display/NativeGpuTrace.h', 'device/myron27/display/NativeHalfCodes.h', 'device/myron27/display/NativeLegacyDisplay.cpp', 'device/myron27/display/NativeLegacyRequest.h', 'device/myron27/display/Test/request-state.c', 'device/myron27/display/display_abi.py', 'device/myron27/display/display_build.py', 'device/myron27/display/legacy-display-24A446-iphone12-1.json', 'device/myron27/display/test_display_abi.py', 'device/myron27/display/test_display_transport.py', 'device/myron27/patches/xnuprelink/zzzz-last-constant-padding.patch', 'device/myron27/prepare_desktop.py', 'device/myron27/root_runtime.py', 'device/myron27/tests/test_root_runtime.py', 'device/sm8850/drivers/NativeUfs/MyronBootLog.h'])
+display_paths=set(['device/myron27/MyronStorageBoot.cpp', 'device/myron27/audit_ufs_storage_abi.py', 'device/myron27/boot_assets.py', 'device/myron27/build_ufs_dormant.py', 'device/myron27/display/AppleKeyStoreState/LICENSE', 'device/myron27/display/AppleKeyStoreState/NativeKeyStoreEvents.cpp', 'device/myron27/display/AppleKeyStoreState/README.md', 'device/myron27/display/AppleKeyStoreState/source.json', 'device/myron27/display/AppleKeyStoreState/test_closed_boundary.py', 'device/myron27/display/LICENSE', 'device/myron27/display/LegacyDisplaySurface.cpp', 'device/myron27/display/MyronDisplayProbe.cpp', 'device/myron27/display/MyronDisplayTransport.h', 'device/myron27/display/MyronKeyStoreProbe.cpp', 'device/myron27/display/NativeGOPWire.h', 'device/myron27/display/NativeGpuTrace.h', 'device/myron27/display/NativeHalfCodes.h', 'device/myron27/display/NativeLegacyDisplay.cpp', 'device/myron27/display/NativeLegacyRequest.h', 'device/myron27/display/Test/request-state.c', 'device/myron27/display/display_abi.py', 'device/myron27/display/display_build.py', 'device/myron27/display/legacy-display-24A446-iphone12-1.json', 'device/myron27/display/test_display_abi.py', 'device/myron27/display/test_display_transport.py', 'device/myron27/patches/xnuprelink/zzzz-last-constant-padding.patch', 'device/myron27/prepare_desktop.py', 'device/myron27/root_runtime.py', 'device/myron27/tests/test_root_runtime.py', 'device/sm8850/drivers/NativeUfs/MyronBootLog.h'])
 if set(display['files'])!=display_paths:raise SystemExit('Unexpected display source delta paths')
 snapshot['files'].update(display['files'])
 for name,item in snapshot['files'].items():

@@ -8,6 +8,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from myron_continuous_contract import kernel_definitions, require_buffer_trace, BUFFER_TRACE_SYMBOLS, BUFFER_TRACE_MARKER, require_exit_trace, EXIT_TRACE_SYMBOLS, EXIT_TRACE_MARKER
 from myron_continuous_contract import require_lockdown_state, LOCKDOWN_STATE_SYMBOLS, REBOOT_TRACE_MARKER, CONSOLE_ROUTE_MARKER, SHUTDOWN_LOG_MARKER, SHUTDOWN_LOG_REASON_MARKERS, SHUTDOWN_LOG_SYMBOLS
 from myron_continuous_contract import require_cpu_display, DISPLAY_SYMBOLS
+from myron_continuous_contract import SHUTDOWN_LOG_LEGACY_SYMBOLS, SHUTDOWN_LOG_CAPTURE_SYMBOLS
+BUFFER_TEST_SYMBOLS = BUFFER_TRACE_SYMBOLS | SHUTDOWN_LOG_LEGACY_SYMBOLS
 class ContractTests(unittest.TestCase):
     def sample(self,name=b'com.apple.kernel'):
         data=bytearray(512)
@@ -29,7 +31,7 @@ class ContractTests(unittest.TestCase):
     def test_rejects_unterminated_name(self):
         raw=self.sample();struct.pack_into('<I',raw,180,8);raw[289:296]=b'abcdefg'
         with self.assertRaises(ValueError):kernel_definitions(raw)
-    def buffer_sample(self, missing=None, marker=True, symbols=BUFFER_TRACE_SYMBOLS, text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER+b"\0"+CONSOLE_ROUTE_MARKER+b"\0"+b"\0".join(SHUTDOWN_LOG_REASON_MARKERS)):
+    def buffer_sample(self, missing=None, marker=True, symbols=BUFFER_TEST_SYMBOLS, text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER+b"\0"+CONSOLE_ROUTE_MARKER+b"\0"+b"\0".join(SHUTDOWN_LOG_REASON_MARKERS)):
         names=sorted(symbols-{missing})
         strings=b'\0';rows=[]
         for i,name in enumerate(names):
@@ -44,8 +46,8 @@ class ContractTests(unittest.TestCase):
         if marker:data[-len(text)-1:-1]=text
         return data
     def test_buffer_hooks_required_in_final_nested_kernel(self):
-        self.assertEqual(set(require_buffer_trace(self.buffer_sample())),BUFFER_TRACE_SYMBOLS)
-        for name in BUFFER_TRACE_SYMBOLS:
+        self.assertEqual(set(require_buffer_trace(self.buffer_sample())),BUFFER_TEST_SYMBOLS)
+        for name in BUFFER_TEST_SYMBOLS:
             with self.subTest(name=name),self.assertRaises(ValueError):
                 require_buffer_trace(self.buffer_sample(missing=name))
     def test_rejects_old_trace_even_with_correct_symbol_names(self):
@@ -57,7 +59,7 @@ class ContractTests(unittest.TestCase):
     def test_accepts_inlined_heading_with_real_recorder(self):
         raw=self.buffer_sample()
         self.assertNotIn(SHUTDOWN_LOG_MARKER, raw)
-        self.assertEqual(set(require_buffer_trace(raw)), BUFFER_TRACE_SYMBOLS)
+        self.assertEqual(set(require_buffer_trace(raw)), BUFFER_TEST_SYMBOLS)
     def test_reason_strings_and_retained_state_are_mandatory(self):
         text=BUFFER_TRACE_MARKER+b"\0"+REBOOT_TRACE_MARKER+b"\0"+CONSOLE_ROUTE_MARKER+b"\0"+b"\0".join(SHUTDOWN_LOG_REASON_MARKERS)
         for marker in (CONSOLE_ROUTE_MARKER, *SHUTDOWN_LOG_REASON_MARKERS):
@@ -68,6 +70,20 @@ class ContractTests(unittest.TestCase):
                                text=text+b"\0"+SHUTDOWN_LOG_MARKER)
         with self.assertRaisesRegex(ValueError, '_shutdown_log_match'):
             require_buffer_trace(old)
+    def test_accepts_inlined_matcher_with_independent_capture(self):
+        symbols=BUFFER_TRACE_SYMBOLS | SHUTDOWN_LOG_CAPTURE_SYMBOLS
+        raw=self.buffer_sample(symbols=symbols)
+        self.assertNotIn('_shutdown_log_match',kernel_definitions(raw))
+        self.assertEqual(set(require_buffer_trace(raw)),symbols)
+        # Every state/hook must remain present; a renamed stub is insufficient.
+        for name in symbols:
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                require_buffer_trace(self.buffer_sample(symbols=symbols,missing=name))
+        with self.assertRaisesRegex(ValueError,'matcher_variants='):
+            require_buffer_trace(self.buffer_sample(symbols=BUFFER_TRACE_SYMBOLS))
+        with self.assertRaises(ValueError):
+            require_buffer_trace(self.buffer_sample(symbols=symbols,marker=False))
+
     def test_log_driver_is_checked_only_after_its_link_stage(self):
         # The early native kernel contains the recorder but not the later UFS object.
         # Inspect the actual early verifier definition, not a duplicated symbol list.
@@ -110,5 +126,6 @@ class ContractTests(unittest.TestCase):
             with self.subTest(name=name),self.assertRaises(ValueError):require_cpu_display(sample(missing=name))
         with self.assertRaises(ValueError):require_cpu_display(self.buffer_sample(text=b'myron GOP display registered'))
 if __name__=='__main__':unittest.main()
+
 
 

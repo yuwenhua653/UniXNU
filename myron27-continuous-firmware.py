@@ -62,7 +62,7 @@ need(set(hashes)=={'EFI/UniXNU/Payloads/'+n for n in ('kernel.macho','kernel.mac
 for name,digest in hashes.items():need(sha(read(name[len('EFI/UniXNU/'):]))==digest,'Embedded file mismatch '+name)
 kernel=read('Payloads/kernel.macho');definitions=kernel_definitions(kernel)
 required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_boot_progress_putc','_myron_boot_progress_state'} | BUFFER_TRACE_SYMBOLS
-need(required<=definitions.keys(),'Continuous recorder missing from final prelinked kernel')
+need(required<=definitions.keys(),f'Continuous recorder missing from final prelinked kernel: {sorted(required-definitions.keys())}')
 buffer_definitions=require_buffer_trace(kernel)
 exit_trace_definitions=require_exit_trace(kernel)
 lockdown_state_definitions=require_lockdown_state(kernel)
@@ -124,4 +124,5 @@ save(a.output/'persistent-log.json',dict(format=1,source_commit=commit,writer='S
     root_install_reusable=True,phone_tested=False,
     files={name:sha((a.output/name).read_bytes()) for name in reader_files}))
 print('PASS: continuous source kernel with Linux firmware; phone/desktop execution remains unverified')
+
 

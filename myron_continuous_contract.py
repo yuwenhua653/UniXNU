@@ -13,9 +13,17 @@ SHUTDOWN_LOG_REASON_MARKERS = (
     b'critical process crashes:', b'feature disabled, device would have rebooted',
 )
 SHUTDOWN_LOG_SYMBOLS = frozenset({
-    '_shutdown_log_match', '_shutdown_log_match.phrases', '_shutdown_log_count',
+    '_shutdown_log_match.phrases', '_shutdown_log_count',
     '_shutdown_log_times', '_shutdown_log_rows', '_shutdown_log_used',
     '_shutdown_log_line', '_shutdown_log_overflow', '_draw_reboot',
+})
+# Optimizing clang may inline shutdown_log_match into capture_console. The
+# new layout must retain the independent capture state as well as all common
+# reason strings/state; absence of an out-of-line helper alone is not a defect.
+SHUTDOWN_LOG_LEGACY_SYMBOLS = frozenset({'_shutdown_log_match'})
+SHUTDOWN_LOG_CAPTURE_SYMBOLS = frozenset({
+    '_capture_console', '_console_capture_busy', '_console_capture_gap',
+    '_console_capture_dropped', '_persist_console', '_persist_console_head',
 })
 BUFFER_TRACE_SYMBOLS = frozenset({
     '_myron_boot_console_write', '_myron_console_route_calls',
@@ -66,9 +74,13 @@ def require_buffer_trace(data):
     missing = sorted(name for name in BUFFER_TRACE_SYMBOLS if not definitions.get(name))
     markers = (BUFFER_TRACE_MARKER, REBOOT_TRACE_MARKER, CONSOLE_ROUTE_MARKER, *SHUTDOWN_LOG_REASON_MARKERS)
     missing_markers = [marker.decode('ascii') for marker in markers if marker not in data]
-    if missing or missing_markers:
-        raise ValueError(f'Buffer/reboot diagnostics missing: symbols={missing}; markers={missing_markers}')
-    return {name: definitions[name] for name in sorted(BUFFER_TRACE_SYMBOLS)}
+    variants = (SHUTDOWN_LOG_LEGACY_SYMBOLS, SHUTDOWN_LOG_CAPTURE_SYMBOLS)
+    implementation = next((symbols for symbols in variants
+                           if all(definitions.get(name) for name in symbols)), None)
+    if missing or missing_markers or implementation is None:
+        absent = [sorted(name for name in symbols if not definitions.get(name)) for symbols in variants]
+        raise ValueError(f'Buffer/reboot diagnostics missing: symbols={missing}; markers={missing_markers}; matcher_variants={absent}')
+    return {name: definitions[name] for name in sorted(BUFFER_TRACE_SYMBOLS | implementation)}
 
 def kernel_definitions(data):
     def need(ok,message):
@@ -110,4 +122,5 @@ def kernel_definitions(data):
         need(stop>=0,'Unterminated native symbol name')
         result[data[strings+ix:stop].decode()]=value
     return result
+
 

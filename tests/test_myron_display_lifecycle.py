@@ -144,6 +144,90 @@ int main(){
     'struct Display:IOMobileFramebufferLegacy {','static uint32_t native_legacy_swapstat[16];\nstruct Display:IOMobileFramebufferLegacy {').replace(
     '};\nstatic uint32_t native_legacy_swapstat[16];\nstatic void word','};\nstatic void word')
 
+def check_publication(source, compiler, flags, output):
+    methods = '\n'.join(method(source, signature) for signature in
+                        ('bool start(IOService', 'bool publishOneLayer()', 'void registerService('))
+    fixture = r'''
+#include <cassert>
+#include <cstring>
+#include <cstddef>
+using IOOptionBits = unsigned;
+static int failure, allocated, publications, observed;
+static void IOLog(const char *) {}
+struct OSNumber {
+    unsigned value;
+    static OSNumber *withNumber(unsigned value, unsigned bits) {
+        assert(bits == 32);
+        if (failure == 2) return nullptr;
+        ++allocated;
+        return new OSNumber{value};
+    }
+    void release() { --allocated; delete this; }
+};
+struct OSDictionary {
+    unsigned layers = 0;
+    static OSDictionary *withCapacity(unsigned capacity) {
+        assert(capacity == 1);
+        if (failure == 1) return nullptr;
+        ++allocated;
+        return new OSDictionary;
+    }
+    bool setObject(const char *key, OSNumber *count) {
+        assert(!strcmp(key, "MaxNumLayers"));
+        layers = count->value;
+        return failure != 3;
+    }
+    void release() { --allocated; delete this; }
+};
+#define OSSafeReleaseNULL(obj) do { if (obj) (obj)->release(); (obj) = nullptr; } while (0)
+static void PE_parse_boot_argn(const char *name, unsigned *value, size_t) {
+    assert(!strcmp(name, "offline-legacy-register"));
+    *value = 1;
+}
+static void native_legacy_backend_guard(unsigned, void *, void *) { assert(false); }
+static unsigned native_legacy_refresh_hz() { return 0; }
+static void native_legacy_set_refresh_properties(void *) { assert(false); }
+static void native_legacy_registration_observed(void *) { ++observed; }
+struct IOService {
+    unsigned clientLayers = 0;
+    bool setProperty(const char *key, OSDictionary *dictionary) {
+        assert(!strcmp(key, "IOMFBNumLayers"));
+        if (failure == 4) return false;
+        clientLayers = dictionary->layers;
+        return true;
+    }
+    virtual void registerService(IOOptionBits options) {
+        // A matching client can read the property immediately.
+        assert(options == 0 && clientLayers == 1);
+        ++publications;
+    }
+};
+struct Display : IOService {
+    bool primary = true;
+    bool startDisplay(IOService *) { registerService(); return true; }
+    void startVsync() {}
+    void startDirect() {}
+    METHODS
+};
+int main() {
+    for (failure = 0; failure <= 4; ++failure) {
+        Display display;
+        publications = observed = 0;
+        display.start(nullptr);
+        assert(publications == (failure == 0));
+        assert(publications == observed && allocated == 0);
+    }
+}
+'''.replace('METHODS', methods)
+    path = output / 'publication.cpp'
+    exe = output / 'publication.exe'
+    path.write_text(fixture)
+    subprocess.run([*compiler, '-std=c++17', '-Wall', '-Wextra', '-Werror', *flags,
+                    str(path), '-o', str(exe)], check=True)
+    subprocess.run([str(exe.resolve())], check=True)
+    print('PASS: first client sees one layer at registration; all four property failures prevent publication')
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--device',type=Path,required=True)
     p.add_argument('--cc',default='clang++');p.add_argument('--cc-arg',action='append',default=[])
@@ -158,6 +242,7 @@ def main():
     code=fixture(source,abi)
     with tempfile.TemporaryDirectory() as tmp:
         out=a.out or Path(tmp);out.mkdir(parents=True,exist_ok=True)
+        check_publication(source,[a.cc,*a.cc_arg],['-fsanitize=address,undefined'] if a.sanitize else [],out)
         for name,body in [('fixed',code),
             ('old-validation-gate',code.replace('enabled==1 && canPresent() && request','enabled==1 && logicalPM && primary && bootMapping && request')),
             ('old-copy-gate',code.replace('enabled!=1 || !canPresent()','enabled!=1 || !logicalPM || !bootMapping || !primary'))]:

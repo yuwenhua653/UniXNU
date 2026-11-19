@@ -347,10 +347,27 @@ int main(void) {
  const char desc_bytes[]={'b','a','d','\n','x','z'};
  struct boot_progress_exit_trace sb_trace={0};
  sb_trace.count=1;sb_trace.frames[0]=0x1234;
- myron_springboard_exit(29,6,2,6,0,0,0,desc_bytes,5,&sb_trace);
+ myron_desktop_exit(0,29,6,2,6,0,0,0,desc_bytes,5,&sb_trace);
  used=myron_boot_log_snapshot(snap,sizeof snap);
  assert(used<sizeof snap && strstr(snap,"[first SpringBoard exit]") &&
         strstr(snap,"description=bad x\n") && strstr(snap,"exit_frame=0x0000000000001234"));
+ assert(!strstr(snap,"[first backboardd exit]"));
+ char long_description[700];memset(long_description,'B',sizeof long_description);
+ struct boot_progress_exit_trace bb_trace={0};
+ bb_trace.count=2;bb_trace.frames[0]=0x5678;bb_trace.frames[1]=0x9abc;bb_trace.cache_slide=0x1000;
+ myron_desktop_exit(1,22,5,2,5,6,1,0x5678,long_description,sizeof long_description,&bb_trace);
+ myron_desktop_exit(2,99,0,0,0,0,0,0,NULL,0,&bb_trace);
+ used=myron_boot_log_snapshot(snap,sizeof snap);
+ assert(used<sizeof snap && strstr(snap,"[first SpringBoard exit]") && strstr(snap,"[first backboardd exit]"));
+ assert(strstr(snap,"pid=0x000000000000001d") && strstr(snap,"pid=0x0000000000000016"));
+ assert(strstr(snap,"exit_frame=0x0000000000001234") && strstr(snap,"exit_frame=0x0000000000005678"));
+ assert(strstr(snap,"exit_thread_exception=0x0000000000000006"));
+ assert(strlen(desktop_exits[1].description)==512 && desktop_exits[0].pid==29);
+ for(size_t cap=1;cap<4096;++cap) {
+  memset(snap,0x5a,sizeof snap);
+  used=myron_boot_log_snapshot(snap,cap);
+  assert(used<cap && snap[used]==0 && snap[cap]==0x5a);
+ }
  busy=1;used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"snapshot busy")&&busy==1);busy=0;
  reboot_first=0;persist_console_head=0;
  for(unsigned i=0;i<40000;++i)shutdown_log_char((i%26)+'A');

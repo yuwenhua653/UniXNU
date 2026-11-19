@@ -4,7 +4,7 @@
 Host doubles cover lifecycle and selector semantics, not real kernel registration.
 The unchanged upstream test independently checks the software blob format.
 """
-import argparse, ast, hashlib, json, os, runpy, subprocess, tempfile
+import argparse, ast, hashlib, json, os, runpy, subprocess, tempfile, unittest
 from pathlib import Path
 
 p=argparse.ArgumentParser(description=__doc__)
@@ -36,7 +36,18 @@ def upstream_run(cmd,**kw):
     if cmd[0]=='c++':cmd=[a.cc,*flags,*cmd[1:]]
     return original_run(cmd,**kw)
 subprocess.run=upstream_run
-try:runpy.run_path(str(source/'test_closed_boundary.py'),run_name='__main__')
+try:
+    runpy.run_path(str(source/'test_closed_boundary.py'),run_name='__main__')
+    # Reuse the existing full-root startup-order fixture without extracting a
+    # firmware image just to run this one independent control-flow test.
+    tree=ast.parse((d/'tests/test_root_runtime.py').read_text())
+    method=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='test_root_mode_call_order_and_failures')
+    scope=dict(HERE=d,Path=Path,json=json,subprocess=subprocess)
+    exec(compile(ast.Module(body=[method],type_ignores=[]),'<existing root startup test>','exec'),scope)
+    with tempfile.TemporaryDirectory() as tmp:
+        case=unittest.TestCase();case.work=Path(tmp)
+        scope[method.name](case)
+    print('PASS: existing root-mode startup fixture; service before display; nine success/failure/reentry cases')
 finally:subprocess.run=original_run
 
 header=r'''
@@ -126,3 +137,5 @@ with tempfile.TemporaryDirectory() as tmp:
     subprocess.run([a.cc,'-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I',str(t),'-I',str(d/'display'),str(t/'main.cpp'),'-o',str(exe)],check=True)
     for case in range(15):subprocess.run([str(exe),str(case)],check=True)
 print('PASS: actual board probe; 15 lifecycle cases; one-time registration; identity refusal; bounded persistent selector evidence')
+subprocess.run([os.sys.executable,str(Path(__file__).with_name('test_myron_log_worker.py')),
+    '--device',str(d),'--cc',a.cc],check=True)

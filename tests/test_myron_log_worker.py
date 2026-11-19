@@ -29,6 +29,8 @@ using wait_result_t=int;using thread_t=void *;
 #define THREAD_NULL nullptr
 #define KERN_SUCCESS 0
 #define kIOReturnSuccess 0
+#define MYRON_ROOT_POLICY 1
+static int displaySnapshots,keystoreSnapshots;
 static int scenario,writes,syncs,locked,sleeps,gptCalls;static unsigned logArg;
 static constexpr unsigned kDataMax=131072;
 static struct {bool ready,poisoned;} gHost;
@@ -56,6 +58,8 @@ static int kernel_thread_start(void (*f)(void *,wait_result_t),void *arg,thread_
 static void thread_deallocate(thread_t){}
 static void IOSleep(unsigned ms){assert(ms==2000);++sleeps;gHost.ready=false;}
 static bool PE_parse_boot_argn(const char *key,void *v,unsigned n){assert(std::string(key)=="log"&&n==4);*(unsigned*)v=logArg;return true;}
+extern "C" size_t myron_display_snapshot(char *p,size_t n){++displaySnapshots;assert(n==512);strcpy(p,"display snapshot\n");return strlen(p);}
+extern "C" size_t myron_keystore_snapshot(char *p,size_t n){++keystoreSnapshots;assert(n==1024&&displaySnapshots==keystoreSnapshots);strcpy(p,"keystore snapshot\n");return strlen(p);}
 extern "C" size_t myron_boot_log_snapshot(char *p,size_t n){assert(!locked&&n>12);strcpy(p,"test snapshot");return strlen(p);}
 extern "C" void bsd_log_lock_safe(){assert(!locked);locked=1;}
 extern "C" void bsd_log_unlock(){assert(locked);locked=0;}
@@ -72,7 +76,7 @@ int main() {
   if(scenario==3)gStoreGeometry.first++;
   if(scenario==8)logArg=0;
   myronBootLogStart();
-  if(scenario==0)assert(myron_log_rounds==1&&writes==34&&syncs==2&&sleeps==1&&gLogOpen);
+  if(scenario==0)assert(myron_log_rounds==1&&writes==34&&syncs==2&&sleeps==1&&gLogOpen&&displaySnapshots==1&&keystoreSnapshots==1);
   else if(scenario==7)assert(myron_log_errors==1&&writes==1&&syncs==0&&myron_log_rounds==0);
   else assert(writes==0&&syncs==0&&!gLogOpen);
   if(scenario!=8)assert(myron_log_state==3);

@@ -64,13 +64,22 @@ from payload_adt import parse as parse_adt
 embedded_adt=parse_adt(read('Payloads/kernel.macho.adt'))
 chosen=embedded_adt['/device-tree/chosen']
 board_adt=tomllib.loads((device/'board.toml').read_text())['adt']
-gop_mode={'display-scale':1,'display-rotation':0}
+gop_mode={'display-scale':2,'display-rotation':0}
 if a.source_repo:
     # Historical recovery verifies the display declarations of its own pinned board.
     board_words=board_adt['chosen']['u32']
     gop_mode={key:board_words[key] for key in gop_mode if key in board_words}
 for key,expected in gop_mode.items():
     need(chosen.get(key)==expected.to_bytes(4,'little'),'Embedded /chosen/'+key+' differs from the myron GOP mode')
+product=embedded_adt.get('/device-tree/product',{})
+if not a.source_repo or 'product' in board_adt:
+    phone_strings={'product-name':'iPhone 11','product-description':'iPhone 11',
+                  'artwork-device-idiom':'phone','compatible-device-fallback':'iPhone11,8'}
+    phone_words={'artwork-scale-factor':2,'artwork-device-subtype':1792,'thin-bezel':1}
+    for key,value in phone_strings.items():
+        need(product.get(key)==value.encode()+bytes(1),'Embedded /product/'+key+' differs from N104AP')
+    for key,value in phone_words.items():
+        need(product.get(key)==value.to_bytes(4,'little'),'Embedded /product/'+key+' differs from N104AP')
 buttons=embedded_adt.get('/device-tree/buttons',{})
 if not a.source_repo or 'buttons' in board_adt:
     for key,value in {'compatible':b'buttons\0','device_type':b'buttons\0',

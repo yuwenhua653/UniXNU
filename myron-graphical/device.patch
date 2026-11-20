@@ -315,3 +315,53 @@
 +            success_framebuffer_preserved=True,test_window_bytes=0x200000,actual_device_window_bytes=0x80000000,
              real_hypervisor_access_qualified=False,phone_tested=False)
  (a.out/'handoff-qemu.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
+--- a/device/myron27/prepare_data_volume.py
++++ b/device/myron27/prepare_data_volume.py
+@@ -118,6 +118,39 @@
+         path.mkdir()
+         os.chown(path, 0, 0)
+         path.chmod(0o755)
++
++
++# Match the uncompressed boot framebuffer used by the myron CPU scanout.
++# Upstream scripts/make-data-seed.py applies these independently of Setup.
++RENDER_PREFS = ('CAEnableDeepFramebuffer', 'CAEnableFramebufferCompression',
++                'CAEnableIOSurfaceCompression')
++
++def set_render_preferences(root):
++    root = Path(root)
++    for home, uid, gid in [('root', 0, 0), ('mobile', 501, 501)]:
++        prefs = root
++        for part in (home, 'Library', 'Preferences'):
++            prefs /= part
++            require(not prefs.is_symlink(), 'Unexpected Data symlink: ' + str(prefs))
++            if not prefs.exists():
++                prefs.mkdir(mode=0o755)
++                os.chown(prefs, uid, gid)
++            require(prefs.is_dir(), 'Expected preferences directory: ' + str(prefs))
++        for name in ('backboardd.plist', '.GlobalPreferences.plist'):
++            path = prefs/name
++            require(not path.is_symlink(), 'Unexpected preferences symlink: ' + str(path))
++            exists = path.exists()
++            require(not exists or path.is_file(), 'Expected preferences file: ' + str(path))
++            content = plistlib.loads(path.read_bytes()) if exists else {}
++            require(isinstance(content, dict), 'Expected preferences dictionary: ' + str(path))
++            if all(content.get(key) is False for key in RENDER_PREFS):
++                continue
++            content.update(dict.fromkeys(RENDER_PREFS, False))
++            # Existing inode retains its numeric ownership, mode, ACLs and xattrs.
++            path.write_bytes(plistlib.dumps(content, fmt=plistlib.FMT_BINARY))
++            if not exists:
++                os.chown(path, uid, gid)
++                path.chmod(0o644)
+ 
+ 
+ def check_userland(root):
+@@ -217,6 +250,7 @@
+     require(not mobile.is_symlink() and mobile.is_dir() and mobile.stat().st_uid == 501,
+             'Copied mobile directory must retain iOS uid 501')
+     ensure_container_layout(target)
++    set_render_preferences(target)
+     directory(target, 'keybags', 0, 0, 0o700)
+     directory(target, 'run', 0, 0, 0o755)
+     directory(target, 'tmp', 0, 0, 0o1777)

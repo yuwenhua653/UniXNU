@@ -30,3 +30,11 @@ jobs:
         run: |
           gh run download 44667978236 --name myron-ios27-continuous-ready --dir "$RUNNER_TEMP/retained-package"
           sudo -n "$(command -v python3)" tests/test_myron_retained_data_layout.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --package "$RUNNER_TEMP/retained-package/myron-ios27-continuous-44667978236.zip"
+
+      - name: Verify compositor preferences on the hardware-tested Data seed
+        if: github.event.head_commit.message == 'Set myron boot framebuffer preferences for CPU scanout'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 44683732571 --name myron-ios27-continuous-ready --dir "$RUNNER_TEMP/retained-render-input"
+          sudo -n "$(command -v python3)" tests/test_myron_render_seed.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --package "$RUNNER_TEMP/retained-render-input/myron-ios27-continuous-44683732571.zip"

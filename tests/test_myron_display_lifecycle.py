@@ -146,7 +146,7 @@ int main(){
 
 def check_publication(source, compiler, flags, output):
     methods = '\n'.join(method(source, signature) for signature in
-                        ('bool start(IOService', 'bool publishOneLayer()', 'void registerService('))
+                        ('bool start(IOService', 'bool publishOneLayer()', 'void registerService(', 'bool publishDisplay('))
     fixture = r'''
 #include <cassert>
 #include <cstring>
@@ -191,6 +191,7 @@ static void native_legacy_set_refresh_properties(void *) { ++refreshPublications
 static void native_legacy_registration_observed(void *) { ++observed; }
 struct IOService {
     unsigned clientLayers = 0;
+    bool powered = false, timerStarted = false;
     bool setProperty(const char *key, OSDictionary *dictionary) {
         assert(!strcmp(key, "IOMFBNumLayers"));
         if (failure == 4) return false;
@@ -199,22 +200,31 @@ struct IOService {
     }
     virtual void registerService(IOOptionBits options) {
         // A matching client can read the property immediately.
-        assert(options == 0 && clientLayers == 1 && refreshPublications==1);
+        assert(options == 4 && powered && timerStarted && clientLayers == 1 && refreshPublications==1);
         ++publications;
     }
 };
 struct Display : IOService {
     bool primary = true;
-    bool startDisplay(IOService *) { registerService(); return true; }
-    void startVsync() {}
+    bool deferPublication = false, requestedPublication = false, stopped = false;
+    IOOptionBits startupOptions = 0;
+    bool startDisplay(IOService *) {
+        if (failure != 6) registerService(4);
+        if (failure == 5) return false;
+        powered = true;
+        return true;
+    }
+    void stop(IOService *) { stopped = true; }
+    void startVsync() { timerStarted = true; }
     void startDirect() {}
     METHODS
 };
 int main() {
-    for (failure = 0; failure <= 4; ++failure) {
+    for (failure = 0; failure <= 6; ++failure) {
         Display display;
         refreshPublications = publications = observed = 0;
-        display.start(nullptr);
+        assert(display.start(nullptr) == (failure == 0));
+        assert(display.stopped == (failure != 0 && failure != 5));
         assert(publications == (failure == 0));
         assert(publications == observed && allocated == 0);
     }
@@ -226,7 +236,7 @@ int main() {
     subprocess.run([*compiler, '-std=c++17', '-Wall', '-Wextra', '-Werror', *flags,
                     str(path), '-o', str(exe)], check=True)
     subprocess.run([str(exe.resolve())], check=True)
-    print('PASS: first client sees one layer at registration; all four property failures prevent publication')
+    print('PASS: first matching client sees powered scanout, refresh and one layer; six startup failures publish nothing')
 
 
 def check_refresh(source, compiler, output):

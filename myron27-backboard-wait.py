@@ -75,7 +75,12 @@ def inspect(path, info, analysis):
             if addr in selected:selectors[hex(addr)] = last_name
     at = subprocess.run(['/usr/bin/atos','-arch','arm64e','-o',str(path),*[hex(f) for f in chosen]],
                         capture_output=True,text=True)
-    return dict(executable_sha256=info['sha256'],uuid=exe.uuid,sites=functions,
+    # These references belong to this exact executable and its one observed parent.
+    metadata = {}
+    if parents == {executable_base + 0x20f6c} and info['sha256'] == 'fbba7fd2925990dd859b24629ecab5cdbf6f2fac8c1c357ec0f9e412ded75559':
+        metadata = wait_metadata(data, executable_base, next(iter(parents)),
+                                 [executable_base + off for off in (0x90238, 0x901f8, 0x90218)])
+    return dict(wait_metadata=metadata,executable_sha256=info['sha256'],uuid=exe.uuid,sites=functions,
                 symbolic_names=at.stdout.splitlines(),objc_method_names=selectors,static_parent_candidates=[hex(p) for p in sorted(parents)],
                 functions={hex(f):selected[f][:180] for f in chosen})
 
@@ -91,3 +96,73 @@ def segments(data):
             if off+length>len(data):raise ValueError('Unbacked segment')
             yield va,length,off,name
         at += size
+
+
+def wait_metadata(data, base, parent, literal_addresses):
+    """Read name/selector references only from bounded, file-backed sections."""
+    sections = []
+    at = 32
+    for _ in range(struct.unpack_from('<I', data, 16)[0]):
+        cmd, size = struct.unpack_from('<II', data, at)
+        if cmd == 0x19:
+            for i in range(struct.unpack_from('<I', data, at + 64)[0]):
+                entry = at + 72 + 80 * i
+                name = data[entry:entry + 16].split(b'\0')[0].decode()
+                va, length, offset = struct.unpack_from('<QQI', data, entry + 32)
+                if offset and offset + length <= len(data):
+                    sections.append((name, va, length, offset))
+        at += size
+
+    def locate(addr, count, names):
+        for name, low, size, off in sections:
+            if name in names and low <= addr and addr + count <= low + size:
+                return off + addr - low
+        return None
+
+    def pointer_options(word):
+        # Absolute pointer, or a chained rebase encoded as an image offset.
+        return (word, base + (word & 0xffffffff), base + (word & ((1 << 43) - 1)))
+
+    def string_at(addr, names, limit=512):
+        pos = locate(addr, 1, names)
+        if pos is None:
+            return None
+        end = data.find(b'\0', pos, pos + limit + 1)
+        if end < pos or locate(addr, end - pos + 1, names) is None:
+            return None
+        value = data[pos:end]
+        return value.decode('ascii') if value and all(32 <= c <= 126 for c in value) else None
+
+    literals = {}
+    for addr in literal_addresses:
+        off = locate(addr, 32, {'__cfstring'})
+        if off is None:
+            continue
+        ptr, length = struct.unpack_from('<QQ', data, off + 16)
+        for va in pointer_options(ptr):
+            value = string_at(va, {'__cstring', '__objc_methname', '__oslogstring'})
+            if value and len(value) == length:
+                literals[hex(addr)] = value
+                break
+    selectors = set()
+    for name, start, size, off in sections:
+        if name not in {'__objc_methlist', '__objc_const', '__const'}:
+            continue
+        for i in range(8, size - 3, 4):
+            rel, = struct.unpack_from('<i', data, off + i)
+            if start + i + rel != parent:
+                continue
+            name_rel, type_rel = struct.unpack_from('<ii', data, off + i - 8)
+            typ = string_at(start + i - 4 + type_rel, {'__objc_methtype', '__cstring'})
+            if not typ or '@' not in typ:
+                continue
+            slot = start + i - 8 + name_rel
+            candidates = [slot]
+            pos = locate(slot, 8, {'__objc_selrefs'})
+            if pos is not None:
+                candidates.extend(pointer_options(struct.unpack_from('<Q', data, pos)[0]))
+            for va in candidates:
+                value = string_at(va, {'__objc_methname'})
+                if value:
+                    selectors.add(value)
+    return dict(assertion_literals=literals, parent_selectors=sorted(selectors))

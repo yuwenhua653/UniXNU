@@ -15,7 +15,7 @@ def inspect(path, info, analysis):
     # Sampler publishes the executable's Mach header from dyld_all_image_infos.
     # Use image-relative addresses only. Shared-cache offsets are independent.
     executable_base = next(seg[0] for seg in segments(data) if seg[3] == '__TEXT')
-    offsets = {'group_wait_return': 0x227f8, 'run_loop_return': 0x18aa0}
+    offsets = {'group_wait_return': 0x21084, 'previous_home_wait_return': 0x227f8, 'run_loop_return': 0x18aa0}
     functions = {}
     for name, delta in offsets.items():
         site = executable_base + delta - 4
@@ -61,10 +61,22 @@ def inspect(path, info, analysis):
         own = exe.owner(pc)
         if own in selected and (';' in m[2] or m[2].startswith(('bl\t','b\t','bl ','b '))):
             selected[own].append(dict(offset=hex(pc-own),detail=m[2][:450]))
+    objc = subprocess.check_output(['/usr/bin/otool','-arch','arm64e','-ov',str(path)],text=True)
+    selectors = {}
+    last_name = None
+    for line in objc.splitlines():
+        field = line.strip().split(None, 2)
+        if not field:continue
+        if field[0] == 'name':
+            last_name = field[2] if len(field) == 3 else None
+        if field[0] == 'imp' and len(field) > 1 and last_name:
+            try: addr = int(field[1],16)
+            except ValueError:continue
+            if addr in selected:selectors[hex(addr)] = last_name
     at = subprocess.run(['/usr/bin/atos','-arch','arm64e','-o',str(path),*[hex(f) for f in chosen]],
                         capture_output=True,text=True)
     return dict(executable_sha256=info['sha256'],uuid=exe.uuid,sites=functions,
-                symbolic_names=at.stdout.splitlines(),static_parent_candidates=[hex(p) for p in sorted(parents)],
+                symbolic_names=at.stdout.splitlines(),objc_method_names=selectors,static_parent_candidates=[hex(p) for p in sorted(parents)],
                 functions={hex(f):selected[f][:180] for f in chosen})
 
 

@@ -283,6 +283,7 @@ def load(name):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for n in ('device','upstream','work','output','archive-tool'):p.add_argument('--'+n,type=Path,required=True)
+    p.add_argument('--backboard-wait',action='store_true')
     a=p.parse_args();require(sys.platform=='darwin' and os.geteuid()==0,'Read-only inspection requires macOS')
     work=a.work.resolve();out=a.output.resolve();require(not work.exists() and not out.exists(),'Fresh output required')
     work.mkdir(parents=True,mode=0o700);out.mkdir(parents=True)
@@ -311,6 +312,13 @@ def main():
     encrypted.unlink();raw=extract.check_raw_image(image,userdata,ROOT_PINS['OS'])
     with volume.attached(image,work/'mount',True) as mounted:
         require(mounted['uuid']==ROOT_PINS['OS'][0],'Wrong OS volume UUID')
+        if a.backboard_wait:
+            binary=volume.regular(mounted['path']/'usr/libexec/backboardd')
+            report=load('myron27-backboard-wait').inspect(binary,audit.macho(binary,trust,2),sys.modules[__name__])
+            report.update(source_volume=raw,source_commit=os.environ.get('GITHUB_SHA'),kernel_built=False)
+            (out/'backboard-wait.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS backboard wait address attribution',flush=True)
+            return
         launchd=volume.regular(mounted['path']/'sbin/launchd');info=audit.macho(launchd,trust,2)
         report=inspect(launchd,info,disassemble=True)
     report.update(source_volume=raw,source_commit=os.environ.get('GITHUB_SHA'),result='passed',

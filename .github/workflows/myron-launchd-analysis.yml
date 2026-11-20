@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   analyze:
-    if: github.event.head_commit.message == 'Analyze original myron launchd reboot'
+    if: github.event.head_commit.message == 'Analyze original myron launchd reboot' || github.event.head_commit.message == 'Identify myron backboard first-frame wait'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           analysis_python="$(python3 -c 'import sys; print(sys.executable)')"
           analysis_ipsw="$(python3 -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("ipsw")).resolve())')"
-          sudo -n env GITHUB_SHA="$GITHUB_SHA" "$analysis_python" myron27-launchd-analysis.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --upstream "$RUNNER_TEMP/launchd-upstream" --work "$RUNNER_TEMP/launchd-private" --output "$RUNNER_TEMP/launchd-public" --archive-tool "$analysis_ipsw"
+          sudo -n env GITHUB_SHA="$GITHUB_SHA" "$analysis_python" myron27-launchd-analysis.py ${{ github.event.head_commit.message == 'Identify myron backboard first-frame wait' && '--backboard-wait' || '' }} --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --upstream "$RUNNER_TEMP/launchd-upstream" --work "$RUNNER_TEMP/launchd-private" --output "$RUNNER_TEMP/launchd-public" --archive-tool "$analysis_ipsw"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: myron-launchd-reboot-analysis

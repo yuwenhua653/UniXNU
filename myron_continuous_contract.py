@@ -44,7 +44,7 @@ DISPLAY_SYMBOLS = frozenset({'_myron_display_start','_myron_display_snapshot',
     '_native_legacy_default_surface_create','_native_legacy_prepare_scanout'})
 DISPLAY_ARGUMENTS = frozenset({'myron27-display=1','offline-legacy-phase=4',
     'offline-legacy-register=1','offline-legacy-gop=1','offline-legacy-validate=1',
-    'offline-legacy-transfer=1','offline-legacy-retire=1','offline-legacy-cpu-present=1'})
+    'offline-legacy-transfer=1','offline-legacy-retire=1','offline-legacy-cpu-present=1','vsync=60'})
 
 def require_cpu_display(data):
     definitions=kernel_definitions(data)

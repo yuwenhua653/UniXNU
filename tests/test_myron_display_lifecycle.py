@@ -185,8 +185,9 @@ static void PE_parse_boot_argn(const char *name, unsigned *value, size_t) {
     *value = 1;
 }
 static void native_legacy_backend_guard(unsigned, void *, void *) { assert(false); }
-static unsigned native_legacy_refresh_hz() { return 0; }
-static void native_legacy_set_refresh_properties(void *) { assert(false); }
+static unsigned cadence=60, refreshPublications;
+static unsigned native_legacy_refresh_hz() { return cadence; }
+static void native_legacy_set_refresh_properties(void *) { ++refreshPublications; }
 static void native_legacy_registration_observed(void *) { ++observed; }
 struct IOService {
     unsigned clientLayers = 0;
@@ -198,7 +199,7 @@ struct IOService {
     }
     virtual void registerService(IOOptionBits options) {
         // A matching client can read the property immediately.
-        assert(options == 0 && clientLayers == 1);
+        assert(options == 0 && clientLayers == 1 && refreshPublications==1);
         ++publications;
     }
 };
@@ -212,7 +213,7 @@ struct Display : IOService {
 int main() {
     for (failure = 0; failure <= 4; ++failure) {
         Display display;
-        publications = observed = 0;
+        refreshPublications = publications = observed = 0;
         display.start(nullptr);
         assert(publications == (failure == 0));
         assert(publications == observed && allocated == 0);
@@ -226,6 +227,53 @@ int main() {
                     str(path), '-o', str(exe)], check=True)
     subprocess.run([str(exe.resolve())], check=True)
     print('PASS: first client sees one layer at registration; all four property failures prevent publication')
+
+
+def check_refresh(source, compiler, output):
+    methods='\n'.join(method(source, signature) for signature in ('void armVsync()', 'void vsyncTick()'))
+    program=r'''
+#include <cassert>
+#include <cstdint>
+static uint64_t now=100;
+static unsigned sent=0, idle=0;
+static uint64_t mach_absolute_time(){return now;}
+static uint64_t mach_continuous_time(){return now+10;}
+static void native_legacy_vsync_observed(unsigned event,unsigned hz){assert(hz==60);if(event==2)++idle;}
+static void native_legacy_vsync_notify(void *,uint64_t ts,uint64_t continuous,uint64_t interval){
+    assert(ts==now && continuous==now+10 && interval==16); ++sent;
+}
+static constexpr int kIOReturnSuccess=0;
+struct Timer {
+    int err=0;
+    uint64_t deadline=0;
+    int wakeAtTime(uint64_t when){deadline=when;return err;}
+    int setTimeoutMS(unsigned ms){assert(ms==250);deadline=now+ms;return err;}
+};
+struct Display {
+    Timer *vsyncTimer; bool vsyncArmed=false,subscribed=false;
+    uint64_t vsyncInterval=16,vsyncNext=0; unsigned vsyncHz=60;
+    bool vsyncWanted() const {return subscribed;}
+    METHODS
+};
+int main(){
+    Timer timer;Display display{&timer};
+    display.armVsync();assert(timer.deadline==116);
+    now=116;display.vsyncTick();assert(sent==0 && idle==1 && timer.deadline==366);
+    display.subscribed=true;now=366;display.vsyncTick();assert(sent==1 && timer.deadline==382);
+    now=382;display.vsyncTick();assert(sent==2 && timer.deadline==398);
+    display.subscribed=false;now=398;display.vsyncTick();assert(sent==2 && idle==2);
+    display.subscribed=true;now=648;display.vsyncTick();assert(sent==3 && timer.deadline==664);
+    now=750;display.vsyncTick();assert(sent==4 && timer.deadline==766);
+    timer.err=1;now=766;display.subscribed=false;display.vsyncTick();assert(!display.vsyncArmed);
+    timer.err=0;display.armVsync();assert(display.vsyncArmed);
+    display.vsyncTimer=nullptr;display.vsyncTick();assert(sent==4 && !display.vsyncArmed);
+}
+'''.replace('METHODS',methods)
+    cpp=output/'refresh.cpp';exe=output/'refresh'
+    cpp.write_text(program)
+    subprocess.run([*compiler,'-std=c++17','-Wall','-Wextra','-Werror',str(cpp),'-o',str(exe)],check=True)
+    subprocess.run([str(exe.resolve())],check=True)
+    print('PASS: late refresh subscription without a swap, unsubscribe/resubscribe, late tick and stop')
 
 
 def main():
@@ -242,6 +290,7 @@ def main():
     code=fixture(source,abi)
     with tempfile.TemporaryDirectory() as tmp:
         out=a.out or Path(tmp);out.mkdir(parents=True,exist_ok=True)
+        check_refresh(source,[a.cc,*a.cc_arg,*(['-fsanitize=address,undefined'] if a.sanitize else [])],out)
         check_publication(source,[a.cc,*a.cc_arg],['-fsanitize=address,undefined'] if a.sanitize else [],out)
         for name,body in [('fixed',code),
             ('old-validation-gate',code.replace('enabled==1 && canPresent() && request','enabled==1 && logicalPM && primary && bootMapping && request')),

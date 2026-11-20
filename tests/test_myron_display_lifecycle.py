@@ -58,11 +58,15 @@ struct OriginalLegacyStateRequest {
 static void native_legacy_pm_observed(unsigned event,int,unsigned long value){if(event==5)reportedPower=value;}
 struct IOMobileFramebufferLegacy {
  bool initialized=false;
+ unsigned requested=0,powered=0;
  bool start(IOService*){return baseStart;}
  void stop(IOService*){}
  int applyStateRequest(OriginalLegacyStateRequest*r,bool gate){
-  ++powerCalls;assert(!gate && r->skipRequested==1 && !r->requested);
-  assert(!r->skipPowered && r->powered==1 && r->changed==1);return powerResult;
+  ++powerCalls;assert(!gate && r->changed==1);
+  if(powerResult)return powerResult;
+  if(!r->skipRequested)requested=r->requested;
+  if(!r->skipPowered)powered=r->powered;
+  return 0;
  }
  void PMinit(){++pmCalls;initialized=true;}
  void PMstop(){}
@@ -118,7 +122,9 @@ int main(){
  const unsigned rects[]={kRequestRect0,kRequestRect1};
  for(unsigned rect:rects){word(r,rect+8,4);word(r,rect+12,2);}
  word(r,kRequestMasks,1);word(r,kRequestDims,4);word(r,kRequestDims+4,2);
- assert(d.validateSwap(&r) && d.pending==&r && lastReason==0);
+ // For a valid record the 24A446 family tests requested before entering
+ // the validation/queue routine. Its separate swap-wait test uses powered.
+ assert(d.powered && d.requested && d.validateSwap(&r) && d.pending==&r && lastReason==0);
  d.kickOnce();assert(d.passedKick==1 && !d.stats[3]);
  // Geometry/format/descriptor checks still reject unsupported surfaces.
  s.format=0x12345678;assert(!d.validateSwap(&r));s.format=0x42475241;
@@ -303,6 +309,7 @@ def main():
         check_refresh(source,[a.cc,*a.cc_arg,*(['-fsanitize=address,undefined'] if a.sanitize else [])],out)
         check_publication(source,[a.cc,*a.cc_arg],['-fsanitize=address,undefined'] if a.sanitize else [],out)
         for name,body in [('fixed',code),
+            ('powered-only-handoff',code.replace('request={0,1,0,1,1,{}','request={1,0,0,1,1,{}')),
             ('old-validation-gate',code.replace('enabled==1 && canPresent() && request','enabled==1 && logicalPM && primary && bootMapping && request')),
             ('old-copy-gate',code.replace('enabled!=1 || !canPresent()','enabled!=1 || !logicalPM || !bootMapping || !primary'))]:
             assert name=='fixed' or body!=code,'negative control did not alter a production decision'

@@ -424,3 +424,24 @@
      }
      bool isMainDisplay() override {return primary;}
      // The render server paces its display timer by the minimum refresh interval in IOMFBDisplayRefresh (int-209: no vsync client ever
+--- a/device/myron27/display/NativeLegacyDisplay.cpp
++++ b/device/myron27/display/NativeLegacyDisplay.cpp
+@@ -507,12 +507,13 @@
+         if(logicalPM){PMstop();logicalPM=false;}
+         primary=false;IOMobileFramebufferLegacy::stop(provider);OSSafeReleaseNULL(bootMapping);
+     }
+-    // The panel is already lit by the firmware's GOP framebuffer, which is the one thing the original code's power-state word (the "powered" word
+-    // of the state pair) is meant to say; the platform subclass that normally writes it is not part of this
+-    // port, so without it the user client's wait (selector 6) answers kIOReturnBusy forever and the compositor never presents. This is the
+-    // original state setter (the virtual the original code calls with this same request shape) with only the powered word named.
++    // The firmware hands over a lit panel with an active scanout. The iPhone
++    // family's swap_wait reads powered, but swap_submit also tests requested
++    // before calling the routine that validates and enqueues the frame.
++    // Establish both once before publication. Later family power requests
++    // can still change them independently.
+     bool announcePoweredByFirmware() {
+-        OriginalLegacyStateRequest request={1,0,0,1,1,{}};
++        OriginalLegacyStateRequest request={0,1,0,1,1,{}};
+         IOReturn status=applyStateRequest(&request,false);
+         firmwareScanoutReady=(status==kIOReturnSuccess);
+         native_legacy_pm_observed(5,status,firmwareScanoutReady);

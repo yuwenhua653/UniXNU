@@ -1,0 +1,111 @@
+--- a/Drivers/MyronFdtGopDxe/MyronFdtGopDxe.c
++++ b/Drivers/MyronFdtGopDxe/MyronFdtGopDxe.c
+@@ -1,5 +1,6 @@
+ /* SPDX-License-Identifier: BSD-2-Clause-Patent */
+ #include "Framebuffer.h"
++#include "MyronBootLogo.h"
+ #include <Library/BaseMemoryLib.h>
+ #include <Library/CacheMaintenanceLib.h>
+ #include <Library/DebugLib.h>
+@@ -30,6 +31,11 @@
+ {
+   EFI_GRAPHICS_OUTPUT_BLT_PIXEL Black = {0,0,0,0};
+   if (This == NULL || Number != 0) return EFI_UNSUPPORTED;
++  if (myron_draw_boot_logo ((volatile unsigned int *)(UINTN)mMode.FrameBufferBase, mMode.FrameBufferSize,
++                            mInfo.HorizontalResolution, mInfo.VerticalResolution, mInfo.PixelsPerScanLine * 4)) {
++    WriteBackDataCacheRange ((VOID *)(UINTN)mMode.FrameBufferBase, mMode.FrameBufferSize);
++    return EFI_SUCCESS;
++  }
+   // No panel registers, clocks or vendor protocol calls. GOP SetMode clears
+   // the visible pixels via the same bounded BLT path used by the console.
+   return This->Blt (This, &Black, EfiBltVideoFill, 0, 0, 0, 0,
+@@ -119,9 +125,8 @@
+   }
+   DEBUG ((DEBUG_ERROR, "MYRON_MINIMAL: GOP base=%lx %ux%u stride=%u format=%u\n",
+           Fb.Base, Fb.Width, Fb.Height, Fb.Stride, (UINT32)Fb.Format));
+-  if (Fb.Height >= 160) {
+-    EFI_GRAPHICS_OUTPUT_BLT_PIXEL Yellow = {0,255,255,0};
+-    mGop.Blt (&mGop, &Yellow, EfiBltVideoFill, 0, 0, 0, 144, Fb.Width, 16, 0);
+-  }
++  if (myron_draw_boot_logo ((volatile unsigned int *)(UINTN)Fb.Base, Fb.Bytes,
++                            Fb.Width, Fb.Height, Fb.Stride))
++    WriteBackDataCacheRange ((VOID *)(UINTN)Fb.Base, (UINTN)Fb.Bytes);
+   return EFI_SUCCESS;
+ }
+--- a/Library/MyronBootManagerLib/MyronBootManagerLib.c
++++ b/Library/MyronBootManagerLib/MyronBootManagerLib.c
+@@ -19,34 +19,7 @@
+ STATIC volatile UINT16 mBdsPhase;
+ STATIC VOID MyronBdsPhase (UINT16 Code)
+ {
+-  STATIC CONST UINT8 Font[16][5] = {
+-    {7,5,5,5,7}, {2,6,2,2,7}, {7,1,7,4,7}, {7,1,7,1,7},
+-    {5,5,7,1,1}, {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1},
+-    {7,5,7,5,7}, {7,5,7,1,7}, {2,5,7,5,5}, {6,5,6,5,6},
+-    {7,4,4,4,7}, {6,5,5,5,6}, {7,4,6,4,7}, {7,4,6,4,4}
+-  };
+-  EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop = NULL;
+-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL Black = {0,0,0,0};
+-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL White = {255,255,255,0};
+-  UINTN Digit, Row, Col;
+   mBdsPhase = Code;
+-  if (EFI_ERROR (gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop)) ||
+-      Gop == NULL || Gop->Blt == NULL || Gop->Mode == NULL || Gop->Mode->Info == NULL ||
+-      Gop->Mode->Info->HorizontalResolution < 288 ||
+-      Gop->Mode->Info->VerticalResolution < 288) return;
+-  // Four 3x5 digits at 16x scale: 240 px wide, 80 px high, below old stripes.
+-  if (EFI_ERROR (Gop->Blt (Gop, &Black, EfiBltVideoFill, 0, 0, 32, 208, 256, 80, 0))) return;
+-  for (Digit = 0; Digit < 4; Digit++) {
+-    UINTN Value = (Code >> ((3 - Digit) * 4)) & 15;
+-    for (Row = 0; Row < 5; Row++) {
+-      for (Col = 0; Col < 3; Col++) {
+-        if (Font[Value][Row] & (1U << (2 - Col))) {
+-          if (EFI_ERROR (Gop->Blt (Gop, &White, EfiBltVideoFill, 0, 0,
+-                         32 + Digit * 64 + Col * 16, 208 + Row * 16, 16, 16, 0))) return;
+-        }
+-      }
+-    }
+-  }
+ }
+ #else
+ #define MyronBdsPhase(Code) ((VOID)0)
+@@ -63,13 +36,6 @@
+ VOID EFIAPI PlatformBootManagerBeforeConsole (VOID)
+ {
+ #if MYRON_MINIMAL
+-  EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;
+-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL Green = {0,255,0,0};
+-  if (!EFI_ERROR (gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop)) &&
+-      Gop->Mode != NULL && Gop->Mode->Info != NULL && Gop->Mode->Info->VerticalResolution >= 184) {
+-    Gop->Blt (Gop, &Green, EfiBltVideoFill, 0, 0, 0, 168,
+-              Gop->Mode->Info->HorizontalResolution, 16, 0);
+-  }
+   DEBUG ((DEBUG_ERROR, "MYRON38: BDS before-console reached\n"));
+ #endif
+   MyronBdsPhase (0xB001); // About to signal EndOfDxe.
+@@ -115,7 +81,6 @@
+   MyronBdsPhase (0xB014);
+   MyronPublishEmbeddedPayload ();
+   MyronBdsPhase (0xB015);
+-  Print (L"MYRON R64: XNU UFS read-only transport probe / Tools > Advanced Logger\r\n");
+ #endif
+ #if !MYRON_MINIMAL
+   Status = gBS->CreateEventEx (EVT_NOTIFY_SIGNAL, TPL_CALLBACK, Notify,
+--- a/Library/MyronPlatformSecLib/DisplayCapture.c
++++ b/Library/MyronPlatformSecLib/DisplayCapture.c
+@@ -19,14 +19,5 @@
+ 
+ VOID MyronPaintDisplayStage (UINT32 Stage)
+ {
+-  UINT32 Y, X, First = 96 + Stage * 24;
+-  volatile UINT32 *Pixels;
+-  if (mMyronDisplay.Status != 1 || Stage > 1 || mMyronDisplay.Height < First + 16) return;
+-  Pixels = (volatile UINT32 *)(UINTN)mMyronDisplay.Base;
+-  for (Y = First; Y < First + 16; Y++) {
+-    for (X = 0; X < mMyronDisplay.Width; X++)
+-      Pixels[Y * (mMyronDisplay.Stride / 4) + X] = Stage == 0 ? 0x0000FFFFU : 0x00FF00FFU;
+-  }
+-  WriteBackDataCacheRange ((VOID *)(UINTN)(mMyronDisplay.Base + (UINT64)First * mMyronDisplay.Stride),
+-                          (UINTN)16 * mMyronDisplay.Stride);
++  (VOID)Stage; // The GOP driver displays the logo once it owns the surface.
+ }

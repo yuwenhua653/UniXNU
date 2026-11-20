@@ -56,7 +56,7 @@ code=(source/'myron_boot_update.py').read_text()
 for before,after in [('RUN = '+str(old.RUN),'RUN = '+str(a.run)),(old.MANIFEST_SHA,sha(mraw)),(old.BOOT_SHA,sha(image))]:
     assert code.count(before)==1;code=code.replace(before,after)
 code=code.replace('Record the last B001-B017 / B0FF / 2700-2704 phase, text or coloured lines.',
-                  'Continuous boot: record the final visible stage and kernel error; no intentional 2716 stop.')
+                  'If the Apple logo persists, collect the existing recovery log before booting iOS again.')
 folder='continuous-boot-'+str(a.run)
 menu=(source/'UPDATE-BOOT.cmd').read_text().replace('boot-update-'+str(old.RUN),folder).replace(str(old.RUN),str(a.run)).replace('Linux/Clang 18 boot comparison','continuous XNU boot').replace('START-IOS27-LINUX-README-CN.txt','START-IOS27-CONTINUOUS-README-CN.txt')
 guide='''myron iOS27 连续启动版
@@ -71,8 +71,8 @@ guide='''myron iOS27 连续启动版
 打开 START-IOS27-CONTINUOUS.cmd：
 1 校验文件、原备份和安装记录。
 2 手机进入 bootloader fastboot 后更新 boot；完整输入 START IOS。
-UniXNU 菜单选第一项，按住音量＋约一秒后松开。
-若启动停住，先拍清最后一屏，然后手动进入已有 recovery。
+正常启动自动进入 iOS，黑底苹果标志应保持到系统提交首帧。
+若一直停在苹果标志，直接进入已有 recovery 采集启动日志。
 保持手机处于 recovery，用 USB 连接电脑，运行 READ-IOS27-LOG.cmd。
 需 recovery 的 root ADB；Android 本身不需要 root，使用系统 PATH 中的 adb/Python 3.11+。
 发回程序显示的 myron-logs-日期时间.zip；即使提示解码失败，也请发回原始采集包。
@@ -83,6 +83,10 @@ UniXNU 菜单选第一项，按住音量＋约一秒后松开。
 任何校验失败均保留错误日志，不修改 state 绕过检查。
 本包不重分区、不切槽，不创建替代 Android 备份。
 '''
+if 'boot-progress=3' not in r['root_handoff']['kernel_args'].split():
+    guide=guide.replace('正常启动自动进入 iOS，黑底苹果标志应保持到系统提交首帧。','此历史版本需在 UniXNU 菜单选择第一项。')
+    guide=guide.replace('若一直停在苹果标志，','若启动停住，')
+    code=code.replace('If the Apple logo persists,','If startup stalls,')
 with tempfile.TemporaryDirectory() as temp:
     d=Path(temp)
     for name in ('myron_device_test.py','device_layout.py','prepare_root_bundle.py','test_boot_update.py','test_companion.py'):
@@ -117,5 +121,3 @@ result=dict(file=a.output.name,bytes=a.output.stat().st_size,sha256=sha(a.output
             persistent_log=log_report,phone_tested=False,desktop_reached=False)
 a.output.with_suffix('.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))
-
-

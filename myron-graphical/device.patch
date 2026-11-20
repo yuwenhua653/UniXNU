@@ -1,0 +1,317 @@
+--- a/device/myron27/build_firmware.py
++++ b/device/myron27/build_firmware.py
+@@ -52,6 +52,10 @@
+ check_source(board)
+ if a.payload:
+     payload = json.loads((a.payload / 'payload.json').read_text())
++    if 'boot-progress=3' in payload.get('kernel_args','').split():
++        device = Path(__file__).resolve().parent
++        subprocess.run(['patch','-s','-p1','-i',str(device/'graphical-board.patch')],cwd=board,check=True)
++        shutil.copy2(device/'package/MyronBootLogo.h',board/'Drivers/MyronFdtGopDxe/MyronBootLogo.h')
+     fat = (a.payload / 'payload.img').read_bytes()
+     assert payload['result'] == 'passed' and len(fat) == payload['bytes'] == 88 * 1024 * 1024
+     assert hashlib.sha256(fat).hexdigest() == payload['sha256']
+@@ -79,6 +83,9 @@
+     'HasInput ? L"VOL+: tap = next; hold 1s then release = select"\n'
+     '             : ((RemainingMs < 0) ? L"MYRON: input unavailable; automatic boot disabled"\n'
+     '                                  : L"No input device: the default entry boots when the timer ends")')
++# With timeout zero, the default entry must start before the menu paints.
++text = replace_once(text, '  UniXNUUiDrawFrame (Ui, Config);',
++                    '  if (RemainingMs == 0) return Config->DefaultIndex;\n  UniXNUUiDrawFrame (Ui, Config);')
+ menu.write_text(text)
+ base = a.mu / 'Mu_Basecore/BaseTools'
+ conf = a.out / 'Conf'; conf.mkdir()
+@@ -113,7 +120,7 @@
+     assert payload['kernel_sha256'].encode() in (build / 'AARCH64/Sec.efi').read_bytes()
+ report = dict(result='passed', full_board_firmware_built=True, fd_sha256=sha(fd),
+               fd_bytes=fd.stat().st_size, darwinboot_sha256=sha(efi), source_stage=stage,
+-              menu_manual_selection=True, board_profile=profile, command=cmd,
++              menu_manual_selection='boot-progress=3' not in (payload or {}).get('kernel_args','').split(), board_profile=profile, command=cmd,
+               payload=payload,
+               payload_contract=(board / 'Library/PlatformPeiLib/KernelPayloadExpected.h').read_text(),
+               board_source_hashes={str(f.relative_to(board)): sha(f) for f in sorted(board.rglob('*')) if f.is_file()},
+--- a/device/myron27/build_payload.py
++++ b/device/myron27/build_payload.py
+@@ -56,7 +56,11 @@
+                    a.static_trust_cache,a.system_trust_cache,a.out/'boot-assets',startup_probe=a.dyld_startup_probe)
+     config['payload']['adt'].update(root_match_volume_uuid=assets['root_uuid'],
+                                   packed_data_ramdisk=True,persistent_data=False)
+-    line += ' ' + check_args(assets['required_boot_arguments'])
++    arguments = list(spec['kernel_args'])
++    if a.dyld_startup_probe:
++        arguments.remove('-v')
++        arguments[arguments.index('boot-progress=2')] = 'boot-progress=3'
++    line = check_args(arguments + assets['required_boot_arguments'])
+ old = parse(reference)
+ seed = struct.unpack('<Q', old['/device-tree/chosen']['unique-chip-id'])[0]
+ dtb = a.out / 'hardware.dtb'
+@@ -96,6 +100,7 @@
+     text=text.replace('path = "Payloads/kernel.macho"\n',
+                       'path = "Payloads/kernel.macho"\ninitrd = "Payloads/scratch-data.img"\n')
+     if a.dyld_startup_probe:
++        text=text.replace('timeout = -1','timeout = 0')
+         text=text.replace('myron27-kernel','myron27-startup-probe').replace('MYRON iOS 27 root integration - unverified',
+                            'MYRON iOS 27 continuous boot - EXPERIMENTAL')
+     config_path.write_text(text)
+--- a/device/myron27/build_root_firmware.py
++++ b/device/myron27/build_root_firmware.py
+@@ -44,7 +44,7 @@
+         return subprocess.check_output(['mtype', '-i', str(payload/'payload.img'), '::/EFI/UniXNU/'+name])
+     menu = tomllib.loads(read('unixnu.toml').decode())
+     selected = [e for e in menu['entry'] if e['id'] == menu['boot']['default']]
+-    assert len(selected) == 1 and menu['boot']['timeout'] == -1 and menu['boot']['rotate'] == 0
++    assert len(selected) == 1 and menu['boot']['timeout'] == (0 if 'boot-progress=3' in proof['kernel_args'].split() else -1) and menu['boot']['rotate'] == 0
+     entry = selected[0]
+     assert entry['type'] == 'xnu' and entry['path'] == 'Payloads/kernel.macho'
+     assert entry['initrd'] == assets['initrd'] == 'Payloads/scratch-data.img'
+@@ -109,7 +109,7 @@
+             payload_sha256=proof['sha256'],kernel_sha256=proof['kernel_sha256'],adt_sha256=proof['adt_sha256'],
+             data_sha256=proof['boot_assets']['data_sha256'],trust_cache_sha256=proof['boot_assets']['trust_bundle_sha256'],
+             dyld_startup_probe_enabled=proof['boot_assets']['dyld_startup_probe_enabled'],
+-            reference_provenance=proof.get('reference_provenance'),manual_selection=True,
++            reference_provenance=proof.get('reference_provenance'),manual_selection=fw['menu_manual_selection'],
+             shim_el1_el2_emulated=True,root_sidecars_bound=True,phone_boot_image_created=False,
+             phone_tested=False,ios_userspace_booted=False,desktop_reached=False)
+         (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+--- a/device/myron27/loader/Handoff.S
++++ b/device/myron27/loader/Handoff.S
+@@ -18,16 +18,7 @@
+   adr x9, .Lvectors
+   msr vbar_el1, x9
+   isb
+-  // Green: ExitBootServices succeeded, capsule is executing.
+-  lsr x10, x5, #4
+-  bic x10, x10, #7
+-  mov x11, x4
+-  mov w12, #0xff00
+-  movk w12, #0xff00, lsl #16
+-1:stp w12, w12, [x11], #8
+-  subs x10, x10, #8
+-  b.hi 1b
+-  // Visible before cache maintenance: a stalled sweep must not look like XNU.
++  // Preserve the loader artwork on normal handoff.
+   mov x0, #0x2700
+   bl .LmarkPhase
+   // Flush/invalidate all owned memory, including this copied code/context,
+@@ -136,52 +127,16 @@
+   ldp x0, x1, [x9]
+   ldp x2, x3, [x9, #16]
+   ldp x4, x5, [x9, #32]
+-  // Cyan second band: EL1/EL0 PAC checks passed; about to branch to XNU.
+-  // This is a loader milestone, not proof that XNU executed or booted.
+-  lsr x10, x5, #4
+-  bic x10, x10, #7
+-  add x11, x4, x10
+-  mov w12, #0xffff
+-  movk w12, #0xff00, lsl #16
+-4:stp w12, w12, [x11], #8
+-  subs x10, x10, #8
+-  b.hi 4b
+   dsb sy
+   br x1
+ 
+-// Render the phase before an instruction that may trap outside EL1. The
+-// original six handoff arguments and LR are restored; no PAC keys are printed.
+-// The row is below the bands, at one quarter height. The 4x font is 384 px wide.
++// Retain the current phase in the owned capsule for the fault handler.
+ .LmarkPhase:
+-  mov x29, x30
+   adr x9, .Largs
+   str x0, [x9, #48]
+-  ldr x9, [x9]
+-  ldr x26, [x9, #0x28]
+-  ldr x27, [x9, #0x38]
+-  ldr x28, [x9, #0x48]
+-  lsr x28, x28, #2
+-  madd x26, x28, x27, x26
+-  bl .Lhex
+-  // The initial 2700 row is drawn while firmware caches can still be on.
+-  mrs x6, ctr_el0
+-  ubfx x6, x6, #16, #4
+-  mov x7, #4
+-  lsl x6, x7, x6
+-  sub x7, x6, #1
+-  bic x9, x26, x7
+-  mov x10, #28
+-  madd x10, x10, x27, x26
+-1:dc cvac, x9
+-  add x9, x9, x6
+-  cmp x9, x10
+-  b.lo 1b
+-  dsb sy
+-  adr x9, .Largs
+   ldp x0, x1, [x9]
+   ldp x2, x3, [x9, #16]
+   ldp x4, x5, [x9, #32]
+-  mov x30, x29
+   ret
+ 
+ // Check all address-key pairs, including non-HINT instructions, at both ELs.
+--- a/device/myron27/loader/KernelStream.h
++++ b/device/myron27/loader/KernelStream.h
+@@ -299,8 +299,6 @@
+   }
+   if (!EFI_ERROR (Status)) {
+     *FileOut = File;
+-    Print (L"DARWINBOOT: streaming kernel bytes=%lu header=%lu chunk=%u\n",
+-           (UINT64)*FileSize, (UINT64)HeaderSize, (UINT32)KERNEL_READ_CHUNK);
+   }
+ Done:
+   if (Info != NULL) { FreePool (Info); }
+--- a/device/myron27/package/BootProgressDisplay.h
++++ b/device/myron27/package/BootProgressDisplay.h
+@@ -2,16 +2,17 @@
+ #ifndef SHENG_BOOT_PROGRESS_DISPLAY_H
+ #define SHENG_BOOT_PROGRESS_DISPLAY_H
+ #include "Font.h"
++#include "MyronBootLogo.h"
+ static const uint64_t font[] = GLYPH_FONT;
+ struct bp_display {
+   uintptr_t frame;
+   unsigned bound, width, height, stride, scale;
+-  unsigned yield_requested;
++  unsigned yield_requested, graphical;
+   char previous[48][BP_COLS];
+   uint32_t colors[48][2];
+ };
+ static void bp_clear(struct bp_display *d) {
+-  if (!d->bound) return;
++  if (!d->bound || d->graphical) return;
+   for(unsigned y=0;y<d->height;++y) {
+     if (__atomic_load_n(&d->yield_requested,__ATOMIC_ACQUIRE)) return;
+     for(unsigned x=0;x<d->width;++x)
+@@ -23,7 +24,7 @@
+ // repaints the row.
+ static void bp_line_bg(struct bp_display *d, unsigned row, const char *text, uint32_t color, uint32_t background) {
+   if (__atomic_load_n(&d->yield_requested,__ATOMIC_ACQUIRE)) return;
+-  if (!d->bound || row >= 48 || (row+1)*14*d->scale >= d->height) return;
++  if (d->graphical || !d->bound || row >= 48 || (row+1)*14*d->scale >= d->height) return;
+   unsigned cols = d->width / (6*d->scale);
+   if (cols >= BP_COLS) cols = BP_COLS-1;
+   // Cache is only an output optimization. All framebuffer stores are bounded
+--- a/device/myron27/package/MyronBootProgress.c
++++ b/device/myron27/package/MyronBootProgress.c
+@@ -483,7 +483,8 @@
+ }
+ void boot_progress_init(void) {
+  unsigned opt=0;
+- if(!PE_parse_boot_argn("boot-progress",&opt,sizeof opt) || opt!=2)return;
++ if(!PE_parse_boot_argn("boot-progress",&opt,sizeof opt) || (opt!=2 && opt!=3))return;
++ display.graphical=(opt==3);
+  __asm__ volatile("mrs %0, cntfrq_el0":"=r"(frequency));
+  __asm__ volatile("mrs %0, cntvct_el0":"=r"(epoch));
+  enabled=1;myron_boot_progress_state.continuous=1;
+@@ -537,7 +538,11 @@
+     stride>=w*4 && stride<=65536 && base<=UINTPTR_MAX-(uint64_t)h*stride) {
+   display.frame=base;display.width=w;display.height=h;display.stride=stride;display.scale=2;
+   memset(display.previous,0,sizeof display.previous);memset(display.colors,0,sizeof display.colors);
+-  display.bound=1;bp_clear(&display);draw();++myron_console_bind_count;
++  display.bound=1;
++  if (display.graphical)
++   myron_draw_boot_logo((volatile unsigned int *)base,(uint64_t)stride*h,w,h,stride);
++  else { bp_clear(&display); draw(); }
++  ++myron_console_bind_count;
+  }
+  __atomic_store_n(&busy,0,__ATOMIC_RELEASE);
+ }
+--- a/device/myron27/package_root_image.py
++++ b/device/myron27/package_root_image.py
+@@ -92,7 +92,8 @@
+     assert all(x['result']=='passed' for x in (summary,fw,fv,shim,st))
+     assert summary['full_board_firmware_built'] and summary['full_fd_unpacked']
+     assert summary['firmware_source_snapshot_sha256'] == SOURCE_SHA256
+-    assert summary['root_sidecars_bound'] and summary['manual_selection'] and summary['shim_el1_el2_emulated']
++    assert summary['root_sidecars_bound'] and summary['shim_el1_el2_emulated']
++    assert summary['manual_selection'] is ('boot-progress=3' not in proof['kernel_args'].split())
+     assert summary['efi_capsule_matches_qemu_executed_bytes'] and fv['efi_capsule_matches_qemu_executed_bytes']
+     assert summary['capsule_sha256'] == fv['capsule_sha256']
+     assert summary['driver_source_sha256'] == host['driver_sha256'] == fw['source_stage']['driver_staged_sha256']
+--- a/device/myron27/prepare_loader.py
++++ b/device/myron27/prepare_loader.py
+@@ -82,6 +82,16 @@
+     # A file belongs to its volume; close it first on every failing path.
+     text = replace_once(text, 'Fail:\n',
+                         'Fail:\n  if (KernelFile != NULL) { KernelFile->Close (KernelFile); }\n')
++    # Normal handoff uses the inherited GOP surface. Keep error messages on failure.
++    start = text.index('  Print (L"DARWINBOOT: ARM64 va=')
++    end = text.index('  // Obtain the final key', start)
++    text = text[:start] + (
++        '  if (Video[5] == 32 && Video[3] <= 8192 && Video[4] <= 8192 && Video[2] <= 65536 &&\n'
++        '      myron_draw_boot_logo ((volatile unsigned int *)(UINTN)Video[0], Video[2]*Video[4],\n'
++        '                            (unsigned)Video[3], (unsigned)Video[4], (unsigned)Video[2]))\n'
++        '    WriteBackDataCacheRange ((VOID *)(UINTN)Video[0], (UINTN)(Video[2]*Video[4]));\n') + text[end:]
++    text = replace_once(text, '#include "Handoff.h"', '#include "Handoff.h"\n#include "MyronBootLogo.h"')
++    text = replace_once(text, '    Print (L"DARWINBOOT: loader v2 installed EL%u\\n", (UINT32)(DarwinCurrentEl () >> 2));\n', '')
+     return text
+ 
+ 
+@@ -104,6 +114,7 @@
+     for name in headers:
+         shutil.copy2(loader / name, out / DRIVER.parent / name)
+     shutil.copy2(loader / 'Myron27Loader.dsc', out / 'DarwinBootPkg/Myron27Loader.dsc')
++    shutil.copy2(loader.parent/'package/MyronBootLogo.h',out/DRIVER.parent/'MyronBootLogo.h')
+     inf = out / DRIVER.parent / 'DarwinBoot.inf'
+     inf_text = replace_once(inf.read_text(), '  DarwinBoot.c\n',
+                             '  DarwinBoot.c\n' + ''.join('  ' + n + '\n' for n in headers))
+--- a/device/myron27/tests/handoff_qemu_start.S
++++ b/device/myron27/tests/handoff_qemu_start.S
+@@ -30,6 +30,14 @@
+   str x9,[x0,#0x38]
+   mov x9,#2608
+   str x9,[x0,#0x48]
++  // Seed the former band and digit locations with an existing graphic.
++  mov w11,#0x597
++  str w11,[x4]
++  lsr x9,x5,#4
++  bic x9,x9,#7
++  str w11,[x4,x9]
++  ldr x9,=0x422fc6a0
++  str w11,[x9,#48]
+   // Sentinel immediately beyond the 384-pixel diagnostic row.
+   ldr x9, =0x422fc700
+   mov w10, #0x1234
+@@ -57,30 +65,18 @@
+   ldr x9,=0xbf0400
+   cmp x5,x9
+   b.ne test_fail
++  // A successful handoff must leave existing pixels untouched.
+   ldr w10,[x4]
+-  mov w11,#0xff00
+-  movk w11,#0xff00,lsl #16
+-  cmp w10,w11
++  cmp w10,#0x597
+   b.ne test_fail
+   lsr x9,x5,#4
+   bic x9,x9,#7
+   ldr w10,[x4,x9]
+-  mov w11,#0xffff
+-  movk w11,#0xff00,lsl #16
+-  cmp w10,w11
++  cmp w10,#0x597
+   b.ne test_fail
+-  add x9,x4,x9,lsl #1
+-  ldur w10,[x9,#-4]
+-  cmp w10,w11
+-  b.ne test_fail
+-  ldr w10,[x9]
+-  cbnz w10,test_fail
+-  // Actual rendered last digit is 4, with no spill into the next column.
+   ldr x9, =0x422fc6a0
+-  ldr w10, [x9]
+-  cbnz w10,test_fail
+   ldr w10, [x9,#48]
+-  cmn w10,#1
++  cmp w10,#0x597
+   b.ne test_fail
+   ldr x9, =0x422fc700
+   ldr w10, [x9]
+--- a/device/myron27/tests/test_handoff_qemu.py
++++ b/device/myron27/tests/test_handoff_qemu.py
+@@ -62,6 +62,6 @@
+             emulator=subprocess.check_output([str(a.qemu.resolve()),'--version'],text=True).splitlines()[0],
+             pac_instructions_emulated_by_qemu=True,instruction_hooks_used=False,el1_and_el0_executed=True,
+             synthetic_entry_only=True,entry_arguments_preserved=True,
+-            pac_pass_band_checked=True,test_window_bytes=0x200000,actual_device_window_bytes=0x80000000,
++            success_framebuffer_preserved=True,test_window_bytes=0x200000,actual_device_window_bytes=0x80000000,
+             real_hypervisor_access_qualified=False,phone_tested=False)
+ (a.out/'handoff-qemu.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))

@@ -33,8 +33,13 @@ with tempfile.TemporaryDirectory() as temp:
  except ValueError:pass
  else:raise AssertionError('Unreviewed BDS source accepted')
  exe=out/'bds-test' 
- subprocess.run([a.cc,'-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-parameter',
-                 '-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(out),
-                 str(pathlib.Path(__file__).with_name('myron_bds_host.c')),'-o',str(exe)],check=True)
- subprocess.run([str(exe)],check=True)
+ command=[a.cc,'-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-Wno-unused-parameter',
+          '-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(out),
+          str(pathlib.Path(__file__).with_name('myron_bds_host.c')),'-o',str(exe)]
+ subprocess.run(command,check=True);subprocess.run([str(exe)],check=True)
+ target.write_bytes(prepared[str(target.relative_to(board))])
+ subprocess.run(['patch','-s','-p1','-i',str((a.device/'graphical-board.patch').resolve())],cwd=board,check=True)
+ graphical=re.sub(r'^#include[^\n]*\n','',target.read_text(),flags=re.M)
+ (out/'bds-under-test.c').write_text(graphical)
+ subprocess.run(command+['-DTEST_GRAPHICAL=1'],check=True);subprocess.run([str(exe)],check=True)
  print('Snapshot BDS source SHA256:',files[name]['sha256'])

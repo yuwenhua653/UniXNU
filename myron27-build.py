@@ -28,6 +28,9 @@ def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
   'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
+  'graphical_source':here/'myron-graphical/device.patch',
+  'graphical_firmware':here/'myron-graphical/board.patch',
+  'boot_artwork':here/'myron-graphical/MyronBootLogo.h',
   'root_bundle':fixture/'bundle/root-bundle.json',
   'data_seed_contract':fixture/'bundle/data-seed.json',
   'data_volume_proof':fixture.parent/'data-volume/report.json'}.items()}
@@ -333,6 +336,11 @@ for name,item in snapshot['files'].items():
  data=item['content'].encode()
  if hashlib.sha256(data).hexdigest()!=item['sha256']:raise SystemExit('Source input digest mismatch')
  target=root/relative;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+graphical=here/'myron-graphical'
+subprocess.run(['patch','-s','-p1','-i',str(graphical/'device.patch')],cwd=root,check=True)
+board=root/'device/myron27'
+(board/'graphical-board.patch').write_bytes((graphical/'board.patch').read_bytes())
+(board/'package/MyronBootLogo.h').write_bytes((graphical/'MyronBootLogo.h').read_bytes())
 if options.source_only:
  print('Reconstructed reviewed source inputs:',root/'device',flush=True)
  raise SystemExit(0)

@@ -96,10 +96,20 @@ from audit_amfi_stack import require_final as require_amfi_stack
 amfi_stack_binding=require_amfi_stack(kernel,definitions)
 need(b'MYRON iOS27 - CONTINUOUS XNU BOOT' in kernel,'Wrong final recorder implementation')
 menu=tomllib.loads(read('unixnu.toml').decode());entries=[e for e in menu['entry'] if e['id']==menu['boot']['default']]
-need(len(entries)==1 and menu['boot']['timeout']==-1 and menu['boot']['rotate']==0,'Manual menu policy changed')
+need(len(entries)==1 and menu['boot']['timeout']==(0 if 'boot-progress=3' in entries[0]['args'].split() else -1) and menu['boot']['rotate']==0,'Menu timeout differs from the selected boot mode')
 e=entries[0]
 need(e['type']=='xnu' and e['path']=='Payloads/kernel.macho' and e['initrd']=='Payloads/scratch-data.img','Unexpected boot entry')
-need({'boot-progress=2','myron27-dyld-startup=1','cpus=1','launchd_log_serial=1','log=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
+args=e['args'].split()
+if not a.source_repo or 'boot-progress=3' in args:
+    need(args.count('boot-progress=3')==1 and '-v' not in args and 'boot-progress=2' not in args,
+         'Normal boot must select the graphical recorder without verbose console')
+    import re
+    artwork=(device/'package/MyronBootLogo.h').read_text().split('myron_logo_spans[128][4] = {',1)[1].split('};',1)[0]
+    mask=bytes(map(int,re.findall(r'\d+',artwork)))
+    need(len(mask)==512 and mask in kernel,'Final kernel is missing graphical boot artwork')
+else:
+    need('boot-progress=2' in args,'Historical recorder argument missing')
+need({'myron27-dyld-startup=1','cpus=1','launchd_log_serial=1','log=1'}<=set(e['args'].split()),'Continuous startup arguments missing')
 need(DISPLAY_ARGUMENTS<=set(e['args'].split()),'Continuous CPU-display arguments missing')
 h=lambda n:hashes['EFI/UniXNU/Payloads/'+n]
 header=(f'#define MYRON_KERNEL_FAT_BYTES 0x{len(fat):x}ULL\n#define MYRON_KERNEL_FAT_CRC32 0x{zlib.crc32(fat):08x}U\n'
@@ -125,6 +135,10 @@ need(fw['payload']==proof and host['kernel_sha256']==h('kernel.macho') and host[
 need(host['root_sidecars_checked'] and host['root_sidecar_failure_cases']==12 and host['byte_equality_at_handoff'],'Incomplete root handoff test')
 need(fw['source_stage']['driver_staged_sha256']==host['driver_sha256'] and fw['source_stage']['stream_source_sha256']==host['stream_source_sha256'],'Loader source mismatch')
 for name,digest in bp.PUBLISHERS.items():need(fw['board_source_hashes'][name]==digest,'Memory publisher changed')
+if 'boot-progress=3' in args:
+    built=a.work/'firmware/Build/myronPkg/RELEASE_CLANGPDB/AARCH64'
+    for module in ('DarwinBoot.efi','MyronFdtGopDxe.efi'):
+        need(mask in (built/module).read_bytes(),'Firmware artwork missing from '+module)
 fd=(a.work/'firmware/Build/myronPkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd').read_bytes()
 need(len(fd)==bp.FD_BYTES and sha(fd)==fv['fd_sha256']==fw['fd_sha256'],'Firmware mismatch')
 image=raw[:bp.FD_OFFSET]+fd+fat

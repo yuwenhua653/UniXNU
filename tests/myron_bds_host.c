@@ -13,6 +13,9 @@
 #define TRUE 1
 #define FALSE 0
 #define MYRON_MINIMAL 1
+#ifndef TEST_GRAPHICAL
+#define TEST_GRAPHICAL 0
+#endif
 #define DEBUG(x) ((void)0)
 #define EFI_ERROR(x) ((x) != 0)
 typedef uint8_t UINT8; typedef uint16_t UINT16; typedef uint32_t UINT32;
@@ -41,6 +44,7 @@ static EFI_STATUS locate(EFI_GUID*a,VOID*b,VOID**out){*out=missing_gop?NULL:&gop
 static EFI_STATUS table(EFI_GUID*a,VOID*b){checkpoint(10);return 0;}
 static EFI_STATUS blt(GOP*g,EFI_GRAPHICS_OUTPUT_BLT_PIXEL*p,int op,UINTN sx,UINTN sy,UINTN x,UINTN y,UINTN w,UINTN h,UINTN d){
  assert(op==EfiBltVideoFill); assert(x+w<=info.HorizontalResolution && y+h<=info.VerticalResolution);
+ assert(!TEST_GRAPHICAL);
  if(bad_blt)return 1;
  if(y>=208){
   assert(x>=32&&x+w<=288&&y+h<=288);draws++;
@@ -63,18 +67,26 @@ static VOID CpuDeadLoop(VOID){assert(!"Unexpected deadloop");}
 static VOID reset(VOID){mStarted=0;mBdsPhase=0;count=0;draws=0;stop_at=0;missing_gop=0;bad_blt=0;load_error=0;memset(pixels,0,sizeof pixels);info.HorizontalResolution=1200;info.VerticalResolution=2608;}
 int main(VOID){
  gop.Blt=blt;gop.Mode=&mode;bs.LocateProtocol=locate;bs.InstallConfigurationTable=table;
- int ids[]={1,2,3,4,5,10,11,12,13,14,15,16};
- UINT16 phases[]={0xB001,0xB002,0xB003,0xB004,0xB005,0xB010,0xB011,0xB012,0xB013,0xB014,0xB015,0xB016};
+ int ids[]={1,2,3,4,5,10,11,12,13,14,
+#if !TEST_GRAPHICAL
+ 15,
+#endif
+ 16};
+ UINT16 phases[]={0xB001,0xB002,0xB003,0xB004,0xB005,0xB010,0xB011,0xB012,0xB013,0xB014,
+#if !TEST_GRAPHICAL
+ 0xB015,
+#endif
+ 0xB016};
  for(volatile unsigned i=0;i<sizeof ids/sizeof ids[0];i++){
   reset();stop_at=ids[i];
   if(setjmp(stop)==0){PlatformBootManagerBeforeConsole();PlatformBootManagerAfterConsole();assert(!"expected injected stall");}
-  assert(mBdsPhase==phases[i]);assert(draws>0);
+  assert(mBdsPhase==phases[i]);assert(TEST_GRAPHICAL ? draws==0 : draws>0);
   /* B glyph's upper-left white and upper-right black cells at scale 16. */
-  assert(pixels[208][32]==255 && pixels[208][64]==0);
+  assert(pixels[208][32]==(TEST_GRAPHICAL ? 0 : 255) && pixels[208][64]==0);
  }
  reset();PlatformBootManagerBeforeConsole();assert(mBdsPhase==0xB006);PlatformBootManagerAfterConsole();assert(mBdsPhase==0xB017);
- assert(count==12);assert(!memcmp(calls,ids,sizeof ids));
- PlatformBootManagerAfterConsole();assert(count==12); /* No second launch. */
+ assert(count==(int)(sizeof ids/sizeof ids[0]));assert(!memcmp(calls,ids,sizeof ids));
+ PlatformBootManagerAfterConsole();assert(count==(int)(sizeof ids/sizeof ids[0])); /* No second launch. */
  reset();load_error=1;PlatformBootManagerAfterConsole();assert(mBdsPhase==0xB0FF);
  /* Drawing failures never prevent the original boot flow, and never write out of bounds. */
  for(int test=0;test<5;test++){
@@ -84,6 +96,6 @@ int main(VOID){
   if(test!=4){PlatformBootManagerAfterConsole();assert(mBdsPhase==0xB017);}
   gop.Blt=blt;
  }
- puts("BDS source: 12 injected stalls, original call order, one-shot launch, error return and 5 display failures passed");
+ puts(TEST_GRAPHICAL ? "PASS production graphical BDS: no display writes, boot call order and one-shot launch" : "PASS diagnostic BDS, milestones and display failure cases");
  return 0;
 }

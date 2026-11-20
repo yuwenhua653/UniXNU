@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: myron-device-package
+  group: ${{ github.event.head_commit.message == 'Check myron graphical boot' && 'myron-graphical-boot' || 'myron-device-package' }}
   cancel-in-progress: ${{ github.event.head_commit.message == 'Check myron process capture before full build' }}
 jobs:
   macos-geometry:
@@ -144,7 +144,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
   handoff:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package' || github.event.head_commit.message == 'Check myron graphical boot'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -385,4 +385,3 @@ jobs:
           path: ${{ runner.temp }}/continuous-output
           if-no-files-found: error
           retention-days: 7
-

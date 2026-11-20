@@ -97,7 +97,40 @@ int PE_initialize_console(void *p,int op) {
  assert(!p && op==kPEReleaseScreen);++release_calls;
  boot_progress_stage("recursive console release");return release_result;
 }
+static int test_graphical_boot(void) {
+ enum { W=1200, H=2608, STRIDE=1216 };
+ size_t bytes=(size_t)STRIDE*H*4;
+ unsigned *fb=malloc(bytes),*saved=malloc(bytes);
+ assert(fb && saved);
+ memset(fb,0xa5,bytes);
+ option=3;boot_progress_init();
+ assert(boot_progress_active() && display.graphical);
+ assert(!myron_draw_boot_logo(fb,bytes-1,W,H,STRIDE*4));
+ assert(fb[0]==0xa5a5a5a5u);
+ assert(myron_draw_boot_logo(fb,bytes,W,H,STRIDE*4));
+ unsigned white=0;
+ for(unsigned y=0;y<H;++y)for(unsigned x=0;x<STRIDE;++x) {
+  unsigned p=fb[y*STRIDE+x];
+  if(x>=W)assert(p==0xa5a5a5a5u);
+  else if(p==0x00ffffff) { ++white; assert(x>W/2-128 && x<W/2+128 && y>H/2-128 && y<H/2+128); }
+  else assert(p==0);
+ }
+ assert(white==23044);
+ display.frame=(uintptr_t)fb;display.width=W;display.height=H;
+ display.stride=STRIDE*4;display.scale=2;display.bound=1;
+ memcpy(saved,fb,bytes);
+ bp_clear(&display);boot_progress_stage("graphical boot");
+ assert(myron_boot_console_write("graphics log",12,1));
+ test_clock+=1000;boot_progress_irq(0xabc,0,0);
+ assert(myron_boot_progress_state.history_count>=2 && !memcmp(fb,saved,bytes));
+ assert(myron_boot_progress_prepare_scanout() && release_calls==1);
+ fb[0]=0x123456;boot_progress_stage("compositor owns display");
+ assert(fb[0]==0x123456 && !memcmp(fb+1,saved+1,bytes-4));
+ free(saved);free(fb);
+ puts("PASS graphical logo pixels, row padding, console capture and scanout handoff");return 0;
+}
 int main(void) {
+ if(getenv("MYRON_TEST_GRAPHICAL"))return test_graphical_boot();
  option=0;boot_progress_init();assert(!boot_progress_active());
  assert(!myron_boot_console_write("inactive",8,1));
  option=2;boot_progress_init();assert(boot_progress_active());
@@ -425,5 +458,6 @@ int main(void) {
     (root/'test.c').write_text(test)
     subprocess.run([a.cc,'-std=c11','-Wall','-Wextra','-Werror','-DMYRON_EARLY_PROGRESS=1','-fsanitize=address,undefined','-fno-omit-frame-pointer',
                     '-I',str(root),'-I',str(source.parent.resolve()),str(root/'test.c'),'-o',str(root/'test')],check=True)
-    subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'),timeout=20)
+    for mode in ({}, {'MYRON_TEST_GRAPHICAL':'1'}):
+        subprocess.run([str(root/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0',**mode),timeout=20)
 print('PASS capture and snapshots independent of framebuffer lock, nonblocking text contention and line reset, one console draw per second; earliest shutdown console reasons, wrapping/truncation/non-reboot control and freeze; first reboot source/options/history/user trace, shutdown phases and timeout retention; formatted panic arguments/truncation/nesting, object-failure snapshots, typed buffer ownership/history, bounded ring wrap, contended writer, first-panic retention, lock-independent IRQ rows, early/recursive panic, scanout ownership, persistent mount phases, dropped-event accounting, IRQ refresh, continuous execution past deadlines, bounded rendering, invalid mapping rejection and scanout handoff')

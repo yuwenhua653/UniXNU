@@ -38,6 +38,50 @@ def write_index(cache,path):
  if len(encoded)>MAX_BYTES:raise ValueError(f'Symbol index {len(encoded)} bytes exceeds {MAX_BYTES} byte limit')
  Path(path).write_bytes(encoded)
  return dict(images=len(result['images']),indexed=len(result['selected']),bytes=len(encoded))
+# Static attribution for the first-frame path in the pinned iPhone system image.
+# Keep this separate from the capped general index and emit no original code.
+def write_compositor_sites(cache, path):
+ from bisect import bisect_right
+ from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+ from capstone.arm64 import ARM64_OP_IMM, ARM64_OP_REG
+ image=next(i for i in cache.images if i['path']=='/System/Library/Frameworks/QuartzCore.framework/QuartzCore')
+ if image['uuid']!='76ce2a6edba4335da5ac77a1c1b286a6':
+  raise ValueError('Unexpected compositor UUID')
+ base=image['address']
+ starts=cache.macho(image)['starts']
+ if not starts:raise ValueError('Missing compositor function boundaries')
+ names={}
+ for addr,name,_ in cache.symbols(image,strict=False):
+  if name and name!='<redacted>':names.setdefault(addr,set()).add(name)
+ offsets=(0x2c3d14,0x2db7a8,0x2c8c2c,0x2d8004,0x2dc834,0x2ded50,0x2df2c4,
+          0x2e3ae8,0x202ddc,0x2033d8,0x2e0a38,0xb0064,0xb8584,0xad51c,0xb3478,0xb8b4c)
+ cs=Cs(CS_ARCH_ARM64,CS_MODE_ARM);cs.detail=True
+ rows=[]
+ for offset in offsets:
+  ix=bisect_right(starts,base+offset)-1
+  if ix<0 or ix+1>=len(starts):raise ValueError('Compositor site outside function index')
+  start,end=starts[ix:ix+2]
+  # Bound work on large routines, keeping the region containing the site.
+  lo=max(start,base+offset-4096);hi=min(end,base+offset+4096)
+  raw,_=cache.read(lo,hi-lo,executable=True)
+  literals=set();calls=set();pages={}
+  for ins in cs.disasm(raw,lo):
+   ops=ins.operands
+   if ins.mnemonic=='adrp' and len(ops)==2:
+    pages[ops[0].reg]=(ops[1].imm,ins.address)
+   elif ins.mnemonic=='add' and len(ops)==3 and ops[1].type==ARM64_OP_REG and ops[2].type==ARM64_OP_IMM:
+    page=pages.get(ops[1].reg)
+    if page and ins.address-page[1]<=12 and not ops[2].shift.value:
+     try: b=cache.read(page[0]+ops[2].imm,128)[0].split(bytes(1),1)
+     except ValueError: continue
+     except RuntimeError: continue
+     if len(b)==2 and 4<=len(b[0])<=100 and all(32<=x<127 for x in b[0]):literals.add(b[0].decode())
+   elif ins.mnemonic=='bl' and len(ops)==1 and ops[0].type==ARM64_OP_IMM:
+    calls.update(names.get(ops[0].imm,()))
+  rows.append(dict(offset=hex(offset),function=hex(start-base),exact_names=sorted(names.get(start,())),
+                   named_calls=sorted(calls)[:40],possible_literals=sorted(literals)[:40]))
+ Path(path).write_text(json.dumps(dict(uuid=image['uuid'],sites=rows),indent=2)+'\n')
+
 def main():
  p=argparse.ArgumentParser(description=__doc__)
  for key in ('device','upstream','work','output','archive-tool'):p.add_argument('--'+key,type=Path,required=True)
@@ -74,6 +118,7 @@ def main():
   require(mounted['uuid']==extract.SYSTEMOS[0],'Wrong original volume UUID')
   with symbolicate.CacheSet(mounted['path']/'System/Library/Caches/com.apple.dyld') as cache:
    summary=write_index(cache,out/'library-index.json')
+   write_compositor_sites(cache,out/'compositor-sites.json')
  summary.update(result='passed',source_volume=raw,kernel_built=False,phone_accessed=False,
   original_files_modified=False,source_commit=os.environ.get('GITHUB_SHA','unknown'))
  (out/'index-report.json').write_text(json.dumps(summary,indent=2)+'\n')

@@ -60,6 +60,22 @@ def read(name):return subprocess.check_output(['mtype','-i',str(payload/'payload
 hashes=r['embedded_files']
 need(set(hashes)=={'EFI/UniXNU/Payloads/'+n for n in ('kernel.macho','kernel.macho.adt','kernel.macho.trustcache','scratch-data.img')},'Unexpected payload inventory')
 for name,digest in hashes.items():need(sha(read(name[len('EFI/UniXNU/'):]))==digest,'Embedded file mismatch '+name)
+from payload_adt import parse as parse_adt
+embedded_adt=parse_adt(read('Payloads/kernel.macho.adt'))
+chosen=embedded_adt['/device-tree/chosen']
+board_adt=tomllib.loads((device/'board.toml').read_text())['adt']
+gop_mode={'display-scale':1,'display-rotation':0}
+if a.source_repo:
+    # Historical recovery verifies the display declarations of its own pinned board.
+    board_words=board_adt['chosen']['u32']
+    gop_mode={key:board_words[key] for key in gop_mode if key in board_words}
+for key,expected in gop_mode.items():
+    need(chosen.get(key)==expected.to_bytes(4,'little'),'Embedded /chosen/'+key+' differs from the myron GOP mode')
+buttons=embedded_adt.get('/device-tree/buttons',{})
+if not a.source_repo or 'buttons' in board_adt:
+    for key,value in {'compatible':b'buttons\0','device_type':b'buttons\0',
+                      'button-names':b'hold\0voldown\0volup\0','home-button-type':(2).to_bytes(4,'little')}.items():
+        need(buttons.get(key)==value,'Embedded /buttons/'+key+' differs from the myron hardware')
 kernel=read('Payloads/kernel.macho');definitions=kernel_definitions(kernel)
 required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_boot_progress_putc','_myron_boot_progress_state'} | BUFFER_TRACE_SYMBOLS
 need(required<=definitions.keys(),f'Continuous recorder missing from final prelinked kernel: {sorted(required-definitions.keys())}')
@@ -106,6 +122,7 @@ image=raw[:bp.FD_OFFSET]+fd+fat
 need(len(image)==len(raw) and image[:bp.FD_OFFSET]==raw[:bp.FD_OFFSET] and image[bp.FAT_OFFSET:]==raw[bp.FAT_OFFSET:],'Non-FD bytes changed')
 a.output.mkdir();(a.output/'root-startup.img').write_bytes(image)
 report=dict(result='passed',kind='continuous-xnu-source-boot',producer=producer,assembly_commit=os.environ['GITHUB_SHA'],assembly_run=os.environ['GITHUB_RUN_ID'],intentional_stop=False,
+    chosen_display_mode=gop_mode,home_button_type=int.from_bytes(buttons['home-button-type'],'little') if 'home-button-type' in buttons else None,
     display_definitions=display_definitions,display_arguments=sorted(DISPLAY_ARGUMENTS),display_runtime_qualified=False,
     required_symbols=sorted(required),buffer_trace_definitions=buffer_definitions,exit_trace_definitions=exit_trace_definitions,lockdown_state_definitions=lockdown_state_definitions,kernel_sha256=h('kernel.macho'),firmware_verification=fv,root_handoff=host,
     boot_sha256=sha(image),elapsed_seconds=round(time.monotonic()-start,1),root_install_reusable=True,phone_tested=False,desktop_reached=False)

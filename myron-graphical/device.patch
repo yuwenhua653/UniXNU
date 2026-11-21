@@ -684,7 +684,7 @@
                      (Path(__file__).parent / 'package/MyronSystemOSLibraries.h').read_text() + '\n' + marker)
 --- a/device/myron27/tests/test_root_runtime.py
 +++ b/device/myron27/tests/test_root_runtime.py
-@@ -392,6 +392,68 @@
+@@ -392,6 +392,70 @@
                  prepare_exec(self.exec_original.replace(marker,''),
                               '12A34567-89AB-4CDE-8F01-23456789ABCD',
                               '99A34567-89AB-4CDE-8F01-23456789ABCD',contract)
@@ -705,7 +705,9 @@
 +#define TRUE 1
 +#define UIO_SYSSPACE 2
 +#define EXECUTABLE_KEY "executable_path="
++#ifndef CAST_USER_ADDR_T
 +#define CAST_USER_ADDR_T(p) ((uintptr_t)(p))
++#endif
 +struct image_params { char *ip_strings, *ip_endargv, *ip_strendp; int ip_argspace, ip_envc; };
 +static int exec_add_user_string(struct image_params *p, uintptr_t value, int seg, int charge) {
 +    const char *s = (const char *)value;

@@ -81,6 +81,6 @@ int main(void){
     assert 'boot_process_capture(' not in log and 'boot_ui_trace_task(' not in log
     assert log.index('myron_process_snapshot((char *)slot+prefix')<log.index('size_t n=myron_boot_log_snapshot(')
     assert '24576' in log
-    for arg in ('boot-ui-trace=1','boot-ui-focus3=chronod','boot-ui-focus4=liveactivitiesd'):
+    for arg in ('boot-ui-trace=1','boot-ui-focus3=chronod','boot-ui-focus4=Setup'):
         assert arg in (device/'boot_assets.py').read_text()
     print('PASS: separate worker, bounded retained stack section and required boot arguments; device execution unverified')

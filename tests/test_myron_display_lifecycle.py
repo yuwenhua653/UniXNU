@@ -132,6 +132,10 @@ int main(){
  s.memory.length=31;assert(!d.validateSwap(&r));s.memory.length=32;
  word(r,kRequestRect0,1);assert(!d.validateSwap(&r));word(r,kRequestRect0,0);
  word(r,kRequestRect0+8,2);assert(d.validateSwap(&r));word(r,kRequestRect0+8,4);
+ word(r,kRequestRect1,(uint32_t)-1);assert(d.validateSwap(&r) && lastReason==0);
+ word(r,kRequestRect1,4);assert(!d.validateSwap(&r) && lastReason==3);
+ word(r,kRequestRect1,0);
+ word(r,kRequestRect0,(uint32_t)-1);assert(!d.validateSwap(&r));word(r,kRequestRect0,0);
  word(r,kRequestOptions,1);assert(!d.validateSwap(&r));word(r,kRequestOptions,0);
  assert(d.validateSwap(&r));
  // Optional gates, missing mapping, nonprimary displays and failed state

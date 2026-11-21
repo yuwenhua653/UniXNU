@@ -466,16 +466,25 @@
  #endif
 --- a/device/myron27/display/NativeLegacyRequest.h
 +++ b/device/myron27/display/NativeLegacyRequest.h
-@@ -180,3 +180,38 @@
+@@ -180,3 +180,49 @@
      return stored;
  }
  
 +
 +/* 24A446 layer 0 source/destination rectangles, in pixels. */
-+struct MyronDisplayRect { uint32_t x,y,w,h; };
++struct MyronDisplayRect { int32_t x,y; uint32_t w,h; };
 +static inline int myron_rect_inside(struct MyronDisplayRect r,uint64_t w,uint64_t h) {
 +    return w && h && w<=16384 && h<=16384 && r.w && r.h &&
-+           r.x<=w && r.y<=h && r.w<=w-r.x && r.h<=h-r.y;
++           r.x>=0 && r.y>=0 && (uint32_t)r.x<=w && (uint32_t)r.y<=h &&
++           r.w<=w-(uint32_t)r.x && r.h<=h-(uint32_t)r.y;
++}
++/* A layer can extend beyond the canvas during a transition. Keep the
++ * original rectangle for sampling; clip writes at the visible canvas. */
++static inline int myron_dst_visible(struct MyronDisplayRect r,uint32_t w,uint32_t h) {
++    return w && h && w<=16384 && h<=16384 &&
++           r.w && r.h && r.w<=16384 && r.h<=16384 &&
++           r.x<(int32_t)w && r.y<(int32_t)h &&
++           (int64_t)r.x+r.w>0 && (int64_t)r.y+r.h>0;
 +}
 +static inline int myron_rect_full(struct MyronDisplayRect r,uint32_t w,uint32_t h) {
 +    return !r.x && !r.y && r.w==w && r.h==h;
@@ -488,13 +497,15 @@
 +    uint32_t cw,uint32_t ch,const uint8_t *half) {
 +    for(uint32_t y=0;y<ph;++y) {
 +        volatile uint32_t *row=(volatile uint32_t *)(dst+y*ds);
-+        uint32_t cy=y*ch/ph;
++        int32_t cy=(int32_t)(y*ch/ph);
 +        const uint8_t *line=0;
-+        if(cy>=d.y && cy-d.y<d.h)line=src+ss*(s.y+(cy-d.y)*s.h/d.h);
++        if(cy>=d.y && (uint32_t)(cy-d.y)<d.h)
++            line=src+ss*((uint32_t)s.y+(uint32_t)(cy-d.y)*s.h/d.h);
 +        for(uint32_t x=0;x<pw;++x) {
-+            uint32_t cx=x*cw/pw, pixel=0xff000000u;
-+            if(line && cx>=d.x && cx-d.x<d.w) {
-+                uint32_t sx=s.x+(cx-d.x)*s.w/d.w;
++            int32_t cx=(int32_t)(x*cw/pw);
++            uint32_t pixel=0xff000000u;
++            if(line && cx>=d.x && (uint32_t)(cx-d.x)<d.w) {
++                uint32_t sx=(uint32_t)s.x+(uint32_t)(cx-d.x)*s.w/d.w;
 +                if(half) {
 +                    uint16_t v[4];__builtin_memcpy(v,line+8*sx,8);
 +                    for(unsigned k=0;k<3;++k)
@@ -518,7 +529,7 @@
 +        bool halfFormat=nativeHalf(native_legacy_surface_format(surface),native_legacy_surface_planes(surface));
 +        if(!memory || !memory->metaCast("IOMemoryDescriptor") ||
 +           !myron_rect_inside(srcRect,native_legacy_surface_width(surface),native_legacy_surface_height(surface)) ||
-+           !myron_rect_inside(dstRect,canvas[0],canvas[1]) || sourceStride<uint64_t(srcRect.x+srcRect.w)*(halfFormat?8:4) ||
++           !myron_dst_visible(dstRect,canvas[0],canvas[1]) || sourceStride<uint64_t(srcRect.x+srcRect.w)*(halfFormat?8:4) ||
 +           !native_legacy_surface_bounds(srcRect.x+srcRect.w,srcRect.y+srcRect.h,sourceStride,allocation,memory->getLength()) ||
             !nativeScanoutFormat(native_legacy_surface_format(surface),native_legacy_surface_planes(surface)) ||
             PE_current_console(&video) || video.v_baseAddr!=bootMapping->getPhysicalAddress() ||
@@ -574,12 +585,12 @@
 +                reason=3;
 +                MyronDisplayRect src,dst;uint32_t canvas[2];layerGeometry(request,src,dst,canvas);
 +                bool options=true;for(unsigned offset=kRequestOptions;offset<=kRequestOptions+8;offset+=4)options=options && word(offset)==0;
-+                bool geometryOK=width && height && options && myron_rect_inside(dst,canvas[0],canvas[1]) &&
++                bool geometryOK=width && height && options && myron_dst_visible(dst,canvas[0],canvas[1]) &&
 +                    myron_rect_inside(src,native_legacy_surface_width(surface),native_legacy_surface_height(surface));
 +                if(!geometryOK) {
 +                    static uint32_t failures;
 +                    if(!(__atomic_fetch_add(&failures,1U,__ATOMIC_RELAXED)%64))
-+                        IOLog("myron-display: reject src=%u,%u,%u,%u dst=%u,%u,%u,%u canvas=%ux%u opts=%x,%x,%x\n",
++                        IOLog("myron-display: reject src=%d,%d,%u,%u dst=%d,%d,%u,%u canvas=%ux%u opts=%x,%x,%x\n",
 +                            src.x,src.y,src.w,src.h,dst.x,dst.y,dst.w,dst.h,canvas[0],canvas[1],
 +                            word(kRequestOptions),word(kRequestOptions+4),word(kRequestOptions+8));
                  }
@@ -605,7 +616,7 @@
                      } else {
 --- a/device/myron27/display/Test/request-state.c
 +++ b/device/myron27/display/Test/request-state.c
-@@ -91,6 +91,22 @@
+@@ -91,6 +91,37 @@
          assert(!native_legacy_copy_pixels(target,60,20,(const void *)(UINTPTR_MAX-16),51,17,3,3));
          assert(!memcmp(before,target,sizeof(target)));
      }
@@ -624,6 +635,21 @@
 +        struct MyronDisplayRect entire={0,0,3,2};
 +        myron_present_rect((volatile uint8_t*)output,4,1,2,(const uint8_t*)input,12,entire,entire,3,2,0);
 +        assert(output[0]==10 && output[1]==40);
++        /* A scaled canvas clips the destination without stretching the visible part. */
++        struct MyronDisplayRect left={-1,-1,3,2},right={1,1,3,2};
++        assert(myron_dst_visible(left,3,2) && myron_dst_visible(right,3,2));
++        assert(!myron_rect_inside(left,3,2));
++        myron_present_rect((volatile uint8_t*)output,24,6,2,(const uint8_t*)input,12,entire,left,3,2,0);
++        const uint32_t black=0xff000000;
++        const uint32_t leftExpected[]={50,50,60,60,black,black,black,black,black,black,black,black};
++        assert(!memcmp(output,leftExpected,sizeof(leftExpected)));
++        myron_present_rect((volatile uint8_t*)output,24,6,2,(const uint8_t*)input,12,entire,right,3,2,0);
++        const uint32_t rightExpected[]={black,black,black,black,black,black,black,black,10,10,20,20};
++        assert(!memcmp(output,rightExpected,sizeof(rightExpected)));
++        left.x=-3;assert(!myron_dst_visible(left,3,2));
++        left.x=INT32_MIN;assert(!myron_dst_visible(left,3,2));
++        right.y=INT32_MAX;assert(!myron_dst_visible(right,3,2));
++        right.y=0;right.w=UINT32_MAX;assert(!myron_dst_visible(right,3,2));
 +    }
      return 0;
  }
@@ -755,3 +781,13 @@
  
      def test_dyld_startup_production_gate_and_failures(self):
          contract = dict(format=1,volume_uuid='B9AE07B1-A4AA-4A22-A689-F048EF253BA2',
+--- a/device/myron27/boot_assets.py
++++ b/device/myron27/boot_assets.py
+@@ -183,6 +183,6 @@
+             'offline-legacy-register=1','offline-legacy-gop=1','offline-legacy-validate=1',
+             'offline-legacy-transfer=1','offline-legacy-retire=1','offline-legacy-cpu-present=1','vsync=60',
+             'myron27-keystore=1','boot-ui-trace=1','boot-ui-focus3=chronod',
+-            'boot-ui-focus4=liveactivitiesd']
++            'boot-ui-focus4=Setup']
+     (out/'boot-assets.json').write_text(json.dumps(report,indent=2)+'\n')
+     return report

@@ -25,7 +25,7 @@ if any(v is not None for v in owner_values):
 if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 TOUCH_SOURCES = ('board.patch', 'touch_build.py', 'MyronDigitizer.cpp', 'MyronTouchStart.cpp', 'MyronTouchBoard.h', 'MyronTouchPower.h',
-                 'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
+                 'MyronSE19Bus.h', 'MyronFirmwareTouch.h', 'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
                  'iphone12-1-hid-24A446.json', 'test_touch.c')
 def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
@@ -385,6 +385,7 @@ if options.userland:
       '--out',root/'private-userland','--report',root/'reports/original-userland.json'])
  raise SystemExit(0)
 root_sources=[
+ {'path':'references/QcomGeniSpi','url':'https://github.com/UniXNU/QcomGeniSpi.git','commit':'eac47baefe6a5d2368a70351e6ad1b6361bedbe2'},
  {'path':'references/loader-basecore','url':'https://github.com/microsoft/mu_basecore.git','commit':'cfb93724a06ff86ff5ba971413368a7809ee42a5'},
  {'path':'upstream/drivers/RamBlock','url':'https://github.com/UniXNU/RamBlock.git','commit':'4be2d7eb05ef5a98126c91e0302c149140c0e3e1'},
  {'path':'upstream/kits/VerifiedRoot','url':'https://github.com/UniXNU/VerifiedRoot.git','commit':'974f043d0c71ba2e60331483a41c6c6d35274ee3'},

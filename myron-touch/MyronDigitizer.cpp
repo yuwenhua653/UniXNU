@@ -9,6 +9,7 @@
 #include "MyronFT3683.h"
 #include "MyronTouchBoard.h"
 #include "MyronTouchPower.h"
+#include "MyronSE19Bus.h"
 
 static_assert(sizeof(IOHIDDevice) == 0xd0, "Wrong iPhone HID superclass ABI");
 
@@ -20,6 +21,9 @@ class MyronDigitizer : public IOHIDDevice {
         uint32_t config, latch;
     };
     Pad pads[PIN_COUNT]{};
+    MyronSE19Bus se;
+    bool useFifo = false;
+    uint32_t halfTicks = 1;
     myron_gpio_io io{};
     myron_touch sensor{};
     IOTimerEventSource *timer = nullptr;
@@ -40,6 +44,21 @@ class MyronDigitizer : public IOHIDDevice {
         __asm__ volatile("dsb sy" ::: "memory");
     }
     static void delay(void *, unsigned us) { IODelay(us); }
+    static uint64_t counter() {
+        uint64_t value;
+        __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(value) :: "memory");
+        return value;
+    }
+    static void waitEdge(void *ctx) {
+        uint64_t start = counter();
+        uint32_t ticks = static_cast<MyronDigitizer *>(ctx)->halfTicks;
+        while (counter() - start < ticks) {}
+    }
+    void setGpioRate(unsigned hz) {
+        uint64_t frequency;
+        __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frequency));
+        halfTicks = (uint32_t)((frequency + 2*hz - 1) / (2*hz));
+    }
     static IOMemoryMap *mapBoardRange(uint64_t address, unsigned size) {
         auto memory = IODeviceMemory::withRange(address, size);
         if (!memory) return nullptr;
@@ -90,6 +109,7 @@ class MyronDigitizer : public IOHIDDevice {
             }
             configured = false;
         }
+        se.close();
         for (auto &pad : pads) { OSSafeReleaseNULL(pad.map); pad.regs = nullptr; }
     }
     bool openSensor() {
@@ -101,34 +121,50 @@ class MyronDigitizer : public IOHIDDevice {
             pads[i].config = pads[i].regs[0];
             pads[i].latch = pads[i].regs[1] & 2;
         }
+        int busStatus = se.open(mapBoardRange);
+        if (busStatus != 0 && busStatus != GENI_ERR_NOTSUP) {
+            IOLog("myron-touch: QUP4 SE0 unavailable (%d)\n", busStatus);
+            return false;
+        }
+        useFifo = busStatus == 0;
+        if (!useFifo) se.close();
         configured = true;
         writePin(this, RESET, 4, 0); configure(RESET, 0x2c3);
         IODelay(2000);
         writePin(this, AVDD, 4, 2); configure(AVDD, 0x240);
         int rail = powerIoRail();
         IOLog("myron-touch: L4I_E0 active vote status %d\n", rail);
-        if (rail == MYRON_POWER_TIMEOUT || rail == MYRON_POWER_RESPONSE) return false;
-        configure(ATTENTION, 0xc3); configure(MISO, 0x80);
-        writePin(this, CS, 4, 2); configure(CS, 0x283);
-        writePin(this, SCLK, 4, 0); configure(SCLK, 0x240);
-        writePin(this, MOSI, 4, 0); configure(MOSI, 0x280);
+        if (rail != MYRON_POWER_OK) return false;
+        configure(ATTENTION, 0xc3);
+        if (useFifo) {
+            configure(MISO, 0x84); configure(MOSI, 0x84);
+            configure(SCLK, 0x44); configure(CS, 0x87);
+            sensor.bus = {&se, MyronSE19Bus::transfer, delay};
+        } else {
+            configure(MISO, 0x80);
+            writePin(this, CS, 4, 2); configure(CS, 0x283);
+            writePin(this, SCLK, 4, 0); configure(SCLK, 0x240);
+            writePin(this, MOSI, 4, 0); configure(MOSI, 0x280);
+            setGpioRate(9600000);
+            io = {this, readPin, writePin, delay, waitEdge};
+            sensor.bus = {&io, myron_spi_transfer, delay};
+        }
         IODelay(3000);
         writePin(this, RESET, 4, 2);
         IOSleep(200);
-        io = {this, readPin, writePin, delay};
-        sensor.bus = {&io, myron_spi_transfer, delay};
         int rc = 0;
         for (unsigned attempt=0; attempt<5; ++attempt) {
+            if (!useFifo && attempt == 3) setGpioRate(500000);
             rc = myron_touch_identify_and_start(&sensor);
             if (!rc) {
-                IOLog("myron-touch: controller %04x, TIC mode verified\n", (unsigned)sensor.chip_id);
+                IOLog("myron-touch: controller %04x, TIC mode verified via %s\n", (unsigned)sensor.chip_id, useFifo ? "SE19 FIFO" : "GPIO");
                 return true;
             }
             if (attempt < 4) IOSleep(200);
         }
         if (sensor.tx[1] == 0xa0 && (sensor.tx[0] == 0xa3 || sensor.tx[0] == 0x9f))
-            IOLog("myron-touch: ID reg %02x status %02x data %02x crc %02x %02x\n",
-                  sensor.tx[0], sensor.rx[3], sensor.rx[7], sensor.rx[8], sensor.rx[9]);
+            IOLog("myron-touch: L4I_E0 vote complete, %s ID reg %02x status %02x data %02x crc %02x %02x\n",
+                  useFifo ? "SE19 FIFO" : "GPIO", sensor.tx[0], sensor.rx[3], sensor.rx[7], sensor.rx[8], sensor.rx[9]);
         IOLog("myron-touch: controller/TIC probe failed (%d), ID %04x\n", rc, (unsigned)sensor.chip_id);
         return false;
     }

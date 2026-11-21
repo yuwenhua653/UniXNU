@@ -2,7 +2,11 @@
 /* myron's FT3683 I/O rail: stock Canoe DT, cmd-db and rpmh-rsc v3. */
 #ifndef MYRON_TOUCH_POWER_H
 #define MYRON_TOUCH_POWER_H
+#ifdef MYRON_TOUCH_EDK2
+typedef UINT32 uint32_t;
+#else
 #include <stdint.h>
+#endif
 
 #define MYRON_CMD_DB 0x81c60000ULL
 #define MYRON_CMD_DB_BYTES 0x20000u
@@ -83,9 +87,10 @@ static inline int myron_vote_l4i(const struct myron_rsc_io *io, uint32_t address
     uint32_t control = io->read(ctx, t+0x24), irq = io->read(ctx, base);
     if (!myron_power_sync(io, t+0x24, control & ~(1u<<24)) ||
         !myron_power_sync(io, t+0x24, 0)) return MYRON_POWER_RESPONSE;
-    /* pmh0110_i_l4: 1800 mV and PMIC7 HPM (DT init-mode = 3).
-     * Enable goes last, as in rpmh_regulator_send_aggregate_requests. */
-    const uint32_t offsets[3] = {0, 8, 4}, values[3] = {1800, 7, 1};
+    /* Canoe uses qcom,rpmh-regulator-levels.h. Its DT value 3 is AUTO,
+     * mapped to PMIC7 LDO OPM (5) by the downstream rpmh-regulator driver.
+     * Apply voltage and mode before enabling the rail. */
+    const uint32_t offsets[3] = {0, 8, 4}, values[3] = {1800, 5, 1};
     for (unsigned c = 0; c < 3; ++c) {
         unsigned cmd = t + 24*c;
         io->write(ctx, cmd+0x34, 0x10108); /* WRITE, response required */
@@ -108,6 +113,10 @@ static inline int myron_vote_l4i(const struct myron_rsc_io *io, uint32_t address
             for (unsigned c = 0; c < 3; ++c)
                 if ((io->read(ctx, t+0x40+24*c) & 0x10100) != 0x10100)
                     status = MYRON_POWER_RESPONSE;
+            /* RSC requires trigger clear before clearing AMC enable. Firmware
+             * and the kernel can now reuse this same active TCS. */
+            if (!myron_power_sync(io, t+0x24, 1u<<16) ||
+                !myron_power_sync(io, t+0x24, 0)) status = MYRON_POWER_RESPONSE;
             io->write(ctx, t+0x2c, 0);
             io->write(ctx, t+0x20, 0);
             io->write(ctx, base+8, bit);

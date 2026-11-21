@@ -34,7 +34,8 @@
  }
 --- a/Library/MyronBootManagerLib/MyronBootManagerLib.c
 +++ b/Library/MyronBootManagerLib/MyronBootManagerLib.c
-@@ -19,34 +19,7 @@
+@@ -19,34 +19,8 @@
++#include "MyronFirmwareTouch.h"
  STATIC volatile UINT16 mBdsPhase;
  STATIC VOID MyronBdsPhase (UINT16 Code)
  {
@@ -83,10 +84,11 @@
    DEBUG ((DEBUG_ERROR, "MYRON38: BDS before-console reached\n"));
  #endif
    MyronBdsPhase (0xB001); // About to signal EndOfDxe.
-@@ -115,7 +81,6 @@
+@@ -115,7 +82,7 @@
    MyronBdsPhase (0xB014);
    MyronPublishEmbeddedPayload ();
    MyronBdsPhase (0xB015);
++  (VOID) MyronPrimeTouchPower ();
 -  Print (L"MYRON R64: XNU UFS read-only transport probe / Tools > Advanced Logger\r\n");
  #endif
  #if !MYRON_MINIMAL

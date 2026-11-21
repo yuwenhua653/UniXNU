@@ -210,3 +210,14 @@
 +        for at in (text + 4, text + offsets[1] + 12, text + offsets[1] + 16, text + offsets[1] + 20, text + offsets[7],
                     text + offsets[10], text + offsets[11], text + offsets[11] + 4,
                     text + offsets[11] + 8, text + offsets[11] + 12,
+--- a/build_firmware.py
++++ b/build_firmware.py
+@@ -56,6 +56,8 @@
+         device = Path(__file__).resolve().parent
+         subprocess.run(['patch','-s','-p1','-i',str(device/'graphical-board.patch')],cwd=board,check=True)
+         shutil.copy2(device/'package/MyronBootLogo.h',board/'Drivers/MyronFdtGopDxe/MyronBootLogo.h')
++        for header in ('MyronFirmwareTouch.h', 'MyronTouchPower.h'):
++            shutil.copy2(device/'touch'/header, board/'Library/MyronBootManagerLib'/header)
+     fat = (a.payload / 'payload.img').read_bytes()
+     assert payload['result'] == 'passed' and len(fat) == payload['bytes'] == 88 * 1024 * 1024
+     assert hashlib.sha256(fat).hexdigest() == payload['sha256']

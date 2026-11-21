@@ -71,18 +71,19 @@ def compile_touch(tree, here, out, builder, target, env, record, donor, native, 
         for path in (hid/original).glob('*.h'):
             shutil.copyfile(path, dest/path.name)
     sdk = subprocess.check_output(['xcrun','--sdk','macosx','--show-sdk-path'], text=True).strip()
-    flags = ['-I', str(includes), '-I', str(tree/'.cache/xnu-work/osfmk'), '-idirafter',
+    geni = here.parents[1]/'references/QcomGeniSpi'
+    flags = ['-I', str(geni), '-I', str(includes), '-I', str(tree/'.cache/xnu-work/osfmk'), '-idirafter',
              str(Path(sdk)/'System/Library/Frameworks/Kernel.framework/Versions/A/Headers')]
     objects = []
     recipe = tree/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json'
     c_record = json.loads(recipe.read_text().strip().rstrip(','))
-    for name, recipe in [('MyronFT3683.c', c_record), ('MyronTouchStart.cpp', record), ('MyronDigitizer.cpp', record)]:
+    for name, recipe in [(geni/'GeniSpi.c', c_record), ('MyronFT3683.c', c_record), ('MyronTouchStart.cpp', record), ('MyronDigitizer.cpp', record)]:
         obj = out/(Path(name).stem+'.o')
         cmd = builder.compile_command(recipe, source/name, obj, flags,
             ['-mgeneral-regs-only','-Wno-missing-field-initializers','-Wno-overloaded-virtual',
              '-Wno-unnecessary-virtual-specifier','-Wno-deprecated-enum-enum-conversion'])
         subprocess.run(cmd, cwd=recipe['directory'], env=env, check=True)
-        target.check_object(obj.read_bytes(), name)
+        target.check_object(obj.read_bytes(), str(name))
         check_object_imports(macho(obj.read_bytes(),1))
         objects.append(obj)
     obj = objects.pop()
@@ -132,6 +133,6 @@ def compile_touch(tree, here, out, builder, target, env, record, donor, native, 
     contract = dict(bindings=bindings, methods=rows, vtable_symbol=VTABLE, donor_sha256=fixture['kernelcache_sha256'],
                     data_imports=[n for n,r in bindings.items() if r['kind']=='data' and n in imports],
                     personality_sha256=personality, owners=[FAMILY])
-    keep = ('_myron_touch_start', '_myron_publish_digitizer', '_myron_touch_read_contacts', VTABLE,'__GLOBAL__sub_I_MyronDigitizer.cpp') + tuple(
+    keep = ('_geni_spi_transfer', '_geni_spi_read_info', '_myron_touch_start', '_myron_publish_digitizer', '_myron_touch_read_contacts', VTABLE,'__GLOBAL__sub_I_MyronDigitizer.cpp') + tuple(
         n+'.original' if r['kind']=='function' else n for n,r in bindings.items())
     return objects, keep, contract

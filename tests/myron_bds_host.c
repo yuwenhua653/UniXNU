@@ -63,19 +63,22 @@ VOID MyronPublishEmbeddedPayload(VOID){checkpoint(14);}
 static VOID Print(const wchar_t *s,...){if(wcsstr(s,L"R64"))checkpoint(15);}
 static EFI_STATUS MyronStartUniXNU(VOID){checkpoint(16);return load_error;}
 static VOID CpuDeadLoop(VOID){assert(!"Unexpected deadloop");}
+#if TEST_GRAPHICAL
+static int MyronPrimeTouchPower(void) { checkpoint(17); return 0; }
+#endif
 #include "bds-under-test.c"
 static VOID reset(VOID){mStarted=0;mBdsPhase=0;count=0;draws=0;stop_at=0;missing_gop=0;bad_blt=0;load_error=0;memset(pixels,0,sizeof pixels);info.HorizontalResolution=1200;info.VerticalResolution=2608;}
 int main(VOID){
  gop.Blt=blt;gop.Mode=&mode;bs.LocateProtocol=locate;bs.InstallConfigurationTable=table;
  int ids[]={1,2,3,4,5,10,11,12,13,14,
-#if !TEST_GRAPHICAL
+#if TEST_GRAPHICAL
+ 17,
+#else
  15,
 #endif
  16};
  UINT16 phases[]={0xB001,0xB002,0xB003,0xB004,0xB005,0xB010,0xB011,0xB012,0xB013,0xB014,
-#if !TEST_GRAPHICAL
  0xB015,
-#endif
  0xB016};
  for(volatile unsigned i=0;i<sizeof ids/sizeof ids[0];i++){
   reset();stop_at=ids[i];

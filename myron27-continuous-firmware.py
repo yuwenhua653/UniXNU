@@ -90,6 +90,8 @@ required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_b
 if (device/'touch/iphone12-1-hid-24A446.json').is_file():
     required |= {'_myron_touch_start', '_myron_publish_digitizer', '_myron_touch_read_contacts',
                  '__ZTV14MyronDigitizer'}
+if (device/'touch/MyronSE19Bus.h').is_file():
+    required |= {'_geni_spi_read_info', '_geni_spi_transfer'}
 need(required<=definitions.keys(),f'Continuous recorder missing from final prelinked kernel: {sorted(required-definitions.keys())}')
 buffer_definitions=require_buffer_trace(kernel)
 exit_trace_definitions=require_exit_trace(kernel)
@@ -139,6 +141,10 @@ need(host['root_sidecars_checked'] and host['root_sidecar_failure_cases']==12 an
 need(fw['source_stage']['driver_staged_sha256']==host['driver_sha256'] and fw['source_stage']['stream_source_sha256']==host['stream_source_sha256'],'Loader source mismatch')
 for name,digest in bp.PUBLISHERS.items():need(fw['board_source_hashes'][name]==digest,'Memory publisher changed')
 if 'boot-progress=3' in args:
+    if (device/'touch/MyronFirmwareTouch.h').is_file():
+        for header in ('MyronFirmwareTouch.h', 'MyronTouchPower.h'):
+            need(fw['board_source_hashes']['Library/MyronBootManagerLib/'+header]==sha((device/'touch'/header).read_bytes()),
+                 'Wrong early touch power source: '+header)
     built=a.work/'firmware/Build/myronPkg/RELEASE_CLANGPDB/AARCH64'
     for module in ('DarwinBoot.efi','MyronFdtGopDxe.efi'):
         need(mask in (built/module).read_bytes(),'Firmware artwork missing from '+module)

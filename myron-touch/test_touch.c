@@ -76,11 +76,13 @@ static void wire_wait(void *p, unsigned us)
     if (w->clk) w->settled=1;
 }
 
+static void wire_edge(void *p) { wire_wait(p,1); }
+
 /* Walk the descriptor as a HID consumer would and verify report wire sizes. */
 static void descriptor(void)
 {
     unsigned id=0, size=0, count=0, page=0, usage=0, depth=0, fingers=0;
-    unsigned input_bits=0, feature_bits=0, x=0, y=0, tips=0;
+    unsigned input_bits=0, feature_bits=0, x=0, y=0, tips=0, valid=0;
     for (size_t i=0; i<myron_touch_descriptor_bytes;) {
         uint8_t tag=myron_touch_descriptor[i++];
         unsigned length=tag&3, v=0;
@@ -103,11 +105,15 @@ static void descriptor(void)
             if ((v&1)==0 && page==1 && usage==0x30) ++x;
             if ((v&1)==0 && page==1 && usage==0x31) ++y;
             if ((v&1)==0 && page==13 && usage==0x42) ++tips;
+            if (!(v&1) && page==13 && usage==0x37) {
+                assert(size==1 && count==1 && (input_bits-1)%48==2);
+                ++valid;
+            }
             break;
         case 0xb0: assert(id==4 && page==13 && usage==0x55); feature_bits+=size*count; break;
         }
     }
-    assert(!depth && fingers==10 && x==10 && y==10 && tips==10);
+    assert(!depth && fingers==10 && x==10 && y==10 && tips==10 && valid==10);
     assert(input_bits==8*(MYRON_REPORT_BYTES-1) && feature_bits==8);
 }
 /* Model the stock AP DRV2 layout and independent completion of its commands. */
@@ -129,7 +135,7 @@ static void rail_write(void *p, unsigned off, uint32_t value) {
     m->regs[off/4]=value;
     if (off == RSC_TCS+8) m->regs[(RSC_TCS+4)/4] &= ~value;
     if (off != RSC_ACTIVE2+0x24 || value != 0x1010000) return;
-    const unsigned address[3]={0x41230,0x41238,0x41234}, data[3]={1800,7,1};
+    const unsigned address[3]={0x41230,0x41238,0x41234}, data[3]={1800,5,1};
     assert(rail_read(m,RSC_ACTIVE2+0x2c)==7 && rail_read(m,RSC_ACTIVE2+0x20)==7);
     for (unsigned c=0;c<3;++c) {
         unsigned cmd=RSC_ACTIVE2+24*c;
@@ -165,6 +171,10 @@ static void test_io_supply(void) {
             assert(!m.writes && !m.commands);
         else {
             assert(m.commands==3 && rail_read(&m,RSC_TCS)==0x20);
+            if (code==MYRON_POWER_OK) {
+                assert(rail_read(&m,RSC_ACTIVE2+0x24)==0);
+                assert(myron_vote_l4i(&bus,0x41230)==MYRON_POWER_OK && m.commands==6);
+            }
             assert(rail_read(&m,RSC_ACTIVE2+0x2c)==(code==MYRON_POWER_TIMEOUT ? 7u : 0u));
         }
     }
@@ -175,7 +185,7 @@ int main(void)
     test_io_supply();
     descriptor();
     struct wires wires={.cs=2};
-    struct myron_gpio_io io={&wires,read_miso,write_wire,wire_wait};
+    struct myron_gpio_io io={&wires,read_miso,write_wire,wire_wait,wire_edge};
     uint8_t tx[]={0x81,0x3f},rx[2];
     assert(myron_spi_transfer(&io,tx,rx,2)==0 && wires.cs_edges==2 && wires.bits==16);
     assert(rx[0]==0x96 && rx[1]==0x43 && wires.sent==0x813f && wires.clk==0 && wires.cs==2);
@@ -184,14 +194,22 @@ int main(void)
     struct myron_touch t={.bus={&c,transfer,wait_us}};
     c.id[0]=0; assert(myron_touch_identify_and_start(&t)==-ENODEV && !c.writes);
     c.id[0]=0x36; assert(myron_touch_identify_and_start(&t)==0 && t.ready && c.writes==1);
+    c.data[1]=0x21;
+    for (unsigned flag=0; flag<3; ++flag) {
+        const unsigned sequence[]={0,2,1};
+        point(c.data+4,sequence[flag],0,20,30);
+        assert(!myron_touch_read_contacts(&t,submit,&c));
+        assert(c.report[61]==1 && c.report[2]==0 && c.report[1]==(flag==2?6:7));
+        for (unsigned i=1;i<MYRON_FINGERS;++i) assert(!(c.report[1+6*i]&4));
+    }
     c.data[1]=0x22;
     point(c.data+4,0,7,1199,2607); point(c.data+12,0,1,0,0);
     assert(!myron_touch_read_contacts(&t,submit,&c) && c.report[61]==2 && c.report[2]==1);
-    assert(c.report[7]==3 && c.report[8]==7 && t.x[7]>32730 && t.y[7]>32730);
+    assert(c.report[7]==7 && c.report[8]==7 && t.x[7]>32730 && t.y[7]>32730);
     c.data[1]=0x21; point(c.data+4,2,7,600,1304);
     c.reject=1; assert(myron_touch_read_contacts(&t,submit,&c)==-EIO && t.active==130);
     c.reject=0; assert(!myron_touch_read_contacts(&t,submit,&c) && t.active==128);
-    assert(c.report[1]==3 && c.report[2]==7 && c.report[7]==2 && c.report[8]==1);
+    assert(c.report[1]==7 && c.report[2]==7 && c.report[7]==6 && c.report[8]==1);
     uint16_t last=t.x[7]; assert(last>=16383 && last<=16384);
     unsigned count=c.reports;
     c.data[1]=0x20;
@@ -204,12 +222,12 @@ int main(void)
     c.bad_status=0; c.data[1]=0x22; point(c.data+12,2,7,1,2);
     assert(myron_touch_read_contacts(&t,submit,&c)==-EBADMSG && c.reports==count);
     c.data[1]=0x21; point(c.data+4,1,7,0,0);
-    assert(!myron_touch_read_contacts(&t,submit,&c) && !t.active && c.report[1]==2);
+    assert(!myron_touch_read_contacts(&t,submit,&c) && !t.active && c.report[1]==6);
     assert((unsigned)(c.report[3]|c.report[4]<<8)==last && c.report[61]==1);
     memset(c.data,0xff,sizeof(c.data)); c.data[0]=0; c.data[1]=1;
     c.data[2]=0; c.data[3]=40; c.data[4]=0x40; c.data[5]=80;
     assert(!myron_touch_read_contacts(&t,submit,&c) && t.active==16);
     memset(c.data,0xff,sizeof(c.data));
-    assert(!myron_touch_read_contacts(&t,submit,&c) && !t.ready && !t.active && c.report[1]==2);
+    assert(!myron_touch_read_contacts(&t,submit,&c) && !t.ready && !t.active && c.report[1]==6);
     puts("PASS: SPI mode 0, probe, TIC readback, CRC, v1/v2 contacts, XY, two fingers, moves, lifts, dropped report, controller restart");
 }

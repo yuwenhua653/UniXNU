@@ -15,6 +15,7 @@ struct myron_gpio_io {
     uint32_t (*read)(void *, enum myron_pin, unsigned);
     void (*write)(void *, enum myron_pin, unsigned, uint32_t);
     void (*delay_us)(void *, unsigned);
+    void (*half_period)(void *);
 };
 /* SPI mode 0: MSB first, sample MISO on the rising edge, hold CS across the
  * full command and response. These GPIO operations require no DMA mapping. */
@@ -27,9 +28,9 @@ static inline int myron_spi_transfer(void *ctx, const uint8_t *tx, uint8_t *rx, 
         unsigned byte = 0;
         for (unsigned mask = 0x80; mask; mask >>= 1) {
             io->write(io->context, MOSI, 4, (tx[i] & mask) ? 2 : 0);
-            io->delay_us(io->context, 1);
+            io->half_period(io->context);
             io->write(io->context, SCLK, 4, 2);
-            io->delay_us(io->context, 1);
+            io->half_period(io->context);
             byte = (byte << 1) | (io->read(io->context, MISO, 4) & 1);
             io->write(io->context, SCLK, 4, 0);
         }

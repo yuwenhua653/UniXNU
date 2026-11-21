@@ -11,6 +11,19 @@
 #include "MyronTouchPower.h"
 #include "MyronSE19Bus.h"
 
+/* The periodic boot snapshot outlives the early kernel message ring. */
+static uint32_t rscId, rscConfig, touchChip, hidReports;
+static int railResult = -1, probeResult = -1, busResult = -1;
+extern "C" size_t myron_touch_snapshot(char *out, size_t cap) {
+    if (!out || !cap) return 0;
+    int n = snprintf(out, cap, "[myron touch] se=%d rail=%d rsc_id=%08x config=%08x probe=%d chip=%04x hid_reports=%u\n",
+        __atomic_load_n(&busResult,__ATOMIC_RELAXED), __atomic_load_n(&railResult,__ATOMIC_RELAXED),
+        __atomic_load_n(&rscId,__ATOMIC_RELAXED), __atomic_load_n(&rscConfig,__ATOMIC_RELAXED),
+        __atomic_load_n(&probeResult,__ATOMIC_RELAXED), __atomic_load_n(&touchChip,__ATOMIC_RELAXED),
+        __atomic_load_n(&hidReports,__ATOMIC_RELAXED));
+    return n < 0 ? 0 : ((size_t)n < cap ? (size_t)n : cap-1);
+}
+
 static_assert(sizeof(IOHIDDevice) == 0xd0, "Wrong iPhone HID superclass ABI");
 
 class MyronDigitizer : public IOHIDDevice {
@@ -81,8 +94,10 @@ class MyronDigitizer : public IOHIDDevice {
         db->release();
         if (!addr) return MYRON_POWER_DB;
         auto rsc = mapBoardRange(MYRON_APPS_DRV2, MYRON_APPS_DRV_BYTES);
-        if (!rsc) return MYRON_POWER_LAYOUT;
+        if (!rsc) return MYRON_POWER_MAP;
         myron_rsc_io bus = {reinterpret_cast<void *>(rsc->getVirtualAddress()), readRsc, writeRsc, delay};
+        __atomic_store_n(&rscId,readRsc(bus.context,0),__ATOMIC_RELAXED);
+        __atomic_store_n(&rscConfig,readRsc(bus.context,0x0c),__ATOMIC_RELAXED);
         int rc = MYRON_POWER_BUSY;
         for (unsigned i = 0; i < 5 && rc == MYRON_POWER_BUSY; ++i) {
             if (i) IOSleep(20);
@@ -122,6 +137,7 @@ class MyronDigitizer : public IOHIDDevice {
             pads[i].latch = pads[i].regs[1] & 2;
         }
         int busStatus = se.open(mapBoardRange);
+        __atomic_store_n(&busResult,busStatus,__ATOMIC_RELAXED);
         if (busStatus != 0 && busStatus != GENI_ERR_NOTSUP) {
             IOLog("myron-touch: QUP4 SE0 unavailable (%d)\n", busStatus);
             return false;
@@ -133,6 +149,7 @@ class MyronDigitizer : public IOHIDDevice {
         IODelay(2000);
         writePin(this, AVDD, 4, 2); configure(AVDD, 0x240);
         int rail = powerIoRail();
+        __atomic_store_n(&railResult,rail,__ATOMIC_RELAXED);
         IOLog("myron-touch: L4I_E0 active vote status %d\n", rail);
         if (rail != MYRON_POWER_OK) return false;
         configure(ATTENTION, 0xc3);
@@ -156,6 +173,8 @@ class MyronDigitizer : public IOHIDDevice {
         for (unsigned attempt=0; attempt<5; ++attempt) {
             if (!useFifo && attempt == 3) setGpioRate(500000);
             rc = myron_touch_identify_and_start(&sensor);
+            __atomic_store_n(&probeResult,rc,__ATOMIC_RELAXED);
+            __atomic_store_n(&touchChip,(uint32_t)sensor.chip_id,__ATOMIC_RELAXED);
             if (!rc) {
                 IOLog("myron-touch: controller %04x, TIC mode verified via %s\n", (unsigned)sensor.chip_id, useFifo ? "SE19 FIFO" : "GPIO");
                 return true;
@@ -174,6 +193,7 @@ class MyronDigitizer : public IOHIDDevice {
         if (!buffer) return kIOReturnNoMemory;
         auto rc = self->handleReport(buffer, kIOHIDReportTypeInput, 0);
         buffer->release();
+        if (!rc) __atomic_fetch_add(&hidReports,1u,__ATOMIC_RELAXED);
         if (self->firstReport) {
             IOLog("myron-touch: first HID submission, status 0x%x, contacts %u\n",
                   (unsigned)rc, (unsigned)bytes[count-1]);

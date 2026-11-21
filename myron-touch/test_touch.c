@@ -134,15 +134,17 @@ static void rail_write(void *p, unsigned off, uint32_t value) {
     ++m->writes;
     m->regs[off/4]=value;
     if (off == RSC_TCS+8) m->regs[(RSC_TCS+4)/4] &= ~value;
-    if (off != RSC_ACTIVE2+0x24 || value != 0x1010000) return;
+    unsigned legacy = (m->regs[0] >> 16) == 2;
+    unsigned ctrl = legacy ? 0x14 : 0x24;
+    if (off != RSC_ACTIVE2+ctrl || value != 0x1010000) return;
     const unsigned address[3]={0x41230,0x41238,0x41234}, data[3]={1800,5,1};
-    assert(rail_read(m,RSC_ACTIVE2+0x2c)==7 && rail_read(m,RSC_ACTIVE2+0x20)==7);
+    assert(rail_read(m,RSC_ACTIVE2+ctrl+8)==7 && rail_read(m,RSC_ACTIVE2+ctrl-4)==7);
     for (unsigned c=0;c<3;++c) {
-        unsigned cmd=RSC_ACTIVE2+24*c;
-        assert(rail_read(m,cmd+0x34)==0x10108);
-        assert(rail_read(m,cmd+0x38)==address[c] && rail_read(m,cmd+0x3c)==data[c]);
+        unsigned cmd=RSC_ACTIVE2+(legacy ? 0x30+20*c : 0x34+24*c);
+        assert(rail_read(m,cmd)==0x10108);
+        assert(rail_read(m,cmd+4)==address[c] && rail_read(m,cmd+8)==data[c]);
         ++m->commands;
-        m->regs[(cmd+0x40)/4]=(c==1 && m->result==MYRON_POWER_RESPONSE) ? 0x100 : 0x10100;
+        m->regs[(cmd+12)/4]=(c==1 && m->result==MYRON_POWER_RESPONSE) ? 0x100 : 0x10100;
     }
     if (m->result!=MYRON_POWER_TIMEOUT) m->regs[(RSC_TCS+4)/4] |= 4;
 }
@@ -155,10 +157,37 @@ static void test_io_supply(void) {
     db[37]++; assert(!myron_l4i_address(db,sizeof db)); db[37]--;
     db[2]=3; assert(!myron_l4i_address(db,sizeof db)); db[2]=4;
     memcpy(db+42,db+36,24); db[3]=2u<<16; assert(!myron_l4i_address(db,sizeof db));
+    for (unsigned major=2;major<=4;++major) {
+        struct rail_model m={0};
+        struct myron_rsc_io io={&m,rail_read,rail_write,wait_us};
+        m.regs[0]=(major<<16) | (7u<<8);
+        m.regs[3]=(31u<<27) | (8u<<12);
+        m.regs[(RSC_ACTIVE2+(major==2 ? 0x18 : 0x28))/4]=1;
+        assert(myron_vote_l4i(&io,0x41230)==MYRON_POWER_OK && m.commands==3);
+        if (major >= 3) {
+            m.regs[(RSC_TCS+0x2c)/4]=1u<<25;
+            m.regs[(RSC_TCS+0x38+25*24)/4]=0x41000;
+            assert(myron_vote_l4i(&io,0x41230)==MYRON_POWER_OK && m.commands==6);
+            m.regs[(RSC_TCS+0x38+25*24)/4]=0x41238;
+            unsigned before=m.writes;
+            assert(myron_vote_l4i(&io,0x41230)==MYRON_POWER_BUSY && m.writes==before);
+        }
+        unsigned before=m.writes;
+        m.regs[(RSC_TCS+(major==2 ? 0x1c : 0x2c))/4]=1u<<31;
+        assert(myron_vote_l4i(&io,0x41230)==MYRON_POWER_BUSY && m.writes==before);
+    }
+    const unsigned badConfig[]={0,0xffffffffu,(2u<<27)|(8u<<12),(16u<<27)|(2u<<12)};
+    for (unsigned i=0;i<sizeof badConfig/sizeof badConfig[0];++i) {
+        struct rail_model m={0};
+        struct myron_rsc_io io={&m,rail_read,rail_write,wait_us};
+        m.regs[0]=3u<<16;
+        m.regs[3]=badConfig[i];
+        assert(myron_vote_l4i(&io,0x41230)==MYRON_POWER_LAYOUT && !m.writes);
+    }
     for (int code=MYRON_POWER_OK;code<=MYRON_POWER_RESPONSE;++code) {
         struct rail_model m={.result=code};
         struct myron_rsc_io bus={&m,rail_read,rail_write,wait_us};
-        m.regs[0]=(code==MYRON_POWER_LAYOUT ? 2u : 3u)<<16;
+        m.regs[0]=(code==MYRON_POWER_LAYOUT ? 1u : 3u)<<16;
         m.regs[3]=(16u<<27) | (8u<<12);
         m.regs[RSC_TCS/4]=0x20;
         for (unsigned i=0;i<3;++i) m.regs[(RSC_TCS+0x2a0*i+0x28)/4]=1;

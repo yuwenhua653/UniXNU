@@ -445,3 +445,22 @@
          IOReturn status=applyStateRequest(&request,false);
          firmwareScanoutReady=(status==kIOReturnSuccess);
          native_legacy_pm_observed(5,status,firmwareScanoutReady);
+--- a/device/sm8850/drivers/NativeUfs/MyronBootLog.h
++++ b/device/sm8850/drivers/NativeUfs/MyronBootLog.h
+@@ -7,6 +7,7 @@
+ extern "C" size_t myron_boot_log_snapshot(char *,size_t);
+ #if MYRON_ROOT_POLICY
+ extern "C" size_t myron_display_snapshot(char *,size_t);
++extern "C" size_t myron_touch_snapshot(char *,size_t);
+ extern "C" size_t myron_keystore_snapshot(char *,size_t);
+ extern "C" void boot_process_start(void);
+ extern "C" size_t myron_process_snapshot(char *,size_t);
+@@ -92,6 +93,8 @@
+   prefix+=(int)myron_display_snapshot((char *)slot+prefix,displayRemaining<1024?displayRemaining:1024);
+   const size_t aksRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;
+   prefix+=(int)myron_keystore_snapshot((char *)slot+prefix,aksRemaining<1024?aksRemaining:1024);
++  const size_t touchRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;
++  prefix+=(int)myron_touch_snapshot((char *)slot+prefix,touchRemaining<256?touchRemaining:256);
+   const size_t processRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;
+   prefix+=(int)myron_process_snapshot((char *)slot+prefix,processRemaining<24576?processRemaining:24576);
+ #endif

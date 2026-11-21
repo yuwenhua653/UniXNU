@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* myron's FT3683 I/O rail: stock Canoe DT, cmd-db and rpmh-rsc v3. */
+/* myron's FT3683 I/O rail: stock Canoe DT, cmd-db and rpmh-rsc. */
 #ifndef MYRON_TOUCH_POWER_H
 #define MYRON_TOUCH_POWER_H
 #ifdef MYRON_TOUCH_EDK2
@@ -11,9 +11,9 @@ typedef UINT32 uint32_t;
 #define MYRON_CMD_DB 0x81c60000ULL
 #define MYRON_CMD_DB_BYTES 0x20000u
 #define MYRON_APPS_DRV2 0x18920000ULL
-#define MYRON_APPS_DRV_BYTES 0x10000u
+#define MYRON_APPS_DRV_BYTES 0x2000u /* DRV header and its three active TCS windows */
 enum myron_power_result { MYRON_POWER_OK, MYRON_POWER_DB, MYRON_POWER_LAYOUT,
-    MYRON_POWER_BUSY, MYRON_POWER_TIMEOUT, MYRON_POWER_RESPONSE };
+    MYRON_POWER_BUSY, MYRON_POWER_TIMEOUT, MYRON_POWER_RESPONSE, MYRON_POWER_MAP };
 struct myron_rsc_io {
     void *context;
     uint32_t (*read)(void *, unsigned);
@@ -66,59 +66,71 @@ static inline int myron_vote_l4i(const struct myron_rsc_io *io, uint32_t address
     if ((address & 15) || ((address >> 16) & 15) != 4) return MYRON_POWER_DB;
     uint32_t id = io->read(ctx, 0), config = io->read(ctx, 0x0c);
     unsigned commands = (config >> 27) & 31;
-    if (((id >> 16) & 255) != 3 || ((config >> 12) & 63) < 3 ||
-        commands < 3 || commands > 26) return MYRON_POWER_LAYOUT;
+    unsigned major = (id >> 16) & 255;
+    if (major < 2 || major == 255 || config == 0xffffffffu ||
+        ((config >> 12) & 63) < 3 || commands < 3) return MYRON_POWER_LAYOUT;
+
+    /* Canoe rpmh-rsc uses the 2.x or 3-and-later register layout based
+     * on the HW ID. DT fixes the TCS stride for both layouts. */
+    const unsigned wait = major == 2 ? 0x10 : 0x20;
+    const unsigned msg = major == 2 ? 0x30 : 0x34;
+    const unsigned cmdStride = major == 2 ? 20 : 24;
+    /* Include the last slot if its five 32-bit registers fit before the next TCS. */
+    const unsigned mappedCommands = 1 + (stride - msg - 5 * sizeof(uint32_t)) / cmdStride;
+    const unsigned readable = commands < mappedCommands ? commands : mappedCommands;
     unsigned slot = 3;
     for (unsigned i = 0; i < 3; ++i) {
         unsigned t = base + i*stride;
-        uint32_t enable = io->read(ctx, t+0x2c);
+        uint32_t enable = io->read(ctx, t+wait+12);
         if (enable) {
-            for (unsigned c = 0; c < commands; ++c) {
+            /* An enabled command outside this TCS cannot be inspected. */
+            if (enable >> readable) return MYRON_POWER_BUSY;
+            for (unsigned c = 0; c < readable; ++c) {
                 if ((enable & (1u << c)) &&
-                    (io->read(ctx, t+0x38+24*c) & ~15u) == address)
+                    (io->read(ctx, t+msg+4+cmdStride*c) & ~15u) == address)
                     return MYRON_POWER_BUSY;
             }
-        } else if (io->read(ctx, t+0x28) == 1 && !(io->read(ctx, base+4) & (1u << i))) {
+        } else if (io->read(ctx, t+wait+8) == 1 && !(io->read(ctx, base+4) & (1u << i))) {
             slot = i;
         }
     }
     if (slot == 3) return MYRON_POWER_BUSY;
     unsigned t = base + slot*stride, bit = 1u << slot;
-    uint32_t control = io->read(ctx, t+0x24), irq = io->read(ctx, base);
-    if (!myron_power_sync(io, t+0x24, control & ~(1u<<24)) ||
-        !myron_power_sync(io, t+0x24, 0)) return MYRON_POWER_RESPONSE;
+    uint32_t control = io->read(ctx, t+wait+4), irq = io->read(ctx, base);
+    if (!myron_power_sync(io, t+wait+4, control & ~(1u<<24)) ||
+        !myron_power_sync(io, t+wait+4, 0)) return MYRON_POWER_RESPONSE;
     /* Canoe uses qcom,rpmh-regulator-levels.h. Its DT value 3 is AUTO,
      * mapped to PMIC7 LDO OPM (5) by the downstream rpmh-regulator driver.
      * Apply voltage and mode before enabling the rail. */
     const uint32_t offsets[3] = {0, 8, 4}, values[3] = {1800, 5, 1};
     for (unsigned c = 0; c < 3; ++c) {
-        unsigned cmd = t + 24*c;
-        io->write(ctx, cmd+0x34, 0x10108); /* WRITE, response required */
-        io->write(ctx, cmd+0x38, address+offsets[c]);
-        io->write(ctx, cmd+0x3c, values[c]);
+        unsigned cmd = t + msg + cmdStride*c;
+        io->write(ctx, cmd, 0x10108); /* WRITE, response required */
+        io->write(ctx, cmd+4, address+offsets[c]);
+        io->write(ctx, cmd+8, values[c]);
     }
-    io->write(ctx, t+0x20, 7);
-    io->write(ctx, t+0x2c, 7);
+    io->write(ctx, t+wait, 7);
+    io->write(ctx, t+wait+12, 7);
     io->write(ctx, base, irq | bit);
-    if (!myron_power_sync(io, t+0x24, 1u<<16)) {
-        io->write(ctx, t+0x2c, 0);
-        io->write(ctx, t+0x20, 0);
+    if (!myron_power_sync(io, t+wait+4, 1u<<16)) {
+        io->write(ctx, t+wait+12, 0);
+        io->write(ctx, t+wait, 0);
         io->write(ctx, base, irq);
         return MYRON_POWER_RESPONSE;
     }
-    io->write(ctx, t+0x24, (1u<<16) | (1u<<24));
+    io->write(ctx, t+wait+4, (1u<<16) | (1u<<24));
     for (unsigned poll = 0; poll < 2000; ++poll) {
-        if ((io->read(ctx, base+4) & bit) && io->read(ctx, t+0x28) == 1) {
+        if ((io->read(ctx, base+4) & bit) && io->read(ctx, t+wait+8) == 1) {
             int status = MYRON_POWER_OK;
             for (unsigned c = 0; c < 3; ++c)
-                if ((io->read(ctx, t+0x40+24*c) & 0x10100) != 0x10100)
+                if ((io->read(ctx, t+msg+12+cmdStride*c) & 0x10100) != 0x10100)
                     status = MYRON_POWER_RESPONSE;
             /* RSC requires trigger clear before clearing AMC enable. Firmware
              * and the kernel can now reuse this same active TCS. */
-            if (!myron_power_sync(io, t+0x24, 1u<<16) ||
-                !myron_power_sync(io, t+0x24, 0)) status = MYRON_POWER_RESPONSE;
-            io->write(ctx, t+0x2c, 0);
-            io->write(ctx, t+0x20, 0);
+            if (!myron_power_sync(io, t+wait+4, 1u<<16) ||
+                !myron_power_sync(io, t+wait+4, 0)) status = MYRON_POWER_RESPONSE;
+            io->write(ctx, t+wait+12, 0);
+            io->write(ctx, t+wait, 0);
             io->write(ctx, base+8, bit);
             io->write(ctx, base, irq);
             return status;

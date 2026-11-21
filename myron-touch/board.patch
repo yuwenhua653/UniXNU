@@ -162,3 +162,20 @@
                       ('_bsd_init', '_native_verified_block_root_authorized'),
                       ('_native_owner_root_accepted_checkpoint', '_myron_record_root_auth'),
                       ('_load_init_program', '_myron_systemos_prepare'),
+--- a/tests/test_root_runtime.py
++++ b/tests/test_root_runtime.py
+@@ -1016,4 +1016,5 @@
+ extern "C" int myron_start_data(){calls.push_back(5);return scenario==8?-1:1;}
+ extern "C" void myron_display_start(){calls.push_back(6);}
++extern "C" void myron_touch_start(){calls.push_back(8);}
+ extern "C" void myron_keystore_start(){calls.push_back(7);}
+ void IOLog(const char*,...){}
+@@ -1022,6 +1023,6 @@
+  std::vector<int> expected=scenario==1||scenario==6?std::vector<int>{1}:
+   scenario==2?std::vector<int>{1,2}:scenario==5?std::vector<int>{1,2,3}:
+-  scenario==7?std::vector<int>{1,2,3,4,1,5,7,6}:
+-  scenario==3||scenario==4?std::vector<int>{1,2,3,4}:std::vector<int>{1,2,3,4,5,7,6};
++  scenario==7?std::vector<int>{1,2,3,4,1,5,7,6,8}:
++  scenario==3||scenario==4?std::vector<int>{1,2,3,4}:std::vector<int>{1,2,3,4,5,7,6,8};
+  assert(calls==expected);
+  unsigned stage=scenario==1||scenario==6?0:scenario==2?2:scenario==5?5:scenario==3||scenario==4?7:8;

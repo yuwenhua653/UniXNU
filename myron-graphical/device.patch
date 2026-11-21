@@ -628,3 +628,128 @@
      return 0;
  }
  
+--- a/device/myron27/root_runtime.py
++++ b/device/myron27/root_runtime.py
+@@ -208,6 +208,39 @@
+ }
+ /* MYRON_DYLD_STARTUP_END */
+ '''.replace('/* REVIEWED_CACHE_PATHS */', cache_paths)
++
++
++MYRON_BACKBOARD_ENV = r'''/* The 24A446 CPU renderer can present hosted layers synchronously. Select
++ * that path for the display server before QuartzCore initializes its options. */
++static __attribute__((noinline)) int
++myron_backboard_display_env(struct image_params *imgp, int ptr_size)
++{
++	static const char setting[] = "CA_DISABLE_ASYNCHRONOUS=1";
++	if (strcmp(imgp->ip_strings, EXECUTABLE_KEY "/usr/libexec/backboardd") != 0) {
++		return 0;
++	}
++
++	/* The original env strings have already been copied, including their NULs. */
++	for (const char *p = imgp->ip_endargv; p < imgp->ip_strendp; p += strlen(p) + 1) {
++		if (strncmp(p, setting, sizeof(setting) - 2) == 0) {
++			return 0;
++		}
++	}
++
++	/* Leave space for the new pointer, the terminating pointer and alignment.
++	 * Near NCARGS, preserve the original exec and its original size checks. */
++	if (imgp->ip_argspace < (int)sizeof(setting) + 3 * ptr_size - 1) {
++		return 0;
++	}
++	int error = exec_add_user_string(imgp, CAST_USER_ADDR_T(setting), UIO_SYSSPACE, TRUE);
++	if (!error) {
++		imgp->ip_argspace -= ptr_size;
++		imgp->ip_envc++;
++	}
++	return error;
++}
++
++'''
+ 
+ 
+ def prepare_exec(source, systemos_uuid, os_uuid, data=None, startup=False):
+@@ -300,6 +333,11 @@
+         require('if (data_error) panic("offline scratch Data mount failed: %d", data_error);' in source,
+                 'Data failure must stop before original init execution')
+         if startup:
++            marker = 'static int\nexec_extract_strings(struct image_params *imgp)\n{'
++            replace(marker, MYRON_BACKBOARD_ENV + marker)
++            marker = '\t/* Save space for envv[] NULL terminator */'
++            replace(marker, '\terror = myron_backboard_display_env(imgp, new_ptr_size);\n'
++                    '\tif (error) goto bad;\n\n' + marker)
+             marker = 'static int\nload_init_program_at_path('
+             replace(marker, startup_source() + '\n' +
+                     (Path(__file__).parent / 'package/MyronSystemOSLibraries.h').read_text() + '\n' + marker)
+--- a/device/myron27/tests/test_root_runtime.py
++++ b/device/myron27/tests/test_root_runtime.py
+@@ -392,6 +392,68 @@
+                 prepare_exec(self.exec_original.replace(marker,''),
+                              '12A34567-89AB-4CDE-8F01-23456789ABCD',
+                              '99A34567-89AB-4CDE-8F01-23456789ABCD',contract)
++
++    def test_myron_backboard_display_environment(self):
++        contract = dict(format=1, volume_uuid='B9AE07B1-A4AA-4A22-A689-F048EF253BA2',
++                        logical_bytes=16384, logical_sha256='42'*32)
++        source = prepare_exec(self.exec_original, '12A34567-89AB-4CDE-8F01-23456789ABCD',
++                              '99A34567-89AB-4CDE-8F01-23456789ABCD', contract, startup=True)
++        begin = source.index('static __attribute__((noinline)) int\nmyron_backboard_display_env')
++        end = source.index('static int\nexec_extract_strings(', begin)
++        directory = self.work / 'display-environment'
++        directory.mkdir()
++        fixture = r'''
++#include <assert.h>
++#include <stdint.h>
++#include <string.h>
++#define TRUE 1
++#define UIO_SYSSPACE 2
++#define EXECUTABLE_KEY "executable_path="
++#define CAST_USER_ADDR_T(p) ((uintptr_t)(p))
++struct image_params { char *ip_strings, *ip_endargv, *ip_strendp; int ip_argspace, ip_envc; };
++static int exec_add_user_string(struct image_params *p, uintptr_t value, int seg, int charge) {
++    const char *s = (const char *)value;
++    int n = (int)strlen(s) + 1;
++    assert(seg == UIO_SYSSPACE && charge && n <= p->ip_argspace);
++    memcpy(p->ip_strendp, s, n);
++    p->ip_argspace -= n;
++    p->ip_strendp += n;
++    return 0;
++}
++'''
++        cases = r'''
++static void check(char *path, const char *old, int space, int ptr, int append) {
++    char env[256] = {0};
++    size_t used = strlen(old) + 1;
++    memcpy(env, old, used);
++    struct image_params p = {path, env, env+used, space, 1};
++    assert(myron_backboard_display_env(&p, ptr) == 0);
++    assert(memcmp(env, old, used) == 0 && p.ip_envc == 1+append);
++    const char expected[] = "CA_DISABLE_ASYNCHRONOUS=1";
++    assert(p.ip_argspace == space - append*((int)sizeof(expected)+ptr));
++    assert(p.ip_strendp == env+used+append*sizeof(expected));
++    if (append) assert(strcmp(env+used, expected) == 0);
++}
++int main(void) {
++    char path[] = EXECUTABLE_KEY "/usr/libexec/backboardd";
++    for (int ptr = 4; ptr <= 8; ptr += 4) {
++        check(path, "PATH=/bin", 192, ptr, 1);
++        check(path, "CA_DISABLE_ASYNCHRONOUS=0", 192, ptr, 0);
++        check(path, "CA_DISABLE_ASYNCHRONOUS_EXTRA=0", 192, ptr, 1);
++        check(path, "", 8, ptr, 0);
++        check(EXECUTABLE_KEY "/usr/libexec/backboardd-helper", "", 192, ptr, 0);
++        check(EXECUTABLE_KEY "/System/Library/CoreServices/SpringBoard.app/SpringBoard", "", 192, ptr, 0);
++    }
++}
++'''
++        program = directory / 'display-env.c'
++        program.write_text(fixture + source[begin:end] + cases)
++        binary = directory / 'display-env'
++        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', str(program), '-o', str(binary)], check=True)
++        subprocess.run([str(binary)], check=True)
++        call = source.index('error = myron_backboard_display_env(imgp, new_ptr_size);')
++        self.assertLess(source.index('imgp->ip_envc++;', source.index('/* Now, get the environment */')), call)
++        self.assertLess(call, source.index('/* Save space for envv[] NULL terminator */'))
+ 
+     def test_dyld_startup_production_gate_and_failures(self):
+         contract = dict(format=1,volume_uuid='B9AE07B1-A4AA-4A22-A689-F048EF253BA2',

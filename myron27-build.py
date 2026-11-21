@@ -24,7 +24,7 @@ if any(v is not None for v in owner_values):
   parser.error('Device inputs require --desktop --original-root and one capture/history input plus all key/anchor options')
 if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
-TOUCH_SOURCES = ('board.patch', 'touch_build.py', 'MyronDigitizer.cpp', 'MyronTouchStart.cpp', 'MyronTouchBoard.h',
+TOUCH_SOURCES = ('board.patch', 'touch_build.py', 'MyronDigitizer.cpp', 'MyronTouchStart.cpp', 'MyronTouchBoard.h', 'MyronTouchPower.h',
                  'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
                  'iphone12-1-hid-24A446.json', 'test_touch.c')
 def root_qualification_identity(fixture):

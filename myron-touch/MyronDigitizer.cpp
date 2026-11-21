@@ -8,6 +8,7 @@
 #include <libkern/c++/OSString.h>
 #include "MyronFT3683.h"
 #include "MyronTouchBoard.h"
+#include "MyronTouchPower.h"
 
 static_assert(sizeof(IOHIDDevice) == 0xd0, "Wrong iPhone HID superclass ABI");
 
@@ -39,6 +40,38 @@ class MyronDigitizer : public IOHIDDevice {
         __asm__ volatile("dsb sy" ::: "memory");
     }
     static void delay(void *, unsigned us) { IODelay(us); }
+    static IOMemoryMap *mapBoardRange(uint64_t address, unsigned size) {
+        auto memory = IODeviceMemory::withRange(address, size);
+        if (!memory) return nullptr;
+        auto mapping = memory->map(kIOMapAnywhere | kIOMapInhibitCache);
+        memory->release();
+        return mapping;
+    }
+    static uint32_t readRsc(void *ctx, unsigned off) {
+        return static_cast<volatile uint32_t *>(ctx)[off/4];
+    }
+    static void writeRsc(void *ctx, unsigned off, uint32_t value) {
+        static_cast<volatile uint32_t *>(ctx)[off/4] = value;
+        __asm__ volatile("dsb sy" ::: "memory");
+    }
+    static int powerIoRail() {
+        auto db = mapBoardRange(MYRON_CMD_DB, MYRON_CMD_DB_BYTES);
+        if (!db) return MYRON_POWER_DB;
+        uint32_t addr = myron_l4i_address(
+            reinterpret_cast<const volatile uint32_t *>(db->getVirtualAddress()), MYRON_CMD_DB_BYTES);
+        db->release();
+        if (!addr) return MYRON_POWER_DB;
+        auto rsc = mapBoardRange(MYRON_APPS_DRV2, MYRON_APPS_DRV_BYTES);
+        if (!rsc) return MYRON_POWER_LAYOUT;
+        myron_rsc_io bus = {reinterpret_cast<void *>(rsc->getVirtualAddress()), readRsc, writeRsc, delay};
+        int rc = MYRON_POWER_BUSY;
+        for (unsigned i = 0; i < 5 && rc == MYRON_POWER_BUSY; ++i) {
+            if (i) IOSleep(20);
+            rc = myron_vote_l4i(&bus, addr);
+        }
+        rsc->release();
+        return rc;
+    }
     void configure(myron_pin pin, uint32_t config) {
         uint32_t old = pads[pin].config;
         // Canoe TLMM's normal GPIO pinmux ownership bit, as in pinctrl-msm.
@@ -62,20 +95,20 @@ class MyronDigitizer : public IOHIDDevice {
     bool openSensor() {
         // Map and snapshot every required pad before changing any of them.
         for (unsigned i=0; i<PIN_COUNT; ++i) {
-            auto mem = IODeviceMemory::withRange(MYRON_TLMM_PADS + myron_gpio[i]*MYRON_PAD_STRIDE, 8);
-            if (!mem) return false;
-            pads[i].map = mem->map(kIOMapAnywhere | kIOMapInhibitCache);
-            mem->release();
+            pads[i].map = mapBoardRange(MYRON_TLMM_PADS + myron_gpio[i]*MYRON_PAD_STRIDE, 8);
             if (!pads[i].map) return false;
             pads[i].regs = reinterpret_cast<volatile uint32_t *>(pads[i].map->getVirtualAddress());
             pads[i].config = pads[i].regs[0];
             pads[i].latch = pads[i].regs[1] & 2;
         }
         configured = true;
-        writePin(this, RESET, 4, 0); configure(RESET, 0x240);
+        writePin(this, RESET, 4, 0); configure(RESET, 0x2c3);
         IODelay(2000);
         writePin(this, AVDD, 4, 2); configure(AVDD, 0x240);
-        configure(ATTENTION, 3); configure(MISO, 0x80);
+        int rail = powerIoRail();
+        IOLog("myron-touch: L4I_E0 active vote status %d\n", rail);
+        if (rail == MYRON_POWER_TIMEOUT || rail == MYRON_POWER_RESPONSE) return false;
+        configure(ATTENTION, 0xc3); configure(MISO, 0x80);
         writePin(this, CS, 4, 2); configure(CS, 0x283);
         writePin(this, SCLK, 4, 0); configure(SCLK, 0x240);
         writePin(this, MOSI, 4, 0); configure(MOSI, 0x280);
@@ -93,6 +126,9 @@ class MyronDigitizer : public IOHIDDevice {
             }
             if (attempt < 4) IOSleep(200);
         }
+        if (sensor.tx[1] == 0xa0 && (sensor.tx[0] == 0xa3 || sensor.tx[0] == 0x9f))
+            IOLog("myron-touch: ID reg %02x status %02x data %02x crc %02x %02x\n",
+                  sensor.tx[0], sensor.rx[3], sensor.rx[7], sensor.rx[8], sensor.rx[9]);
         IOLog("myron-touch: controller/TIC probe failed (%d), ID %04x\n", rc, (unsigned)sensor.chip_id);
         return false;
     }

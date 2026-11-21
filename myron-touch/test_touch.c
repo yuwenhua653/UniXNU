@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "MyronFT3683.h"
 #include "MyronTouchBoard.h"
+#include "MyronTouchPower.h"
 #include "fts_myron_frame.h"
 #include <assert.h>
 #include <stdio.h>
@@ -50,10 +51,11 @@ static void point(uint8_t *p, unsigned flag, unsigned id, unsigned x, unsigned y
     p[2]=(uint8_t)((id<<4)|(y>>12)); p[3]=(uint8_t)(y>>4);
     p[4]=(uint8_t)((x<<4)|(y&15));
 }
-struct wires { unsigned cs,clk,mosi,bits,reads,cs_edges; uint16_t sent; };
+struct wires { unsigned cs,clk,mosi,bits,reads,cs_edges, settled; uint16_t sent; };
 static uint32_t read_miso(void *p, enum myron_pin pin, unsigned off)
 {
     struct wires *w=p;
+    assert(w->settled);
     assert(pin==MISO && off==4 && w->cs==0 && w->clk==2 && w->bits==w->reads+1);
     return (0x9643u >> (15-w->reads++))&1;
 }
@@ -65,8 +67,15 @@ static void write_wire(void *p, enum myron_pin pin, unsigned off, uint32_t v)
     if (pin==MOSI) { assert(!w->clk); w->mosi=v; return; }
     assert(pin==SCLK && w->clk!=v);
     if (v) { w->sent=(uint16_t)(w->sent*2+(w->mosi!=0)); w->bits++; }
-    w->clk=v;
+    w->clk=v; w->settled=0;
 }
+static void wire_wait(void *p, unsigned us)
+{
+    struct wires *w = p;
+    assert(us);
+    if (w->clk) w->settled=1;
+}
+
 /* Walk the descriptor as a HID consumer would and verify report wire sizes. */
 static void descriptor(void)
 {
@@ -101,11 +110,72 @@ static void descriptor(void)
     assert(!depth && fingers==10 && x==10 && y==10 && tips==10);
     assert(input_bits==8*(MYRON_REPORT_BYTES-1) && feature_bits==8);
 }
+/* Model the stock AP DRV2 layout and independent completion of its commands. */
+struct rail_model {
+    uint32_t regs[0x2000/4];
+    int result;
+    unsigned writes, commands;
+};
+enum { RSC_TCS = 0xd00, RSC_ACTIVE2 = RSC_TCS + 2*0x2a0 };
+static uint32_t rail_read(void *p, unsigned off) {
+    struct rail_model *m=p;
+    assert(off < sizeof m->regs && !(off & 3));
+    return m->regs[off/4];
+}
+static void rail_write(void *p, unsigned off, uint32_t value) {
+    struct rail_model *m=p;
+    assert(off < sizeof m->regs && !(off & 3));
+    ++m->writes;
+    m->regs[off/4]=value;
+    if (off == RSC_TCS+8) m->regs[(RSC_TCS+4)/4] &= ~value;
+    if (off != RSC_ACTIVE2+0x24 || value != 0x1010000) return;
+    const unsigned address[3]={0x41230,0x41238,0x41234}, data[3]={1800,7,1};
+    assert(rail_read(m,RSC_ACTIVE2+0x2c)==7 && rail_read(m,RSC_ACTIVE2+0x20)==7);
+    for (unsigned c=0;c<3;++c) {
+        unsigned cmd=RSC_ACTIVE2+24*c;
+        assert(rail_read(m,cmd+0x34)==0x10108);
+        assert(rail_read(m,cmd+0x38)==address[c] && rail_read(m,cmd+0x3c)==data[c]);
+        ++m->commands;
+        m->regs[(cmd+0x40)/4]=(c==1 && m->result==MYRON_POWER_RESPONSE) ? 0x100 : 0x10100;
+    }
+    if (m->result!=MYRON_POWER_TIMEOUT) m->regs[(RSC_TCS+4)/4] |= 4;
+}
+static void test_io_supply(void) {
+    uint32_t db[64]={0};
+    db[1]=0x0c0330db; db[2]=4; db[3]=1u<<16;
+    db[36]=0x5f49344c; db[37]=0x3045; db[40]=0x41230;
+    assert(myron_l4i_address(db,sizeof db)==0x41230);
+    assert(!myron_l4i_address(db,167));
+    db[37]++; assert(!myron_l4i_address(db,sizeof db)); db[37]--;
+    db[2]=3; assert(!myron_l4i_address(db,sizeof db)); db[2]=4;
+    memcpy(db+42,db+36,24); db[3]=2u<<16; assert(!myron_l4i_address(db,sizeof db));
+    for (int code=MYRON_POWER_OK;code<=MYRON_POWER_RESPONSE;++code) {
+        struct rail_model m={.result=code};
+        struct myron_rsc_io bus={&m,rail_read,rail_write,wait_us};
+        m.regs[0]=(code==MYRON_POWER_LAYOUT ? 2u : 3u)<<16;
+        m.regs[3]=(16u<<27) | (8u<<12);
+        m.regs[RSC_TCS/4]=0x20;
+        for (unsigned i=0;i<3;++i) m.regs[(RSC_TCS+0x2a0*i+0x28)/4]=1;
+        if (code==MYRON_POWER_BUSY) {
+            m.regs[(RSC_TCS+0x2c)/4]=1;
+            m.regs[(RSC_TCS+0x38)/4]=0x41234;
+        }
+        assert(myron_vote_l4i(&bus,code==MYRON_POWER_DB ? 0 : 0x41230)==code);
+        if (code==MYRON_POWER_DB || code==MYRON_POWER_LAYOUT || code==MYRON_POWER_BUSY)
+            assert(!m.writes && !m.commands);
+        else {
+            assert(m.commands==3 && rail_read(&m,RSC_TCS)==0x20);
+            assert(rail_read(&m,RSC_ACTIVE2+0x2c)==(code==MYRON_POWER_TIMEOUT ? 7u : 0u));
+        }
+    }
+}
+
 int main(void)
 {
+    test_io_supply();
     descriptor();
     struct wires wires={.cs=2};
-    struct myron_gpio_io io={&wires,read_miso,write_wire,wait_us};
+    struct myron_gpio_io io={&wires,read_miso,write_wire,wire_wait};
     uint8_t tx[]={0x81,0x3f},rx[2];
     assert(myron_spi_transfer(&io,tx,rx,2)==0 && wires.cs_edges==2 && wires.bits==16);
     assert(rx[0]==0x96 && rx[1]==0x43 && wires.sent==0x813f && wires.clk==0 && wires.cs==2);

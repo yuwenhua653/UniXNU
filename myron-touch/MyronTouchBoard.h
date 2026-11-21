@@ -29,8 +29,8 @@ static inline int myron_spi_transfer(void *ctx, const uint8_t *tx, uint8_t *rx, 
             io->write(io->context, MOSI, 4, (tx[i] & mask) ? 2 : 0);
             io->delay_us(io->context, 1);
             io->write(io->context, SCLK, 4, 2);
-            byte = (byte << 1) | (io->read(io->context, MISO, 4) & 1);
             io->delay_us(io->context, 1);
+            byte = (byte << 1) | (io->read(io->context, MISO, 4) & 1);
             io->write(io->context, SCLK, 4, 0);
         }
         rx[i] = (uint8_t)byte;

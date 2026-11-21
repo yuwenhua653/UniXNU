@@ -464,3 +464,167 @@
    const size_t processRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;
    prefix+=(int)myron_process_snapshot((char *)slot+prefix,processRemaining<24576?processRemaining:24576);
  #endif
+--- a/device/myron27/display/NativeLegacyRequest.h
++++ b/device/myron27/display/NativeLegacyRequest.h
+@@ -180,3 +180,38 @@
+     return stored;
+ }
+ 
++
++/* 24A446 layer 0 source/destination rectangles, in pixels. */
++struct MyronDisplayRect { uint32_t x,y,w,h; };
++static inline int myron_rect_inside(struct MyronDisplayRect r,uint64_t w,uint64_t h) {
++    return w && h && w<=16384 && h<=16384 && r.w && r.h &&
++           r.x<=w && r.y<=h && r.w<=w-r.x && r.h<=h-r.y;
++}
++static inline int myron_rect_full(struct MyronDisplayRect r,uint32_t w,uint32_t h) {
++    return !r.x && !r.y && r.w==w && r.h==h;
++}
++/* The caller has validated both rectangles, row strides, formats and mappings.
++ * Map the physical pixel into the destination canvas, then into the source.
++ * Pixels outside the sole layer show the validated black background. */
++static inline void myron_present_rect(volatile uint8_t *dst,uint64_t ds,uint32_t pw,uint32_t ph,
++    const uint8_t *src,uint64_t ss,struct MyronDisplayRect s,struct MyronDisplayRect d,
++    uint32_t cw,uint32_t ch,const uint8_t *half) {
++    for(uint32_t y=0;y<ph;++y) {
++        volatile uint32_t *row=(volatile uint32_t *)(dst+y*ds);
++        uint32_t cy=y*ch/ph;
++        const uint8_t *line=0;
++        if(cy>=d.y && cy-d.y<d.h)line=src+ss*(s.y+(cy-d.y)*s.h/d.h);
++        for(uint32_t x=0;x<pw;++x) {
++            uint32_t cx=x*cw/pw, pixel=0xff000000u;
++            if(line && cx>=d.x && cx-d.x<d.w) {
++                uint32_t sx=s.x+(cx-d.x)*s.w/d.w;
++                if(half) {
++                    uint16_t v[4];__builtin_memcpy(v,line+8*sx,8);
++                    for(unsigned k=0;k<3;++k)
++                        if(!(v[k]&0x8000))pixel|=(uint32_t)half[v[k]]<<(16-8*k);
++                } else __builtin_memcpy(&pixel,line+4*sx,4);
++            }
++            row[x]=pixel;
++        }
++    }
++}
+--- a/device/myron27/display/NativeLegacyDisplay.cpp
++++ b/device/myron27/display/NativeLegacyDisplay.cpp
+@@ -695,8 +695,13 @@
+         uint64_t length=(uint64_t)width*height*4;
+         uint64_t sourceStride=native_legacy_surface_stride(surface);
+         uint64_t allocation=native_legacy_surface_allocation(surface);
+-        if(!memory || !memory->metaCast("IOMemoryDescriptor") || !native_legacy_surface_bounds(width,height,sourceStride,allocation,memory->getLength()) ||
+-           native_legacy_surface_width(surface)<width || native_legacy_surface_height(surface)<height ||
++        MyronDisplayRect srcRect,dstRect;uint32_t canvas[2];layerGeometry(request,srcRect,dstRect,canvas);
++        bool scaled=!myron_rect_full(srcRect,width,height) || !myron_rect_full(dstRect,width,height) || canvas[0]!=width || canvas[1]!=height;
++        bool halfFormat=nativeHalf(native_legacy_surface_format(surface),native_legacy_surface_planes(surface));
++        if(!memory || !memory->metaCast("IOMemoryDescriptor") ||
++           !myron_rect_inside(srcRect,native_legacy_surface_width(surface),native_legacy_surface_height(surface)) ||
++           !myron_rect_inside(dstRect,canvas[0],canvas[1]) || sourceStride<uint64_t(srcRect.x+srcRect.w)*(halfFormat?8:4) ||
++           !native_legacy_surface_bounds(srcRect.x+srcRect.w,srcRect.y+srcRect.h,sourceStride,allocation,memory->getLength()) ||
+            !nativeScanoutFormat(native_legacy_surface_format(surface),native_legacy_surface_planes(surface)) ||
+            PE_current_console(&video) || video.v_baseAddr!=bootMapping->getPhysicalAddress() ||
+            video.v_width!=width || video.v_height!=height || video.v_depth!=32 || video.v_rotate ||
+@@ -707,6 +712,20 @@
+         // as the CPU copy (int-093: accepted swaps were GPU-copied under a page that kept drawing).
+         if(!gpuBypass) {
+             if(!native_legacy_prepare_scanout()) {native_legacy_transfer_observed(kIOReturnNotReady,request,0);return;}
++        }
++        if(scaled) {
++            IOMemoryMap *map=memory->map(kIOMapAnywhere|kIOMapReadOnly|kIOMapCopybackCache);
++            const uint8_t *table=halfFormat?halfTable():nullptr;
++            if(!map || !map->getVirtualAddress() || map->getLength()<allocation || allocation>UINT32_MAX ||
++               (halfFormat && !table) || (gpuBypass && !native_legacy_prepare_scanout())) {
++                OSSafeReleaseNULL(map);native_legacy_transfer_observed(kIOReturnNotReady,request,0);return;
++            }
++            flush_dcache64((addr64_t)map->getVirtualAddress(),(unsigned)allocation,false);
++            myron_present_rect(reinterpret_cast<volatile uint8_t *>(bootMapping->getVirtualAddress()),video.v_rowBytes,width,height,
++                reinterpret_cast<const uint8_t *>(map->getVirtualAddress()),sourceStride,srcRect,dstRect,canvas[0],canvas[1],table);
++            __asm__ volatile("dsb sy" ::: "memory");
++            map->release();shadowValid=false;transferred=true;
++            native_legacy_transfer_observed(kIOReturnSuccess,request,length);finishTransfer(request);return;
+         }
+         noteSurface(surface,memory);
+         const bool half=nativeHalf(native_legacy_surface_format(surface),native_legacy_surface_planes(surface));
+@@ -948,10 +967,15 @@
+ #if defined(NATIVE_LEGACY_MACOS) && NATIVE_LEGACY_MACOS
+     bool consoleReleased=false;
+ #endif
++    static void layerGeometry(const OriginalLegacySwapRequest *r,MyronDisplayRect &src,MyronDisplayRect &dst,uint32_t canvas[2]) {
++        const unsigned char *p=reinterpret_cast<const unsigned char *>(r);
++        memcpy(&src,p+kRequestRect0,sizeof(src));memcpy(&dst,p+kRequestRect1,sizeof(dst));
++        memcpy(canvas,p+kRequestDims,8);
++    }
+     bool validateSwap(const OriginalLegacySwapRequest *request) override {
+         // Qualified original request fields are packed; use memcpy for each
+-        // access. Accept only one full-frame, untransformed, nonplanar BGRA
+-        // surface with real original backing memory. No generic capability
++        // access. Validate a single bounded layer against its destination canvas and
++        // the real IOSurface backing memory. No generic capability
+         // or success is supplied for other layer/format/geometry contracts.
+         auto bytes=reinterpret_cast<const unsigned char *>(request);
+         auto word=[&](unsigned offset){uint32_t value=0;memcpy(&value,bytes+offset,4);return value;};
+@@ -962,24 +986,28 @@
+             uint32_t width=0,height=0;getDisplayDimensions(&width,&height);
+             if(surface && surface->metaCast("IOSurface") && !surfaces[1] && !surfaces[2] && !surfaces[3] &&
+                native_legacy_single_layer_state(word(kRequestMasks),word(kRequestMasks+4),word(kRequestMasks+8))) {
+-                reason=3;bool rectangles=true;
+-                const unsigned rectOffsets[]={kRequestRect0,kRequestRect1};
+-                for(unsigned offset: rectOffsets) {
+-                    uint32_t rect[4]={};memcpy(rect,bytes+offset,sizeof(rect));
+-                    rectangles=rectangles && rect[0]==0 && rect[1]==0 && rect[2]==width && rect[3]==height;
++                reason=3;
++                MyronDisplayRect src,dst;uint32_t canvas[2];layerGeometry(request,src,dst,canvas);
++                bool options=true;for(unsigned offset=kRequestOptions;offset<=kRequestOptions+8;offset+=4)options=options && word(offset)==0;
++                bool geometryOK=width && height && options && myron_rect_inside(dst,canvas[0],canvas[1]) &&
++                    myron_rect_inside(src,native_legacy_surface_width(surface),native_legacy_surface_height(surface));
++                if(!geometryOK) {
++                    static uint32_t failures;
++                    if(!(__atomic_fetch_add(&failures,1U,__ATOMIC_RELAXED)%64))
++                        IOLog("myron-display: reject src=%u,%u,%u,%u dst=%u,%u,%u,%u canvas=%ux%u opts=%x,%x,%x\n",
++                            src.x,src.y,src.w,src.h,dst.x,dst.y,dst.w,dst.h,canvas[0],canvas[1],
++                            word(kRequestOptions),word(kRequestOptions+4),word(kRequestOptions+8));
+                 }
+-                bool options=true;for(unsigned offset=kRequestOptions;offset<=kRequestOptions+8;offset+=4)options=options && word(offset)==0;
+-                if(width && height && rectangles && options && word(kRequestDims)==width && word(kRequestDims+4)==height) {
++                if(geometryOK) {
+                     reason=4;
+                     IOMemoryDescriptor *memory=native_legacy_surface_descriptor(surface);
+                     // A surface larger than the display (rows or lines padded to the GPU's alignment) is accepted: only the visible rectangle,
+                     // which the request's rectangles already name as the whole display, is copied.
+                     const uint32_t format=native_legacy_surface_format(surface),planes=native_legacy_surface_planes(surface);
+-                    if(native_legacy_surface_width(surface)>=width && native_legacy_surface_height(surface)>=height &&
+-                       nativeScanoutFormat(format,planes) &&
+-                       memory && memory->metaCast("IOMemoryDescriptor") &&
+-                       native_legacy_surface_bounds(width,height,native_legacy_surface_stride(surface),
+-                           native_legacy_surface_allocation(surface),memory->getLength())) {
++                    uint64_t stride=native_legacy_surface_stride(surface);
++                    if(nativeScanoutFormat(format,planes) && memory && memory->metaCast("IOMemoryDescriptor") &&
++                       stride>=uint64_t(src.x+src.w)*(nativeHalf(format,planes)?8:4) &&
++                       native_legacy_surface_bounds(src.x+src.w,src.y+src.h,stride,native_legacy_surface_allocation(surface),memory->getLength())) {
+                         reason=0;accepted=true;
+                         countFormat(nativeHalf(format,planes)?2:format==0x26424741?1:0);
+                     } else {
+--- a/device/myron27/display/Test/request-state.c
++++ b/device/myron27/display/Test/request-state.c
+@@ -91,6 +91,22 @@
+         assert(!native_legacy_copy_pixels(target,60,20,(const void *)(UINTPTR_MAX-16),51,17,3,3));
+         assert(!memcmp(before,target,sizeof(target)));
+     }
++    {
++        uint32_t input[]={10,20,30,40,50,60}, output[12]={0};
++        struct MyronDisplayRect src={1,0,2,2},dst={1,0,2,2};
++        assert(myron_rect_inside(src,3,2) && !myron_rect_inside(src,2,2));
++        myron_present_rect((volatile uint8_t*)output,24,6,2,(const uint8_t*)input,12,src,dst,3,2,0);
++        const uint32_t expect[]={0xff000000,0xff000000,20,20,30,30,0xff000000,0xff000000,50,50,60,60};
++        assert(!memcmp(output,expect,sizeof(expect)));
++        uint16_t halfPixels[]={0,0,0,0,1,2,3,0,4,5,6,0,0,0,0,0};
++        static uint8_t table[32768];for(unsigned i=1;i<=6;++i)table[i]=(uint8_t)i;
++        struct MyronDisplayRect halfSrc={1,0,2,1},full={0,0,2,1};
++        myron_present_rect((volatile uint8_t*)output,8,2,1,(const uint8_t*)halfPixels,32,halfSrc,full,2,1,table);
++        assert(output[0]==0xff010203 && output[1]==0xff040506);
++        struct MyronDisplayRect entire={0,0,3,2};
++        myron_present_rect((volatile uint8_t*)output,4,1,2,(const uint8_t*)input,12,entire,entire,3,2,0);
++        assert(output[0]==10 && output[1]==40);
++    }
+     return 0;
+ }
+ 

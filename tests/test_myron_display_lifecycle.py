@@ -16,7 +16,7 @@ def method(text,signature):
 def fixture(source,abi):
     methods='\n'.join(method(source,s) for s in (
         'bool canPresent()','bool announcePoweredByFirmware()',
-        'bool startDisplay(','bool validateSwap('))
+        'bool startDisplay(','static void layerGeometry(','bool validateSwap('))
     # Run the actual kick entry gates, stopping before any IOSurface mapping.
     kick=method(source,'void kickOnce()')
     kick=kick[:kick.index('        const OriginalLegacySwapRequest *request=')]+'        ++passedKick;\n    }'
@@ -31,6 +31,7 @@ def fixture(source,abi):
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#define IOLog(...) ((void)0)
 #define assert(c) do {if(!(c)){fprintf(stderr,"assertion failed: %s\n",#c);exit(1);}} while(0)
 #include "NativeLegacyRequest.h"
 using IOReturn=int;
@@ -130,6 +131,8 @@ int main(){
  s.format=0x12345678;assert(!d.validateSwap(&r));s.format=0x42475241;
  s.memory.length=31;assert(!d.validateSwap(&r));s.memory.length=32;
  word(r,kRequestRect0,1);assert(!d.validateSwap(&r));word(r,kRequestRect0,0);
+ word(r,kRequestRect0+8,2);assert(d.validateSwap(&r));word(r,kRequestRect0+8,4);
+ word(r,kRequestOptions,1);assert(!d.validateSwap(&r));word(r,kRequestOptions,0);
  assert(d.validateSwap(&r));
  // Optional gates, missing mapping, nonprimary displays and failed state
  // publication cannot authorize a copy, even if PM says it is initialized.

@@ -53,6 +53,7 @@ def write_compositor_sites(cache, path):
  names={}
  for addr,name,_ in cache.symbols(image,strict=False):
   if name and name!='<redacted>':names.setdefault(addr,set()).add(name)
+ write_async_options(cache,image,starts,names,path.with_name("asynchronous-surface-options.json"))
  offsets=(0x2c3d14,0x2db7a8,0x2c8c2c,0x2d8004,0x2dc834,0x2ded50,0x2df2c4,
           0x2e3ae8,0x202ddc,0x2033d8,0x2e0a38,0xb0064,0xb8584,0xad51c,0xb3478,0xb8b4c,
           0x7d2a8,0x17e2dc,0xaafcc,0xaa818,0xabc18,0xab318)
@@ -103,6 +104,53 @@ def write_compositor_sites(cache, path):
   rows.append(dict(offset=hex(offset),function=hex(start-base),exact_names=sorted(names.get(start,())),
                    near_call=near_call,named_calls=sorted(calls)[:40],possible_literals=sorted(literals)[:40]))
  Path(path).write_text(json.dumps(dict(uuid=image['uuid'],sites=rows),indent=2)+'\n')
+
+def write_async_options(cache, image, starts, names, path):
+ """Identify configuration names and callers related to asynchronous surfaces in the pinned library."""
+ import re
+ import struct
+ from bisect import bisect_right
+ from collections import defaultdict
+ base=image['address']
+ raw=cache.read(base,image['size'])[0]
+ key_pattern=rb'(?:CA[A-Z_][A-Za-z0-9_]{3,100}|[a-z][a-z_]{5,90})'
+ keys={}
+ for match in re.finditer(rb'(?<![ -~])('+key_pattern+rb')\x00',raw):
+  key=match[1].decode()
+  if 'async' in key.lower():
+   keys[base+match.start(1)]=key
+ refs=defaultdict(list)
+ calls=defaultdict(set)
+ for i,(lo,hi) in enumerate(zip(starts,starts[1:])):
+  if not base<=lo<hi<=base+len(raw):continue
+  pages={}
+  for pc in range(lo,hi,4):
+   op=struct.unpack_from('<I',raw,pc-base)[0]
+   if op&0x9f000000==0x90000000: # ADRP
+    imm=((op>>29)&3)|(((op>>5)&0x7ffff)<<2)
+    if imm&0x100000:imm-=0x200000
+    pages[op&31]=((pc&~4095)+(imm<<12),pc)
+   elif op&0xffc00000==0x91000000: # ADD Xd,Xn,#imm12
+    item=pages.get((op>>5)&31)
+    if item and pc-item[1]<=48:
+     address=item[0]+((op>>10)&4095)
+     if address in keys:refs[lo].append((pc,keys[address]))
+   elif op&0xfc000000 in (0x94000000,0x14000000):
+    offs=op&0x3ffffff
+    if offs&0x2000000:offs-=0x4000000
+    dest=pc+4*offs
+    if dest!=lo and dest in names:calls[lo].add(dest)
+ def node(a):
+  return sorted(names.get(a,())) or [hex(a-base)]
+ def async_lifecycle(a):
+  return any(any(q in n for q in ('AsynchronousItem','AsynchronousNode','AsynchronousState')) for n in names.get(a,()))
+ seed=set(refs)|{a for a in names if async_lifecycle(a)}
+ result=[]
+ for lo in sorted(seed|{a for a,v in calls.items() if v&seed}):
+  relevant=(calls[lo] if lo in seed else calls[lo]&seed)
+  result.append(dict(function=node(lo),offset=hex(lo-base),references=[(hex(p-base),s) for p,s in refs[lo]],
+                     calls=[n for a in sorted(relevant) for n in node(a)][:160]))
+ path.write_text(json.dumps(dict(uuid=image['uuid'],possible_keys=sorted(set(keys.values())),functions=result),indent=2)+'\n')
 
 def main():
  p=argparse.ArgumentParser(description=__doc__)

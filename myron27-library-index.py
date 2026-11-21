@@ -119,6 +119,23 @@ def write_async_options(cache, image, starts, names, path):
   key=match[1].decode()
   if 'async' in key.lower():
    keys[base+match.start(1)]=key
+ # Some configuration names are reached through a CFString or a pointer
+ # table. Keep indirect candidates separate from direct string references.
+ direct=keys.copy()
+ slots={}
+ for seg in cache.macho(image)['segments']:
+  if not seg['name'].startswith(('__DATA','__AUTH')) or not seg['file_bytes']:continue
+  data=cache.read(seg['address'],seg['file_bytes'])[0]
+  for off in range(0,len(data)-7,8):
+   value=struct.unpack_from('<Q',data,off)[0]
+   if not value:continue
+   for address in (value,cache.region_start+(value&0x3ffffffff)):
+    if address in direct:
+     slot=seg['address']+off; slots[slot]=direct[address]
+     if off>=16 and off+16<=len(data) and struct.unpack_from('<Q',data,off+8)[0]==len(direct[address]):
+      keys[slot-16]='CFString: '+direct[address]
+     break
+ keys.update((a,'pointer slot: '+v) for a,v in slots.items())
  refs=defaultdict(list)
  calls=defaultdict(set)
  for i,(lo,hi) in enumerate(zip(starts,starts[1:])):
@@ -130,6 +147,15 @@ def write_async_options(cache, image, starts, names, path):
     imm=((op>>29)&3)|(((op>>5)&0x7ffff)<<2)
     if imm&0x100000:imm-=0x200000
     pages[op&31]=((pc&~4095)+(imm<<12),pc)
+   elif op&0x9f000000==0x10000000: # ADR
+    imm=((op>>29)&3)|(((op>>5)&0x7ffff)<<2)
+    if imm&0x100000:imm-=0x200000
+    if pc+imm in keys:refs[lo].append((pc,keys[pc+imm]))
+   elif op&0xffc00000==0xf9400000: # LDR Xt,[Xn,#imm]
+    item=pages.get((op>>5)&31)
+    if item and pc-item[1]<=64:
+     address=item[0]+8*((op>>10)&4095)
+     if address in keys:refs[lo].append((pc,keys[address]))
    elif op&0xffc00000==0x91000000: # ADD Xd,Xn,#imm12
     item=pages.get((op>>5)&31)
     if item and pc-item[1]<=48:
@@ -144,13 +170,43 @@ def write_async_options(cache, image, starts, names, path):
   return sorted(names.get(a,())) or [hex(a-base)]
  def async_lifecycle(a):
   return any(any(q in n for q in ('AsynchronousItem','AsynchronousNode','AsynchronousState')) for n in names.get(a,()))
- seed=set(refs)|{a for a in names if async_lifecycle(a)}
+ seed=set(refs)|{a for a in names if async_lifecycle(a) or a-base==0x61f98}
  result=[]
  for lo in sorted(seed|{a for a,v in calls.items() if v&seed}):
   relevant=(calls[lo] if lo in seed else calls[lo]&seed)
   result.append(dict(function=node(lo),offset=hex(lo-base),references=[(hex(p-base),s) for p,s in refs[lo]],
                      calls=[n for a in sorted(relevant) for n in node(a)][:160]))
- path.write_text(json.dumps(dict(uuid=image['uuid'],possible_keys=sorted(set(keys.values())),functions=result),indent=2)+'\n')
+ # Keep named calls and conditionals in the one routine that constructs
+ # the asynchronous state. For references to global bytes, identify writers.
+ from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM
+ from capstone.arm64 import ARM64_OP_MEM,ARM64_OP_REG,ARM64_OP_IMM
+ cs=Cs(CS_ARCH_ARM64,CS_MODE_ARM);cs.detail=True
+ host=base+0x61f98; end=starts[bisect_right(starts,host)]
+ pages={};uses={};events=[]
+ for op in cs.disasm(cache.read(host,end-host,executable=True)[0],host):
+  os_=op.operands; detail=None
+  if op.mnemonic=='adrp':pages[os_[0].reg]=os_[1].imm
+  elif op.mnemonic.startswith('ldr') and len(os_)>1 and os_[1].type==ARM64_OP_MEM and os_[1].mem.base in pages:
+   target=pages[os_[1].mem.base]+os_[1].mem.disp; uses[target]=[];detail='global '+hex(target)
+  elif op.mnemonic=='bl' and os_[0].type==ARM64_OP_IMM:detail='call '+','.join(node(os_[0].imm))
+  elif op.mnemonic in ('tbz','tbnz','cbz','cbnz') or op.mnemonic.startswith('b.'):detail=op.mnemonic+' '+op.op_str
+  if detail:events.append([hex(op.address-base),detail])
+ for lo,hi in zip(starts,starts[1:]):
+  if not base<=lo<hi<=base+len(raw):continue
+  pages={}
+  for pc in range(lo,hi,4):
+   op=struct.unpack_from('<I',raw,pc-base)[0]
+   if op&0x9f000000==0x90000000:
+    imm=((op>>29)&3)|(((op>>5)&0x7ffff)<<2)
+    pages[op&31]=((pc&~4095)+((imm-(0x200000 if imm&0x100000 else 0))<<12),pc)
+   elif op&0x3fc00000==0x39000000: # STR unsigned immediate
+    item=pages.get((op>>5)&31)
+    if item and pc-item[1]<=96:
+     target=item[0]+(((op>>10)&4095)<<(op>>30))
+     if target in uses and len(uses[target])<16:
+      uses[target].append([hex(pc-base),node(lo),refs.get(lo,[])])
+ path.with_name('hosted-context-options.json').write_text(json.dumps(dict(events=events,possible_writers={hex(k):v for k,v in uses.items()}),indent=2)+'\n')
+ path.write_text(json.dumps(dict(uuid=image['uuid'],possible_keys=sorted(set(direct.values())),indirect_slots={hex(a):v for a,v in slots.items()},functions=result),indent=2)+'\n')
 
 def main():
  p=argparse.ArgumentParser(description=__doc__)

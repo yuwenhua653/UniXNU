@@ -179,3 +179,34 @@
 +  scenario==3||scenario==4?std::vector<int>{1,2,3,4}:std::vector<int>{1,2,3,4,5,7,6,8};
   assert(calls==expected);
   unsigned stage=scenario==1||scenario==6?0:scenario==2?2:scenario==5?5:scenario==3||scenario==4?7:8;
+--- a/tests/test_root_runtime.py
++++ b/tests/test_root_runtime.py
+@@ -1090,6 +1090,6 @@
+                  '_native_verified_block_manifest_sha384', '_IOGetBootManifestHash', '_myron_start_data',
+                  '_myron_data_prepare', '_native_ram_block_volume_seed',
+-                 '_myron_dyld_startup_prepare', '_commpage_update_dyld_flags']
+-        calls = [[1, 6], [2, 3, 4, 5, 18], [], [], [], [], [], [8], [], [1], [11, 19, 21], [12, 13, 14, 15], [], [], [], [16, 16, 17], [], [], [], [20, 13], [], [20, 22], []]
++                 '_myron_dyld_startup_prepare', '_commpage_update_dyld_flags', '_myron_touch_start']
++        calls = [[1, 6], [2, 3, 4, 5, 18, 23], [], [], [], [], [], [8], [], [1], [11, 19, 21], [12, 13, 14, 15], [], [], [], [16, 16, 17], [], [], [], [20, 13], [], [20, 22], [], []]
+         offsets, cursor = [], 0
+         for targets in calls:
+@@ -1117,10 +1117,10 @@
+         path = self.work / 'root-link.macho'; path.write_bytes(raw)
+         result = verify_chain(path, ARGS.upstream / 'kits/XnuPrelink', root_runtime=True, data_mount=True)
+-        self.assertEqual(len(result['edges']), 18)
++        self.assertEqual(len(result['edges']), 19)
+         self.assertTrue(result['data_mount_enabled'])
+         self.assertEqual(result['root_runtime_mode'], 3)
+         candidate = verify_chain(path, ARGS.upstream / 'kits/XnuPrelink', root_runtime=True,
+                                  data_mount=True, dyld_startup=True)
+-        self.assertEqual(len(candidate['edges']),21)
++        self.assertEqual(len(candidate['edges']),22)
+         self.assertTrue(candidate['dyld_startup_candidate'])
+         self.assertFalse(candidate['dyld_startup_default_enabled'])
+@@ -1136,5 +1136,5 @@
+         with self.assertRaisesRegex(ValueError,'precedes required mounts'):
+             verify_chain(path,ARGS.upstream/'kits/XnuPrelink',root_runtime=True,data_mount=True,dyld_startup=True)
+-        for at in (text + 4, text + offsets[1] + 12, text + offsets[1] + 16, text + offsets[7],
++        for at in (text + 4, text + offsets[1] + 12, text + offsets[1] + 16, text + offsets[1] + 20, text + offsets[7],
+                    text + offsets[10], text + offsets[11], text + offsets[11] + 4,
+                    text + offsets[11] + 8, text + offsets[11] + 12,

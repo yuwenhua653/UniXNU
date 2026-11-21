@@ -1,0 +1,145 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+#include "MyronFT3683.h"
+#include "MyronTouchBoard.h"
+#include "fts_myron_frame.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+struct controller {
+    uint8_t id[2], mode, data[MYRON_FRAME_BYTES], report[MYRON_REPORT_BYTES];
+    unsigned writes, calls, reports;
+    int bad_crc, bad_status, reject;
+};
+static void wait_us(void *p, unsigned n) { (void)p; assert(n > 0); }
+static int transfer(void *p, const uint8_t *tx, uint8_t *rx, size_t n)
+{
+    struct controller *c = p;
+    unsigned size = tx[2]*256u + tx[3];
+    c->calls++;
+    if (c->bad_status) { rx[3] = 0x80; return 0; }
+    if (!tx[1]) {
+        assert(tx[0]==0x9e && n==8 && size==1 && tx[7]==0);
+        c->writes++; c->mode=tx[7]; return 0;
+    }
+    assert(tx[1]==0xa0 && n==size+9);
+    switch (tx[0]) {
+    case 1: assert(size==MYRON_FRAME_BYTES); memcpy(rx+7,c->data,size); break;
+    case 0xa3: rx[7]=c->id[0]; break;
+    case 0x9f: rx[7]=c->id[1]; break;
+    case 0x9e: rx[7]=c->mode; break;
+    default: assert(0);
+    }
+    uint16_t crc = fts_myron_crc(rx+7,size);
+    rx[7+size]=(uint8_t)(crc ^ c->bad_crc); rx[8+size]=(uint8_t)(crc>>8);
+    return 0;
+}
+static int submit(void *p, const uint8_t *data, size_t n)
+{
+    struct controller *c=p;
+    assert(n==MYRON_REPORT_BYTES && data[0]==3);
+    if (c->reject) return -EIO;
+    memcpy(c->report,data,n);
+    c->reports++;
+    return 0;
+}
+static void point(uint8_t *p, unsigned flag, unsigned id, unsigned x, unsigned y)
+{
+    x*=16; y*=16;
+    p[0]=(uint8_t)((flag<<6)|(x>>12)); p[1]=(uint8_t)(x>>4);
+    p[2]=(uint8_t)((id<<4)|(y>>12)); p[3]=(uint8_t)(y>>4);
+    p[4]=(uint8_t)((x<<4)|(y&15));
+}
+struct wires { unsigned cs,clk,mosi,bits,reads,cs_edges; uint16_t sent; };
+static uint32_t read_miso(void *p, enum myron_pin pin, unsigned off)
+{
+    struct wires *w=p;
+    assert(pin==MISO && off==4 && w->cs==0 && w->clk==2 && w->bits==w->reads+1);
+    return (0x9643u >> (15-w->reads++))&1;
+}
+static void write_wire(void *p, enum myron_pin pin, unsigned off, uint32_t v)
+{
+    struct wires *w=p; assert(off==4 && (v==0 || v==2));
+    if (pin==CS) { assert(w->cs!=v && !w->clk); w->cs=v; w->cs_edges++; return; }
+    assert(!w->cs);
+    if (pin==MOSI) { assert(!w->clk); w->mosi=v; return; }
+    assert(pin==SCLK && w->clk!=v);
+    if (v) { w->sent=(uint16_t)(w->sent*2+(w->mosi!=0)); w->bits++; }
+    w->clk=v;
+}
+/* Walk the descriptor as a HID consumer would and verify report wire sizes. */
+static void descriptor(void)
+{
+    unsigned id=0, size=0, count=0, page=0, usage=0, depth=0, fingers=0;
+    unsigned input_bits=0, feature_bits=0, x=0, y=0, tips=0;
+    for (size_t i=0; i<myron_touch_descriptor_bytes;) {
+        uint8_t tag=myron_touch_descriptor[i++];
+        unsigned length=tag&3, v=0;
+        if (length==3) length=4;
+        assert(i+length<=myron_touch_descriptor_bytes);
+        for (unsigned j=0; j<length; ++j) v|=(unsigned)myron_touch_descriptor[i++]<<(8*j);
+        switch (tag&0xfc) {
+        case 0x04: page=v; break;
+        case 0x08: usage=v; break;
+        case 0x84: id=v; break;
+        case 0x74: size=v; break;
+        case 0x94: count=v; break;
+        case 0xa0:
+            if (!depth) assert(page==13 && usage==4 && v==1);
+            else { assert(page==13 && usage==0x22 && v==2); ++fingers; }
+            ++depth; break;
+        case 0xc0: assert(depth); --depth; break;
+        case 0x80:
+            assert(id==3); input_bits+=size*count;
+            if ((v&1)==0 && page==1 && usage==0x30) ++x;
+            if ((v&1)==0 && page==1 && usage==0x31) ++y;
+            if ((v&1)==0 && page==13 && usage==0x42) ++tips;
+            break;
+        case 0xb0: assert(id==4 && page==13 && usage==0x55); feature_bits+=size*count; break;
+        }
+    }
+    assert(!depth && fingers==10 && x==10 && y==10 && tips==10);
+    assert(input_bits==8*(MYRON_REPORT_BYTES-1) && feature_bits==8);
+}
+int main(void)
+{
+    descriptor();
+    struct wires wires={.cs=2};
+    struct myron_gpio_io io={&wires,read_miso,write_wire,wait_us};
+    uint8_t tx[]={0x81,0x3f},rx[2];
+    assert(myron_spi_transfer(&io,tx,rx,2)==0 && wires.cs_edges==2 && wires.bits==16);
+    assert(rx[0]==0x96 && rx[1]==0x43 && wires.sent==0x813f && wires.clk==0 && wires.cs==2);
+    assert(fts_myron_crc((const uint8_t *)"123456789",9)==0x6f91);
+    struct controller c={.id={0x36,0x83},.mode=0xaa};
+    struct myron_touch t={.bus={&c,transfer,wait_us}};
+    c.id[0]=0; assert(myron_touch_identify_and_start(&t)==-ENODEV && !c.writes);
+    c.id[0]=0x36; assert(myron_touch_identify_and_start(&t)==0 && t.ready && c.writes==1);
+    c.data[1]=0x22;
+    point(c.data+4,0,7,1199,2607); point(c.data+12,0,1,0,0);
+    assert(!myron_touch_read_contacts(&t,submit,&c) && c.report[61]==2 && c.report[2]==1);
+    assert(c.report[7]==3 && c.report[8]==7 && t.x[7]>32730 && t.y[7]>32730);
+    c.data[1]=0x21; point(c.data+4,2,7,600,1304);
+    c.reject=1; assert(myron_touch_read_contacts(&t,submit,&c)==-EIO && t.active==130);
+    c.reject=0; assert(!myron_touch_read_contacts(&t,submit,&c) && t.active==128);
+    assert(c.report[1]==3 && c.report[2]==7 && c.report[7]==2 && c.report[8]==1);
+    uint16_t last=t.x[7]; assert(last>=16383 && last<=16384);
+    unsigned count=c.reports;
+    c.data[1]=0x20;
+    for (unsigned i=0; i<30; ++i) assert(!myron_touch_read_contacts(&t,submit,&c));
+    assert(t.active==128 && c.reports==count);
+    c.bad_crc=1; unsigned before=c.calls;
+    assert(myron_touch_read_contacts(&t,submit,&c)==-EBADMSG && c.calls-before==3);
+    c.bad_crc=0; c.bad_status=1;
+    assert(myron_touch_read_contacts(&t,submit,&c)==-EIO && t.active==128 && c.reports==count);
+    c.bad_status=0; c.data[1]=0x22; point(c.data+12,2,7,1,2);
+    assert(myron_touch_read_contacts(&t,submit,&c)==-EBADMSG && c.reports==count);
+    c.data[1]=0x21; point(c.data+4,1,7,0,0);
+    assert(!myron_touch_read_contacts(&t,submit,&c) && !t.active && c.report[1]==2);
+    assert((unsigned)(c.report[3]|c.report[4]<<8)==last && c.report[61]==1);
+    memset(c.data,0xff,sizeof(c.data)); c.data[0]=0; c.data[1]=1;
+    c.data[2]=0; c.data[3]=40; c.data[4]=0x40; c.data[5]=80;
+    assert(!myron_touch_read_contacts(&t,submit,&c) && t.active==16);
+    memset(c.data,0xff,sizeof(c.data));
+    assert(!myron_touch_read_contacts(&t,submit,&c) && !t.ready && !t.active && c.report[1]==2);
+    puts("PASS: SPI mode 0, probe, TIC readback, CRC, v1/v2 contacts, XY, two fingers, moves, lifts, dropped report, controller restart");
+}

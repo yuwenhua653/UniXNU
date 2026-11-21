@@ -87,6 +87,9 @@ if not a.source_repo or 'buttons' in board_adt:
         need(buttons.get(key)==value,'Embedded /buttons/'+key+' differs from the myron hardware')
 kernel=read('Payloads/kernel.macho');definitions=kernel_definitions(kernel)
 required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_boot_progress_putc','_myron_boot_progress_state'} | BUFFER_TRACE_SYMBOLS
+if (device/'touch/iphone12-1-hid-24A446.json').is_file():
+    required |= {'_myron_touch_start', '_myron_publish_digitizer', '_myron_touch_read_contacts',
+                 '__ZTV14MyronDigitizer'}
 need(required<=definitions.keys(),f'Continuous recorder missing from final prelinked kernel: {sorted(required-definitions.keys())}')
 buffer_definitions=require_buffer_trace(kernel)
 exit_trace_definitions=require_exit_trace(kernel)

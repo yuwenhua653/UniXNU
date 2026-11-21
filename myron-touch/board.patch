@@ -1,0 +1,164 @@
+--- a/display/display_abi.py
++++ b/display/display_abi.py
+@@ -195,10 +195,10 @@
+     return cache
+ 
+ 
+-def object_slots(data):
++def object_slots(data, symbol="__ZTV19NativeLegacyDisplay", slots=379):
+     """Inspect exact object vtable authentication relocations, not nm text."""
+     from build_ufs_dormant import macho
+-    info=macho(data,1);table=info['defined']['__ZTV19NativeLegacyDisplay']
++    info=macho(data,1);table=info['defined'][symbol]
+     commands=[];at=32
+     for _ in range(struct.unpack_from('<I',data,16)[0]):
+         cmd,size=struct.unpack_from('<II',data,at);commands.append((cmd,at));at+=size
+@@ -218,7 +218,7 @@
+             require(ro+rc*8<=len(data),'Display relocation table truncated')
+             for j in range(rc):
+                 addr,bits=struct.unpack_from('<iI',data,ro+j*8);site=va+addr
+-                if not table+16<=site<=table+16+379*8:continue
++                if not table+16<=site<=table+16+slots*8:continue
+                 require(site not in rows and addr>=0 and addr+8<=size and off+addr+8<=len(data),'Bad display relocation')
+                 require(bits>>28==11 and bits>>27&1 and bits>>25&3==3 and not bits>>24&1,'Display slot is not authenticated')
+                 require(bits&0xffffff<len(symbols),'Bad display relocation symbol')
+@@ -226,9 +226,9 @@
+                 require(word>>63 and word&0xffffffff==0 and word>>51&0xfff==0,'Bad display relocation addend')
+                 rows[site]=dict(name=symbols[bits&0xffffff],auth=1,key=word>>49&3,
+                     diversity=word>>32&0xffff,address_diversity=word>>48&1)
+-    require(table+16+379*8 not in rows and all(table+16+8*i in rows for i in range(379)),
++    require(table+16+slots*8 not in rows and all(table+16+8*i in rows for i in range(slots)),
+             'Compiled display vtable is not exactly 379 slots')
+-    return info,[dict(slot=i,**rows[table+16+i*8]) for i in range(379)]
++    return info,[dict(slot=i,**rows[table+16+i*8]) for i in range(slots)]
+ 
+ 
+ def audit_object(obj,abi,donor=None,native=None,mapping_path=None,tool=None):
+--- a/display/display_build.py
++++ b/display/display_build.py
+@@ -51,6 +51,12 @@
+             obj=late
+         require(not initializers(macho(obj.read_bytes(),1)),'Display must be explicitly registered after donor kext load')
+         objects.append(obj);evidence.append(dict(source=name,sha256=sha(src),object_sha256=sha(obj)))
++    sys.path.insert(0, str(here/'touch'))
++    from touch_build import compile_touch
++    touch_objects,touch_keep,touch_contract=compile_touch(tree,here,out/'touch',builder,target,env,record,
++        donor,native,mapping,tool,objcopy)
++    contract['touch']=touch_contract
++    objects.extend(touch_objects)
+     (out/'display-abi.json').write_text(json.dumps(contract,indent=2)+'\n')
+     # Preflight still compiles adapters; these never reach a phone until donor,
+     # native inheritance, final GOT and all final branch checks have passed.
+@@ -69,7 +75,7 @@
+         slots=379,runtime_qualified=False,gpu_enabled=False,
+         keystore=json.loads((source/'AppleKeyStoreState/source.json').read_text()))
+     (out/'display-build.json').write_text(json.dumps(report,indent=2)+'\n')
+-    return objects,keep,contract,report
++    return objects,keep+touch_keep,contract,report
+ 
+ 
+ def verify_linked(path,contract,tool):
+@@ -99,6 +105,8 @@
+     for row in contract['methods']:
+         require(fix.get(table+16+8*row['slot'])==(names[row['name']],)+tuple(row[k] for k in
+             ('auth','key','diversity','address_diversity')),'Linked display slot changed')
++    if 'touch' in contract:
++        verify_linked(path,contract['touch'],tool)
+     return got
+ 
+ 
+@@ -130,15 +138,19 @@
+             require(bti==0xd503245f and branch&0xfc000000==0x14000000 and
+                 site+4+signed(branch&0x3ffffff,26)*4==address,'Final display adapter misses original: '+name)
+             records=[r for r in report['native_original_branches'] if r['symbol']==name]
+-            require(len(records)==1 and records[0]['owner'] in ('com.apple.iokit.IOMobileGraphicsFamily','com.apple.iokit.IOSurface') and
++            require(len(records)==1 and records[0]['owner'] in contract.get('owners', ('com.apple.iokit.IOMobileGraphicsFamily','com.apple.iokit.IOSurface')) and
+                 int(records[0]['target'],16)==address and int(records[0]['source'],16)==site+4,'Wrong display adapter owner')
+         else:
+             for site in got[name]:
+                 site=moved(site)
+                 require(site not in fix and struct.unpack('<Q',image.read(site,8))[0]==address,'Final display data import moved')
+     table=names[contract['vtable_symbol']];original_fix=original.fixups()
+-    for i in range(379):
++    for i in range(len(contract['methods'])):
+         site=table+16+i*8;p=original_fix[site]
+         require(fix.get(moved(site))==(moved(p[0]),)+p[1:],'Final display PAC slot changed')
+-    return dict(authenticated_slots_checked=379,display_original_bindings_checked=len(contract['bindings']),
++    if 'touch' in contract:
++        from touch_build import matching
++        verify_prelinked(native,candidate,contract['touch'],tool)
++        require(matching(image)==contract['touch']['personality_sha256'], 'Final digitizer matching metadata changed')
++    return dict(authenticated_slots_checked=len(contract['methods']),display_original_bindings_checked=len(contract['bindings']),
+         runtime_qualified=False,gpu_enabled=False)
+--- a/MyronStorageBoot.cpp
++++ b/MyronStorageBoot.cpp
+@@ -15,6 +15,7 @@
+ extern "C" int myron_start_root(void);
+ extern "C" int myron_start_data(void);
+ extern "C" void myron_display_start(void);
++extern "C" void myron_touch_start(void);
+ extern "C" void myron_keystore_start(void);
+ #endif
+ extern "C" {
+@@ -77,6 +78,7 @@
+             // The entry checks the explicit CPU-display boot policy itself.
+             myron_keystore_start();
+             myron_display_start();
++            myron_touch_start();
+         }
+     }
+ #endif
+--- a/prepare_desktop.py
++++ b/prepare_desktop.py
+@@ -269,7 +269,8 @@
+                     extra_adapters=()
+                     if mode == 'root':
+                         display_contract=json.loads((out/'ufs'/mode/'display/display-abi.json').read_text())
+-                        extra_adapters=tuple(n for n,r in display_contract['bindings'].items() if r['kind']=='function')
++                        extra_adapters=tuple(n for c in (display_contract, display_contract['touch'])
++                                             for n,r in c['bindings'].items() if r['kind']=='function')
+                     evidence = verify_prelinked(retained_kernel/'kernel.macho', retained_output,
+                         json.loads((out/'ufs'/mode/'storage-abi.json').read_text()), upstream/'kits/XnuPrelink', extra_adapters)
+                     if mode in ('boot', 'root'):
+@@ -280,6 +281,7 @@
+                             dyld_startup=mode == 'root' and (args.root_bundle/'dyld-startup.json').is_file())
+                     if mode == 'root':
+                         sys.path.insert(0,str(here/'display'))
++                        sys.path.insert(0,str(here/'touch'))
+                         from display_build import verify_prelinked as verify_display_prelinked
+                         evidence['display'] = verify_display_prelinked(retained_kernel/'kernel.macho', retained_output,
+                             display_contract,upstream/'kits/XnuPrelink')
+--- a/build_ufs_dormant.py
++++ b/build_ufs_dormant.py
+@@ -538,7 +538,8 @@
+                 require(not candidate_info['undefined'], 'Dormant native candidate has unresolved imports')
+                 require(all(name in candidate_info['defined'] for name in keep if not retained or
+                             (not name.endswith('.original') and name not in binding_report['bindings'] and
+-                             name not in (display_contract['bindings'] if display_contract else {}))),
++                             name not in (display_contract['bindings'] if display_contract else {}) and
++                             name not in (display_contract['touch']['bindings'] if display_contract else {}))),
+                         'Dormant probe or source-class vtable was dead-stripped')
+                 metadata = dormant_metadata(candidate_info)
+                 if retained:
+--- a/upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/profile.toml
++++ b/upstream-overlay/profiles/os/ios-27.0.1-24A446-iphone12-1/profile.toml
+@@ -36,7 +36,7 @@
+ # For MH_FILESET the emitter preserves collection-relative addresses.
+ "slide" = "0"
+ # Retain AppleARMPlatform exports as a dependency, without Apple CPU/PE matching.
+-"roots" = ["com.apple.AppleFSCompression.AppleFSCompressionTypeZlib", "com.apple.driver.AppleARMWatchdogTimer", "com.apple.driver.AppleAudioClockLibs", "com.apple.driver.AppleEffaceableStorage", "com.apple.driver.AppleIISController", "com.apple.driver.AppleM2ScalerCSCDriver", "com.apple.driver.AppleMobileFileIntegrity", "com.apple.driver.ApplePMGR", "com.apple.driver.IODARTFamily", "com.apple.filesystems.apfs", "com.apple.iokit.CoreAnalyticsFamily", "com.apple.iokit.IOAVFamily", "com.apple.iokit.IOAudio2Family", "com.apple.iokit.IOCECFamily", "com.apple.iokit.IOCryptoAcceleratorFamily", "com.apple.iokit.IOGPUFamily", "com.apple.iokit.IOHDCPFamily", "com.apple.iokit.IOMobileGraphicsFamily", "com.apple.iokit.IOReportFamily", "com.apple.iokit.IOSlowAdaptiveClockingFamily", "com.apple.iokit.IOStorageFamily", "com.apple.iokit.IOSurface", "com.apple.kec.Libm", "com.apple.kec.corecrypto", "com.apple.kext.AppleMatch", "com.apple.kext.CoreTrust", "com.apple.security.AppleImage4", "com.apple.security.sandbox", "com.apple.iokit.IOHIDFamily"]
++"roots" = ["com.apple.AppleFSCompression.AppleFSCompressionTypeZlib", "com.apple.driver.AppleARMWatchdogTimer", "com.apple.driver.AppleAudioClockLibs", "com.apple.driver.AppleEffaceableStorage", "com.apple.driver.AppleIISController", "com.apple.driver.AppleM2ScalerCSCDriver", "com.apple.driver.AppleMobileFileIntegrity", "com.apple.driver.ApplePMGR", "com.apple.driver.IODARTFamily", "com.apple.filesystems.apfs", "com.apple.iokit.CoreAnalyticsFamily", "com.apple.iokit.IOAVFamily", "com.apple.iokit.IOAudio2Family", "com.apple.iokit.IOCECFamily", "com.apple.iokit.IOCryptoAcceleratorFamily", "com.apple.iokit.IOGPUFamily", "com.apple.iokit.IOHDCPFamily", "com.apple.iokit.IOMobileGraphicsFamily", "com.apple.iokit.IOReportFamily", "com.apple.iokit.IOSlowAdaptiveClockingFamily", "com.apple.iokit.IOStorageFamily", "com.apple.iokit.IOSurface", "com.apple.kec.Libm", "com.apple.kec.corecrypto", "com.apple.kext.AppleMatch", "com.apple.kext.CoreTrust", "com.apple.security.AppleImage4", "com.apple.security.sandbox", "com.apple.iokit.IOHIDFamily", "com.apple.iokit.IOHIDEventDriverSafeBoot"]
+ 
+ 
+ 
+--- a/storage_boot_hook.py
++++ b/storage_boot_hook.py
+@@ -168,7 +168,7 @@
+                 (WRAPPER, '_myron_ufs_register_classes'), (WRAPPER, '_myron_ufs_probe')]
+     if root_runtime:
+         required += [(WRAPPER, '_myron_start_root'),
+-                     (WRAPPER, '_myron_start_data'),
++                     (WRAPPER, '_myron_start_data'), (WRAPPER, '_myron_touch_start'),
+                      ('_bsd_init', '_native_verified_block_root_authorized'),
+                      ('_native_owner_root_accepted_checkpoint', '_myron_record_root_auth'),
+                      ('_load_init_program', '_myron_systemos_prepare'),

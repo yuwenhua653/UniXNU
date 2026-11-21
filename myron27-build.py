@@ -24,10 +24,14 @@ if any(v is not None for v in owner_values):
   parser.error('Device inputs require --desktop --original-root and one capture/history input plus all key/anchor options')
 if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
+TOUCH_SOURCES = ('board.patch', 'touch_build.py', 'MyronDigitizer.cpp', 'MyronTouchStart.cpp', 'MyronTouchBoard.h',
+                 'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
+                 'iphone12-1-hid-24A446.json', 'test_touch.c')
 def root_qualification_identity(fixture):
  return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
   'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
+  **{'touch/'+name:here/'myron-touch'/name for name in TOUCH_SOURCES},
   'graphical_source':here/'myron-graphical/device.patch',
   'graphical_firmware':here/'myron-graphical/board.patch',
   'boot_artwork':here/'myron-graphical/MyronBootLogo.h',
@@ -37,6 +41,10 @@ def root_qualification_identity(fixture):
 def qualify_root_inputs():
  d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
  qualification.mkdir(exist_ok=True)
+ touch=d/'touch'
+ subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(touch/'MyronFT3683.c'),
+                 str(touch/'test_touch.c'),'-o',str(qualification/'touch-host-test')],check=True)
+ subprocess.run([str(qualification/'touch-host-test')],check=True)
  (qualification/'host-checks.json').unlink(missing_ok=True)
  subprocess.run(['brew','install','openssl@3','mtools'],check=True)
  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
@@ -339,6 +347,16 @@ for name,item in snapshot['files'].items():
 graphical=here/'myron-graphical'
 subprocess.run(['patch','-s','-p1','-i',str(graphical/'device.patch')],cwd=root,check=True)
 board=root/'device/myron27'
+touch=board/'touch'
+touch.mkdir(exist_ok=True)
+for name in TOUCH_SOURCES:
+ (touch/name).write_bytes((here/'myron-touch'/name).read_bytes())
+for line in (touch/'board.patch').read_text().splitlines():
+ if line.startswith('--- a/'):
+  path=board/line[6:]
+  data=path.read_bytes()
+  if b'\r\n' in data: path.write_bytes(data.replace(b'\r\n',b'\n'))
+subprocess.run(['patch','-s','-p1','-i',str(touch/'board.patch')],cwd=board,check=True)
 (board/'graphical-board.patch').write_bytes((graphical/'board.patch').read_bytes())
 (board/'package/MyronBootLogo.h').write_bytes((graphical/'MyronBootLogo.h').read_bytes())
 if options.source_only:

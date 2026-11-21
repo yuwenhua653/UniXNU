@@ -54,7 +54,8 @@ def write_compositor_sites(cache, path):
  for addr,name,_ in cache.symbols(image,strict=False):
   if name and name!='<redacted>':names.setdefault(addr,set()).add(name)
  offsets=(0x2c3d14,0x2db7a8,0x2c8c2c,0x2d8004,0x2dc834,0x2ded50,0x2df2c4,
-          0x2e3ae8,0x202ddc,0x2033d8,0x2e0a38,0xb0064,0xb8584,0xad51c,0xb3478,0xb8b4c)
+          0x2e3ae8,0x202ddc,0x2033d8,0x2e0a38,0xb0064,0xb8584,0xad51c,0xb3478,0xb8b4c,
+          0x7d2a8,0x17e2dc,0xaafcc,0xaa818,0xabc18,0xab318)
  cs=Cs(CS_ARCH_ARM64,CS_MODE_ARM);cs.detail=True
  rows=[]
  for offset in offsets:
@@ -78,8 +79,29 @@ def write_compositor_sites(cache, path):
      if len(b)==2 and 4<=len(b[0])<=100 and all(32<=x<127 for x in b[0]):literals.add(b[0].decode())
    elif ins.mnemonic=='bl' and len(ops)==1 and ops[0].type==ARM64_OP_IMM:
     calls.update(names.get(ops[0].imm,()))
+  # The assertion caller is a return PC adjusted to the calling instruction.
+  # Keep individual literal references near that call distinct from function-wide hints.
+  near_call=[]
+  if offset==0x7d2a8:
+   literal_pages={}
+   site=base+offset
+   window=max(start,site-96)
+   block=cache.read(window,site+4-window,executable=True)[0]
+   for ins in cs.disasm(block,window):
+    ops=ins.operands
+    if ins.mnemonic=='adrp' and len(ops)==2:
+     literal_pages[ops[0].reg]=ops[1].imm
+    elif ins.mnemonic=='add' and len(ops)==3 and ops[1].type==ARM64_OP_REG and ops[2].type==ARM64_OP_IMM:
+     page=literal_pages.get(ops[1].reg)
+     if page is None or ops[2].shift.value:continue
+     try: value=cache.read(page+ops[2].imm,512)[0].split(bytes(1),1)
+     except (ValueError,RuntimeError):continue
+     if len(value)==2 and value[0] and all(32<=c<127 for c in value[0]):
+      near_call.append(dict(at=hex(ins.address-base),register=ins.reg_name(ops[0].reg),literal=value[0].decode()))
+    elif ins.mnemonic=='mov' and len(ops)==2 and ins.reg_name(ops[0].reg)=='w2' and ops[1].type==ARM64_OP_IMM:
+     near_call.append(dict(at=hex(ins.address-base),register='w2',immediate=ops[1].imm))
   rows.append(dict(offset=hex(offset),function=hex(start-base),exact_names=sorted(names.get(start,())),
-                   named_calls=sorted(calls)[:40],possible_literals=sorted(literals)[:40]))
+                   near_call=near_call,named_calls=sorted(calls)[:40],possible_literals=sorted(literals)[:40]))
  Path(path).write_text(json.dumps(dict(uuid=image['uuid'],sites=rows),indent=2)+'\n')
 
 def main():

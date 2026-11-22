@@ -243,6 +243,28 @@ def main():
  with volume.attached(image,work/'mount',True) as mounted:
   require(mounted['uuid']==extract.SYSTEMOS[0],'Wrong original volume UUID')
   with symbolicate.CacheSet(mounted['path']/'System/Library/Caches/com.apple.dyld') as cache:
+   # Match pkd's install name against the actual read-only donor volume.
+   install = '/System/Library/PrivateFrameworks/PlugInKitDaemon.framework/PlugInKitDaemon'
+   donor = mounted['path'].resolve(strict=True)
+   matches = []
+   for directory, _, names in os.walk(donor, followlinks=False):
+    if 'PlugInKitDaemon' not in names:
+     continue
+    path = Path(directory) / 'PlugInKitDaemon'
+    item = {'path': '/' + str(path.relative_to(donor))}
+    try:
+     binary = path.resolve(strict=True)
+    except (FileNotFoundError, RuntimeError):
+     binary = None
+    if binary and binary.is_relative_to(donor) and binary.is_file():
+     item.update(bytes=binary.stat().st_size, sha256=extract.sha(binary))
+     deps = subprocess.run(['/usr/bin/otool','-L',str(binary)], capture_output=True, text=True, check=True)
+     item['dependencies'] = [line.strip().split(' (compatibility version')[0] for line in deps.stdout.splitlines() if line.startswith('\t')]
+    matches.append(item)
+   record = dict(install_name=install, volume_uuid=mounted['uuid'], files=matches,
+                 cached_paths=[row['path'] for row in cache.images if 'PlugInKitDaemon' in row['path']])
+   (out/'pluginkit-layout.json').write_text(json.dumps(record,indent=2)+'\n')
+   print('PlugInKitDaemon donor lookup:', json.dumps(record), flush=True)
    summary=write_index(cache,out/'library-index.json')
    write_compositor_sites(cache,out/'compositor-sites.json')
  summary.update(result='passed',source_volume=raw,kernel_built=False,phone_accessed=False,

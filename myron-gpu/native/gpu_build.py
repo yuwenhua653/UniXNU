@@ -131,13 +131,21 @@ extern "C" void myron_gpu_run(void *, wait_result_t);
         filename = next(n for n in pins if n.startswith('gen80200_'+name+'.'))
         symbol = '_myron_'+name+'_firmware'
         asm = out/('myron-'+name+'-firmware.S')
-        asm.write_text('.section __DATA_CONST,__const\n.p2align 12\n.globl '+symbol+'\n'+symbol+':\n.incbin '+
+        # Firmware contains immutable bytes, not authenticated kernel pointers.
+        # Keep it in the read-only header/string mapping, away from the tight
+        # native-before-retained-kext DATA_CONST prefix on iPhone12,1.
+        asm.write_text('.section __TEXT,__myron_gpu,regular\n.p2align 12\n.globl '+symbol+'\n'+symbol+':\n.incbin '+
                        json.dumps(str(firmware/filename))+'\n'+symbol+'_end:\n.p2align 3\n.globl '+symbol+'_size\n'+
                        symbol+'_size:\n.quad '+symbol+'_end-'+symbol+'\n')
         obj = asm.with_suffix('.o')
         subprocess.run(['xcrun', '--sdk', 'iphoneos', 'clang', *iphone_target_flags(env), '-c', asm, '-o', obj],
                        check=True, env=env)
         target.check_object(obj.read_bytes(), name+' firmware')
+        firmware_object = macho(obj.read_bytes(), 1)
+        require(not firmware_object['undefined'], 'Firmware object has unresolved imports')
+        require(all(s['segment'] == '__TEXT' and s['name'] == '__myron_gpu'
+                    for s in firmware_object['sections'] if s['size']),
+                'Firmware object must use only the read-only payload section')
         objects.append(obj)
         evidence.append(dict(source=filename, source_sha256=pins[filename]['sha256'], object_sha256=sha(obj)))
     report.update(objects=evidence, late_initializers=late_symbols, native_objects_compiled=True)

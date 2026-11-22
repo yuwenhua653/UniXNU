@@ -71,3 +71,16 @@
      result = dict(passed=not failures, objects=evidence, failures=failures,
                    kernel_linked=False, runtime_qualified=False)
      if not failures:
+--- a/build_ufs_dormant.py
++++ b/build_ufs_dormant.py
+@@ -554,6 +554,10 @@
+                              name not in (display_contract['bindings'] if display_contract else {}) and
+                              name not in (display_contract['touch']['bindings'] if display_contract else {}))),
+                         'Dormant probe or source-class vtable was dead-stripped')
++                if gpu_enabled:
++                    from gpu_firmware_audit import verify_linked as verify_gpu_firmware
++                    result['gpu_firmware_link'] = verify_gpu_firmware(
++                        raw_native, here/'gpu/firmware-3.0.306.json')
+                 metadata = dormant_metadata(candidate_info)
+                 if retained:
+                     from audit_ufs_storage_abi import verify_linked

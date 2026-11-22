@@ -73,6 +73,23 @@ poisoned rings, and bounded timeouts. It also tests pool/OPP/admission policy
 and fragments/reassembles all 20480 possible BO extents using the staged
 allocator functions. The source-check CI job runs these host tests. The separate device-package workflow now fetches exact OTA firmware and compiles the native stage with the kernel.
 
-Next required checks are real XNU compile/link and retained ABI validation,
+Run 45029819275 (602714d7) compiled all 35 native GPU objects and linked the
+native kernel, then failed fileset placement: `__DATA_CONST` plus
+`__LASTDATA_CONST` still needed 0x166000 bytes after safe padding removal;
+the retained-text/retained-constant gap was 0x1222c8 bytes (page-aligned
+usable capacity 0x121000). Native kernel SHA-256:
+`b382a9b298c5703e43812e5bf57d42364b7c130f762d93f1c3e4db3dbed9b4f9`.
+
+The four immutable firmware inputs now use `__TEXT,__myron_gpu`, keeping
+4 KiB blob alignment and the existing copy-to-GMU/GPU-memory paths. They
+are not kernel authenticated pointers and need no space in the constrained
+native constant prefix. The linked-kernel audit checks all four byte hashes,
+size words, nonoverlap, alignment, section ownership and read-only mapping.
+No retained-kext address, overlap check, PAC check or runtime gate is relaxed.
+A layout projection using the failed kernel and pinned donor fits with a
+0x1f0000 TEXT upper bound, 0x120000 DATA_CONST and 0x1000 LASTDATA_CONST;
+this projection is not a new native build or successful full prelink.
+
+Next required checks are the rebuilt fileset layout and retained ABI validation,
 then matched iOS27 Metal/Turnip code, signed addon capacity, a known rendered
 image, and phone verification. Follow the [official GPU porting sequence](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md).

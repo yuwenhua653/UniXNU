@@ -76,9 +76,9 @@ class MyronDigitizer : public IOHIDDevice {
         halfTicks = (uint32_t)((frequency + 2*hz - 1) / (2*hz));
     }
     static IOMemoryMap *mapBoardRange(uint64_t address, unsigned size) {
-        auto memory = IODeviceMemory::withRange(address, size);
+        IODeviceMemory *memory = IODeviceMemory::withRange(address, size);
         if (!memory) return nullptr;
-        auto mapping = memory->map(kIOMapAnywhere | kIOMapInhibitCache);
+        IOMemoryMap *mapping = memory->map(kIOMapAnywhere | kIOMapInhibitCache);
         memory->release();
         return mapping;
     }
@@ -192,7 +192,7 @@ class MyronDigitizer : public IOHIDDevice {
     }
     static int submit(void *ctx, const uint8_t *bytes, size_t count) {
         auto self = static_cast<MyronDigitizer *>(ctx);
-        auto buffer = IOBufferMemoryDescriptor::withBytes(bytes, count, kIODirectionIn);
+        IOBufferMemoryDescriptor *buffer = IOBufferMemoryDescriptor::withBytes(bytes, count, kIODirectionIn);
         if (!buffer) return kIOReturnNoMemory;
         auto rc = self->handleReport(buffer, kIOHIDReportTypeInput, 0);
         buffer->release();
@@ -211,7 +211,7 @@ class MyronDigitizer : public IOHIDDevice {
             self->power.poll();
             if (self->power.state.pending()) {
                 uint8_t report[]={5,(uint8_t)self->power.state.stable};
-                auto buffer=IOBufferMemoryDescriptor::withBytes(report,sizeof(report),kIODirectionIn);
+                IOBufferMemoryDescriptor *buffer=IOBufferMemoryDescriptor::withBytes(report,sizeof(report),kIODirectionIn);
                 if(buffer){
                     auto status=self->handleReport(buffer,kIOHIDReportTypeInput,0);
                     buffer->release();

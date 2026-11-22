@@ -7,9 +7,11 @@ class MyronPowerHardware {
     uint16_t apid=8192;
     bool failed=false;
     static IOMemoryMap *mapping(uint64_t pa,unsigned bytes){
-        auto memory=IODeviceMemory::withRange(pa,bytes);
+        // OSPtr is a return-type-only alias in the pinned XNU headers.
+        // Keep explicit owned raw pointers, paired with release()/close().
+        IODeviceMemory *memory=IODeviceMemory::withRange(pa,bytes);
         if(!memory)return nullptr;
-        auto result=memory->map(kIOMapAnywhere|kIOMapInhibitCache);
+        IOMemoryMap *result=memory->map(kIOMapAnywhere|kIOMapInhibitCache);
         memory->release();return result;
     }
 public:
@@ -25,7 +27,7 @@ public:
         uint32_t version=core[0],count=core[1]&0x1fff;
         if(version<0x80000000u || version>=0x90000000u || !count || count>8192){close();return false;}
         unsigned found=0;
-        for(unsigned i=0;i<count;++i)if((map[i]&0x1fff)==0x13 && (owners[i]&7)==0){apid=i;++found;}
+        for(unsigned i=0;i<count;++i)if((map[i]&0x1fff)==0x13 && (owners[i]&7)==0){apid=static_cast<uint16_t>(i);++found;}
         if(found!=1){close();return false;}
         uint8_t value=0;
         if(!myronPowerRead(*this,apid,&value)){close();return false;}

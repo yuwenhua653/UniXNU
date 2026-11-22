@@ -1,0 +1,23 @@
+{
+  "host_tests": {
+    "GpuBoard": "MyronGpuBoard: all tests passed",
+    "CmdDb": "MyronCmdDb: all tests passed",
+    "Gmu": "real firmware <firmware>/gen80200_gmu.bin: 112142 bytes, 4 blocks, version 50030023\nMyronGmu: all tests passed",
+    "Hfi": "MyronHfi: all tests passed"
+  },
+  "firmware_pins_verified": true,
+  "hardware_tested": false,
+  "files_sha256": {
+    "MyronCmdDb.c": "a081fcc3ed5cef4df901c3cb89ce90e21b3202bfc305e5e862883da198f2aab4",
+    "MyronCmdDb.h": "e3ceeb0e6dd0fb2404adb43b21b356e4b5279cd3e576968b5039ef6b689c3a58",
+    "MyronCmdDbTests.c": "3befe9e6fb28e6d8b8ae9f1c399e9fae64cb479033e5da9916c558eb4bdae704",
+    "MyronGmu.c": "a5ef5193e3e1a207ddda6c122a99428eec08768572fe6207f2fc4f0efa1bc5d2",
+    "MyronGmu.h": "066caf00e415089bf1cc7b2c70de2c7d7f5f00b81cb07849f27426d01cb3cbe9",
+    "MyronGmuTests.c": "c1490347f3ddffdcf848630f4abd6dadf149cce6864cacb071ec793d8cd3b367",
+    "MyronGpuBoard.h": "0d6be3c50a266ae44b605b21085b28f4238b8da33719836da81cd5da8f539f34",
+    "MyronGpuBoardTests.c": "d1ee4dd0610994508820b1f4093d2f5cf49d4b76bf061999f60f0bacaf42bad4",
+    "MyronHfi.c": "5a7dddf80c336f888542941b856a1b8020fb679da7fef1a4d73e54494036a174",
+    "MyronHfi.h": "795971d4006329f61fe36af6d7cc547727b5e3362ec6bc39aebdcd802e7f33d9",
+    "MyronHfiTests.c": "b184d4ef79ad59ca7452f1201192344a9d61b6118f22c267e0815f7da7113bb6"
+  }
+}

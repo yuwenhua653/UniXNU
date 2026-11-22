@@ -1,0 +1,34 @@
+{
+  "board": {
+    "repository": "https://github.com/Typeun/myron-device",
+    "commit": "d9b6be4d75f5a8169aee65b02bb23cd88968c1eb",
+    "source_files": {
+      "MyronGpuBoard.h": "0d6be3c50a266ae44b605b21085b28f4238b8da33719836da81cd5da8f539f34",
+      "MyronGpuBoardTests.c": "d1ee4dd0610994508820b1f4093d2f5cf49d4b76bf061999f60f0bacaf42bad4",
+      "MyronGmu.c": "a5ef5193e3e1a207ddda6c122a99428eec08768572fe6207f2fc4f0efa1bc5d2",
+      "MyronGmu.h": "066caf00e415089bf1cc7b2c70de2c7d7f5f00b81cb07849f27426d01cb3cbe9",
+      "MyronGmuTests.c": "9501ffa95ddcdd5943e0cb69c37ac7df0feb2867af4f321330bccea6ffbd12f6",
+      "MyronCmdDb.c": "a081fcc3ed5cef4df901c3cb89ce90e21b3202bfc305e5e862883da198f2aab4",
+      "MyronCmdDb.h": "e3ceeb0e6dd0fb2404adb43b21b356e4b5279cd3e576968b5039ef6b689c3a58",
+      "MyronCmdDbTests.c": "3befe9e6fb28e6d8b8ae9f1c399e9fae64cb479033e5da9916c558eb4bdae704",
+      "MyronHfi.c": "2d5ec246749df91e8c1359fc3f65a46faee00e8f347db432fef6a81ed4a3585a",
+      "MyronHfi.h": "5c7b89f9b1ac8e47d000c6cae2bb9c43c8b087f01cada0a196d8512fd713ec85",
+      "MyronHfiTests.c": "33a559a119f07f073f9607f1b63273af13761d5c05b2b2c8d28bba885378c8b5"
+    }
+  },
+  "native_adreno": {
+    "repository": "https://github.com/zg7681/NativeAdreno-myron",
+    "branch": "a8xx",
+    "commit": "5bbeb3b8d049a637a595090319835a49e58a8b56"
+  },
+  "reference_core": {
+    "repository": "https://github.com/UniXNU/UniXNU",
+    "commit": "8542980d02b4d2cc5c32ee3542de1760b2562aac"
+  },
+  "known_desktop": {
+    "run": "45008031354",
+    "commit": "682c5c4887ba87aef1848ec1a191659a2450ac17",
+    "kernel_sha256": "7e616ed8b916311ab93ef5a5b3c280e5f07a8bdee4d6f46b0782965c623318c2"
+  },
+  "runtime_enabled": false
+}

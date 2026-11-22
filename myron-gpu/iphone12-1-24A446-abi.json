@@ -1,0 +1,36 @@
+{
+  "final_kernel_sha256": "7e616ed8b916311ab93ef5a5b3c280e5f07a8bdee4d6f46b0782965c623318c2",
+  "target": "iPhone12,1/24A446",
+  "collection_slide": "0x0",
+  "metaclass": "0xfffffff00af6ac58",
+  "instance_bytes": 136,
+  "virtual_entries": 168,
+  "operational_overrides": [],
+  "metadata_overrides": [
+    0,
+    1,
+    7
+  ],
+  "protected_compatible_constructor_aliases": [
+    "0xfffffff009924850",
+    "0xfffffff009924888"
+  ],
+  "nondeleting_destructor": "0xfffffff0099248c0",
+  "get_meta_class": "0xfffffff009924930",
+  "vtable": "0xfffffff007fea6a0",
+  "native_parent_vtable": "0xfffffff007c25108",
+  "original_code_sha256": {
+    "0xfffffff009924850": "b0d36cfecf0ddf32651d25f2d36468b63fd2b98632020dbf53eb951b0b575228",
+    "0xfffffff009924888": "444fddae07b728019e398f4e9df7dc3bbafab42ef3e1436d8071688db297f957",
+    "0xfffffff0099248c0": "953d254e0d5ed10abf2795c4f90a9c1e863067cb1b9a1c5b7969449274c103ea",
+    "0xfffffff009924930": "a639cb886fe3172540e60889942e5320fbd5d72c1a189a74801348a3d0696204",
+    "0xfffffff00992962c": "27ec431f322832d79fbe756f0404fb23c35d99ee8e388de74cbf10da47e1599a",
+    "0xfffffff009937f80": "8d153953cfd2ae8220f5d975470d7787463d4438ae2db190fd298cb83d51cf10"
+  },
+  "native_parent_imports_checked": true,
+  "authenticated_vtable_entries_checked": 168,
+  "accelerator_instantiated": false,
+  "gpu_hardware_tested": false,
+  "metal_runtime_tested": false,
+  "binary_negative_controls_passed": 3
+}

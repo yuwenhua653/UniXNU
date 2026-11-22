@@ -1,0 +1,28 @@
+{
+  "android_build": "OS3.0.306.0.WPMCNXM",
+  "ota_name": "myron-ota_full-OS3.0.306.0.WPMCNXM-user-16.0-0b34ee6a73.zip",
+  "ota_full_archive_verified": false,
+  "extraction": "Selected OTA operations verified against payload manifest digests; firmware hashes pin extracted files, not whole-OTA authenticity.",
+  "files": {
+    "gen80200_gmu.bin": {
+      "bytes": 112142,
+      "sha256": "4069397c9d214bdac9a55902603c5bea1cfd2e5882a4963fb60ec26a2490978b"
+    },
+    "gen80200_sqe.fw": {
+      "bytes": 119156,
+      "sha256": "e2d4e74282f50e40788b83b9ba4a5f5894c7975ed356c03a0161372d78f12932"
+    },
+    "gen80200_aqe.fw": {
+      "bytes": 25880,
+      "sha256": "ed7916ca84e663d63fa94b0d40cc8c222e362e6cff860c539a8cca30d3721b68"
+    },
+    "gen80200_zap.mbn": {
+      "bytes": 12088,
+      "sha256": "48e50309e02c6c37a4c1e4a68a5371cb3d839029e7fbdb075ed4ae4e5712519c"
+    }
+  },
+  "stock_gpu_chip_id": "0x44050a01",
+  "gmu_version": "0x50030023",
+  "gmu_icache_bytes": "0x1b260",
+  "hardware_tested": false
+}

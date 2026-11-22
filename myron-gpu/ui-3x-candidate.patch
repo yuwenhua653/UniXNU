@@ -1,0 +1,31 @@
+--- a/device/myron27/board.toml
++++ b/device/myron27/board.toml
+@@ -49,20 +49,22 @@
+ # initialization. SM8850 has no Apple CTRR; do not claim an enabled Apple unit.
+ "kernel-ctrr-to-be-enabled" = 0
+ # MobileGestalt UI scale. GOP dimensions and pixel copies stay native.
+-"display-scale" = 2
++"display-scale" = 3
+ "display-rotation" = 0
+ 
+-# N104AP presentation properties for the iPhone12,1 system image.
+-# Source: https://gist.github.com/freedomtan/585abcb51b8ba012269055c97dc244a2
++# Myron phone presentation: @3x and 2556 artwork metrics, as Typeun/myron-device
++# d9b6be4d uses for this panel. N104/iPhone12,1 remains the OS and security donor;
++# these product artwork properties select UI layout, not an Apple GPU/SoC.
++# Actual GOP pixels, stride and FT3683 coordinates are unchanged.
+ [adt.product.string]
+ product-name = "iPhone 11"
+ product-description = "iPhone 11"
+ artwork-device-idiom = "phone"
+-compatible-device-fallback = "iPhone11,8"
++compatible-device-fallback = "iPhone15,2"
+ 
+ [adt.product.u32]
+-artwork-scale-factor = 2
+-artwork-device-subtype = 1792
++artwork-scale-factor = 3
++artwork-device-subtype = 2556
+ thin-bezel = 1
+ 
+ [adt.buttons.string]

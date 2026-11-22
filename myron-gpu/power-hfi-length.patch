@@ -1,0 +1,11 @@
+--- a/package/MyronGpuPower.cpp
++++ b/package/MyronGpuPower.cpp
+@@ -368,7 +368,7 @@
+     m.step = 1;
+     if (mhf_build(&gM4.db, &m.t)) return;
+     m.step = 2;
+-    if (!exchange(0, MHF_MSG_TABLE, m.t.perf, MHF_PERF_WORDS)) return;
++    if (!exchange(0, MHF_MSG_TABLE, m.t.perf, m.t.perf_words)) return;
+     m.step = 3;
+     if (!exchange(1, MHF_MSG_BW_TABLE, m.t.bw, MHF_BW_WORDS)) return;
+     m.step = 4;

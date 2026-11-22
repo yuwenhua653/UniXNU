@@ -287,7 +287,7 @@ def inspect_setup_flow(mount, audit, trust):
     info=audit.macho(binary,trust,2)
     exe=Executable(binary.read_bytes(),info)
     first=exe.owner(0x10004eefc)
-    observed={exe.owner(0x100000000+n-4) for n in (0x4ef00,0x4edec,0x4d3c8,0x4cfe0,0x1560d4)}
+    observed={exe.owner(0x100000000+n-4) for n in (0x4ef00,0x4edec,0x4d3c8,0x4cfe0,0x1560d4,0x50838,0x5029c,0xc4c78,0x3dd70,0x3e80c,0x42fe0,0x42f28,0x42e88,0x3d324,0x44f74,0x3ec94,0x3e260)}
     listing=subprocess.check_output(['/usr/bin/otool','-tvV',str(binary)], text=True)
     # Keep selector names, public preference names, and branch edges only.
     funcs={}
@@ -420,7 +420,7 @@ def inspect_setup_flow(mount, audit, trust):
         except (OSError, ValueError,plistlib.InvalidFileException):continue
         jobs.append({k:v for k,v in job.items() if k in ('Label','_LimitLoadToDeviceTree','Program','ProgramArguments','Disabled','MachServices')})
     return dict(uuid=exe.uuid,query_owner=hex(first),jobs=jobs,
-        method_count=len(methods), sites=[dict(start=hex(s),name=labels.get(s),events=funcs.get(s,[])[:500]) for s in sorted(chosen) if s])
+        method_count=len(methods), method_names={hex(k):v for k,v in sorted(methods.items())}, sites=[dict(start=hex(s),name=labels.get(s),events=funcs.get(s,[])[:500]) for s in sorted(chosen) if s])
 
 
 def main():
@@ -463,6 +463,7 @@ def main():
             print('PASS backboard wait address attribution',flush=True)
             return
         setup_report=inspect_setup_flow(mounted['path'],audit,trust)
+        setup_report.update(source_commit=os.environ.get('GITHUB_SHA'), source_volume=raw)
         (out/'setup-keyboard.json').write_text(json.dumps(setup_report,indent=2)+'\n')
         launchd=volume.regular(mounted['path']/'sbin/launchd');info=audit.macho(launchd,trust,2)
         report=inspect(launchd,info,disassemble=True)

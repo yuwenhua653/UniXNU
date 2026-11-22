@@ -1,0 +1,140 @@
+--- a/device/myron27/prepare_data_volume.py
++++ b/device/myron27/prepare_data_volume.py
+@@ -31,6 +31,75 @@
+ AX_OPAQUE = 'EnhancedBackgroundContrastEnabled'
+ SEED_EXCLUSION = 'staged_system_apps'
+ SEED_POLICY = 'UniXNU-04573c510c5fd4892ca6948739389141cc9e05f5-first-install'
++SETUP_POLICY = 'UniXNU-8542980d02b4d2cc5c32ee3542de1760b2562aac-skip-setup-24A446'
++
++
++def desktop_preferences():
++    """Upstream Skip Setup preferences for a new, owned 24A446 installation.
++
++    Applied only while copying the signed donor's initial /private/var into a
++    new local Data volume. Keep the native watchdogs: upstream's optional
++    BKNoWatchdogs/FBLaunchWatchdogExceptions are not needed to complete Setup.
++    """
++    require((BUILD, VERSION) == ('24A446', '27.0.1'), 'Skip Setup requires reviewed 24A446 values')
++    return {
++        'com.apple.purplebuddy': dict(SetupDone=True, SetupFinishedAllSteps=True,
++            SetupVersion=11, daemonizeNeedsToRun=False),
++        'com.apple.purplebuddy.notbackedup': dict.fromkeys((
++            'ShouldRunDiagnosticsMiniBuddy', 'ShouldRunHSA2MiniBuddy',
++            'ShouldRunKeychainSyncMiniBuddy', 'ShouldRunMesaMiniBuddy',
++            'ShouldRunPaymentMiniBuddy', 'ShouldRunStandardMiniBuddy', 'SilentICDPUpgrade'), False),
++        'com.apple.managedconfiguration.notbackedup': {
++            'LockdownActivationIndicatesCloudConfigurationAvailable': False},
++        'com.apple.springboard': dict(MCForceShowCloudConfigurationUI=False,
++            SBDisableAutoDim=True, SBDontDimOrLockOnAC=True, SBDisableIdleSleep=True),
++        'com.apple.migration': dict(LastSystemVersion=BUILD,
++            DMUserDataDisposition=dict(SyntheticDidUpgrade=False, buildVersion=BUILD)),
++    }
++
++
++def desktop_preference_path(root, domain):
++    path = Path(root)
++    for name in ('mobile', 'Library', 'Preferences'):
++        path /= name
++        require(not path.is_symlink() and path.is_dir(), 'Invalid mobile preferences directory')
++    path /= domain + '.plist'
++    require(not path.is_symlink() and (not path.exists() or path.is_file()),
++            'Invalid Setup preferences file: ' + domain)
++    return path
++
++
++def set_desktop_preferences(root):
++    for domain, values in desktop_preferences().items():
++        path = desktop_preference_path(root, domain)
++        exists = path.exists()
++        content = plistlib.loads(path.read_bytes()) if exists else {}
++        require(isinstance(content, dict), 'Expected Setup preferences dictionary: ' + domain)
++        content.update(values)
++        path.write_bytes(plistlib.dumps(content, fmt=plistlib.FMT_BINARY))
++        # Preferences belong to the mobile account that reads them. No ACL or
++        # extended-attribute stripping, and no modification of the donor mount.
++        os.chown(path, 501, 501)
++        path.chmod(0o600)
++    return check_desktop_preferences(root)
++
++
++def check_desktop_preferences(root):
++    hashes = {}
++    for domain, values in desktop_preferences().items():
++        path = desktop_preference_path(root, domain)
++        content = plistlib.loads(path.read_bytes())
++        require(isinstance(content, dict), 'Expected Setup preferences dictionary: ' + domain)
++        # Typed plist equality rejects integer/string stand-ins for booleans.
++        actual = {key: content[key] for key in values if key in content}
++        require(plistlib.dumps(actual) == plistlib.dumps(values), 'Wrong desktop seed values: ' + domain)
++        st = path.stat()
++        require((st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode)) == (501, 501, 0o600),
++                'Wrong desktop seed ownership/mode: ' + domain)
++        hashes[domain] = sha(path)
++    return dict(policy=SETUP_POLICY, skip_setup=True, build=BUILD, version=VERSION,
++                no_auto_dim=True, preferences_sha256=hashes,
++                watchdog_bypass_added=False, phone_tested=False)
+ 
+ 
+ def run(*args):
+@@ -264,6 +333,7 @@
+             'Copied mobile directory must retain iOS uid 501')
+     ensure_container_layout(target)
+     set_render_preferences(target)
++    set_desktop_preferences(target)
+     directory(target, 'keybags', 0, 0, 0o700)
+     directory(target, 'run', 0, 0, 0o755)
+     directory(target, 'tmp', 0, 0, 0o1777)
+@@ -349,6 +419,9 @@
+             require(source['uuid'] == identity(policy['volume_uuid']), 'Mounted OS UUID differs from signed policy')
+             var, launchd_sha = check_userland(source['path'])
+             result = build_volume(output, mib, lambda target: copy_var(var, target))
++            with attached(Path(result['raw_path']), output/'desktop-check', True) as checked:
++                require(checked['uuid'] == result['volume_uuid'], 'Desktop seed UUID changed')
++                result['desktop_setup'] = check_desktop_preferences(checked['path'])
+             require(check_userland(source['path'])[1] == launchd_sha, 'Source launchd changed')
+     check_root_source(image, bundle)
+     require(sha(bundle/'root-bundle.json') == root_digest, 'Root bundle changed during preparation')
+--- a/device/myron27/prepare_userland.py
++++ b/device/myron27/prepare_userland.py
+@@ -164,6 +164,7 @@
+             with volume.attached(Path(data['raw_path']),out/'data-check',True) as mounted:
+                 require(mounted['uuid']==data['volume_uuid'] and
+                         (mounted['path']/'mobile').stat().st_uid==501,'Data identity/ownership mismatch')
++                desktop_setup=volume.check_desktop_preferences(mounted['path'])
+                 prefs=mounted['path']/'mobile/Library/Preferences'/volume.AX_PLIST
+                 require(prefs.stat().st_uid==501 and
+                         plistlib.loads(prefs.read_bytes()).get(volume.AX_OPAQUE) is True,
+@@ -178,7 +179,7 @@
+             require(packed_capacity==data['logical_bytes'], 'Packed Setup Data capacity changed')
+             print(f'Checked Setup Data: {packed_capacity//volume.MIB} MiB logical, '
+                   f'{available//volume.MIB} MiB free at first boot provisioning, Reduce Transparency enabled', flush=True)
+-            data.update(setup_free_bytes=available,reduce_transparency=True,passed=True,source_os_sha256=report['stages']['OS-image']['image_sha256'],
++            data.update(desktop_setup=desktop_setup,setup_free_bytes=available,reduce_transparency=True,passed=True,source_os_sha256=report['stages']['OS-image']['image_sha256'],
+                         source_os_uuid=os_volume['uuid'],copied_original_private_var=False,
+                         copied_first_install_subset=True,copy_plan=plan,
+                         root_bundle_bound=False)
+@@ -187,6 +188,13 @@
+             data['run52_payload_size_estimate']=82722816+data['transport_bytes']+92268+boot_assets.MAX_ADT+4096
+             data['fits_run52_fat_budget']=data['run52_payload_size_estimate']<=boot_assets.FAT_BYTES-1024**2
+             checkpoint('original-data',data)
++            # Public receipt contains only preference/source/packed-seed hashes.
++            # The main diagnostic collector does not traverse private-userland.
++            (report_path.parent/'setup-seed-check.json').write_text(json.dumps(dict(
++                **desktop_setup, data_transport_sha256=data['transport_sha256'],
++                data_logical_sha256=data['logical_sha256'], logical_bytes=data['logical_bytes'],
++                initial_free_bytes=available, raw_reopened_readonly=True,
++                source_sha256=sha(Path(volume.__file__))), indent=2)+'\n')
+         for role,image in images.items():
+             require(sha(image)==report['stages'][role+'-image']['image_sha256'],'Readonly source image changed')
+         from unixnu import userdata
+--- a/device/myron27/tests/check_data_volume.py
++++ b/device/myron27/tests/check_data_volume.py
+@@ -51,6 +51,8 @@
+     result=volume.create(Path(source['raw_path']),bundle,out/'seed',128)
+     with volume.attached(Path(result['raw_path']),out/'verify-mount',True) as data:
+         root=data['path'];mobile=root/'mobile';file=mobile/'fixture'
++        require(volume.check_desktop_preferences(root)==result['desktop_setup'],
++                'Reopened APFS Data changed the verified desktop preferences')
+         require(mobile.stat().st_uid==501 and file.stat().st_uid==501,'Mobile ownership lost')
+         require(file.read_bytes()==b'myron metadata preservation\n','Copied file changed')
+         require(bytes.fromhex(volume.run('/usr/bin/xattr','-px','com.myron.fixture',file).decode())==b'preserved',

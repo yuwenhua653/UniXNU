@@ -51,6 +51,11 @@ jobs:
               subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
               subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
               assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check fresh Data desktop provisioning before the full build
+        run: |
+          mkdir -p "$RUNNER_TEMP/geometry-check"
+          set -o pipefail
+          python3 tests/test_myron_skip_setup.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" -v 2>&1 | tee "$RUNNER_TEMP/geometry-check/skip-setup.log"
       - name: Check Darwin 26 workloop limits before the full build
         run: |
           mkdir -p "$RUNNER_TEMP/geometry-check"

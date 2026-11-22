@@ -35,6 +35,7 @@ def root_qualification_identity(fixture):
   'ufs_medium_source':here/'myron-ufs-medium.patch',
   'setup_worker_source':here/'myron-setup-worker.patch',
   'setup_data_source':here/'myron-setup-data.patch',
+  'skip_setup_source':here/'myron-skip-setup.patch',
   'graphical_source':here/'myron-graphical/device.patch',
   'graphical_firmware':here/'myron-graphical/board.patch',
   'boot_artwork':here/'myron-graphical/MyronBootLogo.h',
@@ -352,6 +353,7 @@ subprocess.run(['patch','-s','-p1','-i',str(graphical/'device.patch')],cwd=root,
 subprocess.run(['patch','-s','-p1','-i',str(here/'myron-setup-data.patch')],cwd=root,check=True)
 subprocess.run(['patch','-s','-p1','-i',str(here/'myron-ufs-medium.patch')],cwd=root,check=True)
 subprocess.run(['patch','-s','-p1','-i',str(here/'myron-setup-worker.patch')],cwd=root,check=True)
+subprocess.run(['patch','-s','-p1','-i',str(here/'myron-skip-setup.patch')],cwd=root,check=True)
 board=root/'device/myron27'
 touch=board/'touch'
 touch.mkdir(exist_ok=True)

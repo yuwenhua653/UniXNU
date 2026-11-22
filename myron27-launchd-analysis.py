@@ -280,6 +280,52 @@ def inspect(path,info,disassemble=False):
 def load(name):
     spec=importlib.util.spec_from_file_location(name,ROOT/(name+'.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
 
+def inspect_setup_flow(mount, audit, trust):
+    import plistlib
+    import re
+    binary=mount/'Applications/Setup.app/Setup'
+    info=audit.macho(binary,trust,2)
+    exe=Executable(binary.read_bytes(),info)
+    first=exe.owner(0x10004eefc)
+    observed={exe.owner(0x100000000+n-4) for n in (0x4ef00,0x4edec,0x4d3c8,0x4cfe0,0x1560d4)}
+    listing=subprocess.check_output(['/usr/bin/otool','-tvV',str(binary)], text=True)
+    # Keep selector names, public preference names, and branch edges only.
+    funcs={}
+    labels=dict(exe.symbols)
+    method=None
+    for line in listing.splitlines():
+        if line.endswith(':') and not line.startswith((' ', '\t')):
+            method=line[:-1]
+            continue
+        m=re.match(r'^\s*([0-9a-fA-F]{12,16})\s+([a-z][a-z0-9.]+)\s*(.*)',line)
+        if not m:continue
+        addr=int(m[1],16)
+        if not exe.low<=addr<exe.high:continue
+        start=exe.owner(addr)
+        if method:
+            labels.setdefault(start,method)
+            method=None
+        entry=funcs.setdefault(start,[])
+        body=m[3]
+        if ';' in body:
+            annotation=body.split(';',1)[1].strip()
+            if any(x in annotation.lower() for x in ('objc','literal','symbol stub','selector')):
+                entry.append([hex(addr-start),annotation[:180]])
+        if m[2] in ('bl','b','tbz','tbnz','cbz','cbnz') or m[2].startswith('b.'):
+            addrto=re.search(r'0x([0-9a-fA-F]+)',body.split(';',1)[0])
+            if addrto:entry.append([hex(addr-start),m[2]+' '+hex(int(addrto[1],16))])
+    names=re.compile(r'(Multilingual|WrittenAndSpoken|LanguageAndLocale|KeyboardController|KeyboardData)',re.I)
+    chosen=observed|{s for s,k in labels.items() if names.search(k)}
+    chosen.update(s for s,v in funcs.items() if any('buddyDefaultKeyboards' in a or 'buddySuggestedKeyboards' in a for _,a in v))
+    jobs=[]
+    for p in (mount/'System/Library/LaunchDaemons').glob('*[Cc]omm[Cc]enter*'):
+        try: job=plistlib.loads(p.read_bytes())
+        except (OSError, ValueError,plistlib.InvalidFileException):continue
+        jobs.append({k:v for k,v in job.items() if k in ('Label','_LimitLoadToDeviceTree','Program','ProgramArguments')})
+    return dict(uuid=exe.uuid,query_owner=hex(first),jobs=jobs,
+        sites=[dict(start=hex(s),name=labels.get(s),events=funcs.get(s,[])[:280]) for s in sorted(chosen) if s])
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for n in ('device','upstream','work','output','archive-tool'):p.add_argument('--'+n,type=Path,required=True)
@@ -319,6 +365,8 @@ def main():
             (out/'backboard-wait.json').write_text(json.dumps(report,indent=2)+'\n')
             print('PASS backboard wait address attribution',flush=True)
             return
+        setup_report=inspect_setup_flow(mounted['path'],audit,trust)
+        (out/'setup-keyboard.json').write_text(json.dumps(setup_report,indent=2)+'\n')
         launchd=volume.regular(mounted['path']/'sbin/launchd');info=audit.macho(launchd,trust,2)
         report=inspect(launchd,info,disassemble=True)
     report.update(source_volume=raw,source_commit=os.environ.get('GITHUB_SHA'),result='passed',

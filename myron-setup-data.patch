@@ -1,0 +1,148 @@
+--- a/device/myron27/prepare_data_volume.py
++++ b/device/myron27/prepare_data_volume.py
+@@ -23,6 +23,12 @@
+ BUILD = '24A446'
+ VERSION = '27.0.1'
+ MIB = 1024 * 1024
++# The sparse RamBlock allocates backing pages as they are written. Reserve
++# space for Setup's databases and APFS transactions beyond the copied seed.
++SETUP_MIN_MIB = 1024
++SETUP_FREE_MIB = 768
++AX_PLIST = 'com.apple.Accessibility.plist'
++AX_OPAQUE = 'EnhancedBackgroundContrastEnabled'
+ SEED_EXCLUSION = 'staged_system_apps'
+ SEED_POLICY = 'UniXNU-04573c510c5fd4892ca6948739389141cc9e05f5-first-install'
+ 
+@@ -136,16 +142,21 @@
+                 prefs.mkdir(mode=0o755)
+                 os.chown(prefs, uid, gid)
+             require(prefs.is_dir(), 'Expected preferences directory: ' + str(prefs))
+-        for name in ('backboardd.plist', '.GlobalPreferences.plist'):
++        domains = {name: dict.fromkeys(RENDER_PREFS, False)
++                   for name in ('backboardd.plist', '.GlobalPreferences.plist')}
++        if home == 'mobile':
++            # This is the fresh donor seed, before Setup or a user's preferences exist.
++            domains[AX_PLIST] = {AX_OPAQUE: True}
++        for name, settings in domains.items():
+             path = prefs/name
+             require(not path.is_symlink(), 'Unexpected preferences symlink: ' + str(path))
+             exists = path.exists()
+             require(not exists or path.is_file(), 'Expected preferences file: ' + str(path))
+             content = plistlib.loads(path.read_bytes()) if exists else {}
+             require(isinstance(content, dict), 'Expected preferences dictionary: ' + str(path))
+-            if all(content.get(key) is False for key in RENDER_PREFS):
++            if all(content.get(key) is value for key, value in settings.items()):
+                 continue
+-            content.update(dict.fromkeys(RENDER_PREFS, False))
++            content.update(settings)
+             # Existing inode retains its numeric ownership, mode, ACLs and xattrs.
+             path.write_bytes(plistlib.dumps(content, fmt=plistlib.FMT_BINARY))
+             if not exists:
+@@ -207,7 +218,7 @@
+     return counts
+ 
+ 
+-def plan_var(source, minimum_mib=512):
++def plan_var(source, minimum_mib=SETUP_MIN_MIB):
+     source=Path(source)
+     require(source.is_dir() and not source.is_symlink(),'Require the original Data source directory')
+     selected=tree_usage(source,omit_staged=True)
+@@ -215,6 +226,8 @@
+     excluded=tree_usage(staged,measure_xattrs=False) if staged.exists() or staged.is_symlink() else None
+     # Keep >=25% free after a 32 MiB filesystem reserve, rounded to 64 MiB.
+     needed=((selected['allocation_estimate']+32*MIB)*4+2)//3
++    if minimum_mib >= SETUP_MIN_MIB:
++        needed=max(needed, selected['allocation_estimate']+(32+SETUP_FREE_MIB)*MIB)
+     mib=max(minimum_mib,((needed+64*MIB-1)//(64*MIB))*64)
+     return dict(policy=SEED_POLICY,excluded_paths=[SEED_EXCLUSION],
+                 selected=selected,excluded=excluded,volume_mib=mib,
+@@ -263,6 +276,23 @@
+     require(len(header) == 4096 and header[32:36] == b'NXSB', 'Require raw APFS, without GPT or UDIF footer')
+     block, count = struct.unpack_from('<IQ', header, 36)
+     require(block == 4096 and count * block == expected_size, 'APFS container geometry mismatch')
++
++
++def check_setup_seed(packed):
++    """Check the logical geometry delivered to RamBlock and the APFS container inside."""
++    require(len(packed) >= 48, 'Truncated Setup Data seed')
++    magic, version, block, logical, runs = struct.unpack_from('<8sIIQQ', packed)
++    require((magic, version, block) == (b'DBRDISK1', 1, 4096) and
++            SETUP_MIN_MIB*MIB <= logical <= data_seed.MAX_LOGICAL,
++            'Wrong packed Setup Data capacity or format')
++    body = 32 + runs * 16
++    require(0 < runs <= 65536 and body+block <= len(packed), 'Missing packed Setup Data extents')
++    offset, size = struct.unpack_from('<QQ', packed, 32)
++    require(offset == 0 and block <= size <= len(packed)-body and packed[body+32:body+36] == b'NXSB',
++            'Packed Setup Data has no APFS container at block zero')
++    block_size, blocks = struct.unpack_from('<IQ', packed, body+36)
++    require(block_size == block and blocks*block_size == logical, 'Packed and APFS Data capacities differ')
++    return logical
+ 
+ 
+ def build_volume(output, mib, populate):
+@@ -338,6 +368,6 @@
+     p.add_argument('--os-image', type=Path, required=True)
+     p.add_argument('--root-bundle', type=Path, required=True)
+     p.add_argument('--out', type=Path, required=True)
+-    p.add_argument('--mib', type=int, default=512)
++    p.add_argument('--mib', type=int, default=SETUP_MIN_MIB)
+     a = p.parse_args()
+     print(json.dumps(create(a.os_image, a.root_bundle, a.out, a.mib), indent=2))
+--- a/device/myron27/prepare_userland.py
++++ b/device/myron27/prepare_userland.py
+@@ -164,10 +164,21 @@
+             with volume.attached(Path(data['raw_path']),out/'data-check',True) as mounted:
+                 require(mounted['uuid']==data['volume_uuid'] and
+                         (mounted['path']/'mobile').stat().st_uid==501,'Data identity/ownership mismatch')
++                prefs=mounted['path']/'mobile/Library/Preferences'/volume.AX_PLIST
++                require(prefs.stat().st_uid==501 and
++                        plistlib.loads(prefs.read_bytes()).get(volume.AX_OPAQUE) is True,
++                        'Reduce Transparency missing in final mobile preferences')
++                available=data['initial_free_bytes']
++                require(available>=volume.SETUP_FREE_MIB*volume.MIB,
++                        'Populated Data lacks the free space reserved for Setup')
+                 for relative,uid,mode in [('tmp',0,0o1777),('run',0,0o755),('keybags',0,0o700),('mobile/tmp',501,0o700)]:
+                     st=(mounted['path']/relative).stat()
+                     require(st.st_uid==uid and st.st_mode&0o7777==mode,'Incorrect Data runtime directory')
+-            data.update(passed=True,source_os_sha256=report['stages']['OS-image']['image_sha256'],
++            packed_capacity=volume.check_setup_seed(Path(data['seed_path']).read_bytes())
++            require(packed_capacity==data['logical_bytes'], 'Packed Setup Data capacity changed')
++            print(f'Checked Setup Data: {packed_capacity//volume.MIB} MiB logical, '
++                  f'{available//volume.MIB} MiB free at first boot provisioning, Reduce Transparency enabled', flush=True)
++            data.update(setup_free_bytes=available,reduce_transparency=True,passed=True,source_os_sha256=report['stages']['OS-image']['image_sha256'],
+                         source_os_uuid=os_volume['uuid'],copied_original_private_var=False,
+                         copied_first_install_subset=True,copy_plan=plan,
+                         root_bundle_bound=False)
+--- a/device/myron27/tests/test_userland_audit.py
++++ b/device/myron27/tests/test_userland_audit.py
+@@ -303,7 +303,7 @@
+         plan=prep.volume.plan_var(source)
+         self.assertEqual(plan['selected']['logical_bytes'],4)
+         self.assertEqual(plan['excluded']['logical_bytes'],3*1024**3)
+-        self.assertEqual(plan['volume_mib'],512)
++        self.assertEqual(plan['volume_mib'],1024)
+         self.assertTrue(plan['within_ram_logical_limit'])
+         self.assertEqual((staged/'large').stat().st_size,3*1024**3)
+ 
+@@ -321,7 +321,8 @@
+         source=self.root/'var';source.mkdir();large=source/'runtime-data'
+         with large.open('wb') as f:f.truncate(600*1024**2)
+         plan=prep.volume.plan_var(source)
+-        self.assertGreater(plan['volume_mib'],512)
++        self.assertGreaterEqual(plan['volume_mib']*1024**2,
++                                plan['selected']['allocation_estimate']+(32+768)*1024**2)
+         self.assertGreaterEqual(plan['volume_mib']*1024**2*3//4,
+                                 plan['selected']['allocation_estimate']+32*1024**2)
+         with large.open('wb') as f:f.truncate(2*1024**3)
+--- a/device/myron27/tests/check_data_volume.py
++++ b/device/myron27/tests/check_data_volume.py
+@@ -63,6 +63,9 @@
+                 'Exclusion removed unrelated nested content')
+         require(os.readlink(mobile/'symlink')=='fixture','Symbolic link changed')
+         require(b'everyone allow read' in volume.run('ls','-lde',file),'Access control entry lost')
++        prefs=mobile/'Library/Preferences'/volume.AX_PLIST
++        require(prefs.stat().st_uid==501 and plistlib.loads(prefs.read_bytes()).get(volume.AX_OPAQUE) is True,
++                'Reopened APFS Data lost the mobile Reduce Transparency preference')
+         for rel in volume.CONTAINER_DIRS:
+             path=root/rel
+             require(path.is_dir() and not path.is_symlink(), 'Missing Data directory: '+rel)

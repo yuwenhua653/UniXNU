@@ -60,6 +60,10 @@ def read(name):return subprocess.check_output(['mtype','-i',str(payload/'payload
 hashes=r['embedded_files']
 need(set(hashes)=={'EFI/UniXNU/Payloads/'+n for n in ('kernel.macho','kernel.macho.adt','kernel.macho.trustcache','scratch-data.img')},'Unexpected payload inventory')
 for name,digest in hashes.items():need(sha(read(name[len('EFI/UniXNU/'):]))==digest,'Embedded file mismatch '+name)
+setup_capacity = None
+if not a.source_repo or (repo/'myron-setup-data.patch').exists():
+    from prepare_data_volume import check_setup_seed
+    setup_capacity = check_setup_seed(read('Payloads/scratch-data.img'))
 from payload_adt import parse as parse_adt
 embedded_adt=parse_adt(read('Payloads/kernel.macho.adt'))
 chosen=embedded_adt['/device-tree/chosen']
@@ -124,6 +128,8 @@ proof=dict(result='passed',bytes=len(fat),sha256=sha(fat),crc32=f'{zlib.crc32(fa
     kernel_sha256=h('kernel.macho'),adt_sha256=h('kernel.macho.adt'),kernel_args=e['args'],root_volume_enabled=True,
     boot_assets=dict(initrd=e['initrd'],data_sha256=h('scratch-data.img'),trust_bundle_sha256=h('kernel.macho.trustcache'),dyld_startup_probe_enabled=True),
     producer=producer,amfi_stack_binding=amfi_stack_binding,phone_tested=False)
+if setup_capacity is not None:
+    proof['boot_assets']['data_logical_bytes'] = setup_capacity
 save(payload/'payload.json',proof)
 prepare(a.work/'mu')
 subprocess.run(['make','-C',str(a.work/'mu/Mu_Basecore/BaseTools/Source/C'),'-j4','CLANG=1','CC=clang','CXX=clang++'],env=env,check=True)

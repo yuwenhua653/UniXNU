@@ -40,6 +40,49 @@ def write_index(cache,path):
  return dict(images=len(result['images']),indexed=len(result['selected']),bytes=len(encoded))
 # Static attribution for the first-frame path in the pinned iPhone system image.
 # Keep this separate from the capped general index and emit no original code.
+def write_setup_queries(cache, path):
+    """Resolve 24A446 Setup call sites, retaining names and offsets only."""
+    from bisect import bisect_right
+    from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+    from capstone.arm64 import ARM64_OP_IMM
+    decoder = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+    decoder.detail = True
+    targets = {
+        '94dfc60c765d3f20b8aa376bdb44b49b': (0x2394, 0x4cec, 0x14890, 0x40b8, 0x10c38),
+        '2371d1a4791c3de7a866b202c590847b': (0x28160,),
+        '80d108988f9034f0b37102f80621e835': (0x2b64, 0x2cf4, 0x2ebc),
+    }
+    images = {image['uuid']: image for image in cache.images}
+    rows = []
+    for uuid, offsets in targets.items():
+        image = images[uuid]
+        base = image['address']
+        starts = cache.macho(image)['starts']
+        names = {}
+        for address, name, _ in cache.symbols(image, strict=False):
+            if name and name != '<redacted>':
+                names.setdefault(address, set()).add(name)
+        for offset in offsets:
+            # Stacks hold return PCs. Attribute the preceding instruction.
+            idx = bisect_right(starts, base+offset-4)-1
+            if idx < 0 or idx+1 >= len(starts):
+                raise ValueError('Setup site outside documented function boundaries')
+            start, end = starts[idx:idx+2]
+            calls = []
+            code, _ = cache.read(start, min(end-start, 32768), executable=True)
+            for op in decoder.disasm(code, start):
+                if op.mnemonic in ('b', 'bl') and len(op.operands)==1 and op.operands[0].type==ARM64_OP_IMM:
+                    target = op.operands[0].imm
+                    if names.get(target):
+                        calls.append(dict(site=hex(op.address-base), names=sorted(names[target])))
+            rows.append(dict(image=image['path'], uuid=uuid, return_offset=hex(offset),
+                             start=hex(start-base), names=sorted(names.get(start,())),
+                             calls=calls[:128]))
+    path.write_text(json.dumps(rows, indent=2)+'\n')
+    for row in rows:
+        print('Setup CT site', row['return_offset'], row['start'], row['names'], flush=True)
+
+
 def write_compositor_sites(cache, path):
  from bisect import bisect_right
  from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
@@ -265,6 +308,7 @@ def main():
                  cached_paths=[row['path'] for row in cache.images if 'PlugInKitDaemon' in row['path']])
    (out/'pluginkit-layout.json').write_text(json.dumps(record,indent=2)+'\n')
    print('PlugInKitDaemon donor lookup:', json.dumps(record), flush=True)
+   write_setup_queries(cache,out/'setup-telephony-sites.json')
    summary=write_index(cache,out/'library-index.json')
    write_compositor_sites(cache,out/'compositor-sites.json')
  summary.update(result='passed',source_volume=raw,kernel_built=False,phone_accessed=False,

@@ -90,7 +90,7 @@ def setup_method_flow(cache, image, decoder, names, start, end):
                     labels.update(v for _,v in references(stub[:3]) if v)
             except (ValueError, RuntimeError):
                 pass
-            if not labels and any('isCommCenterSupported' in n for n in names.get(start,())):
+            if not labels and any('iscommcentersupported' in n.lower() for n in names.get(start,())):
                 try:
                     insns=list(decoder.disasm(cache.read(target,12,executable=True)[0],target))
                     dest=insns[0].operands[0].imm if insns and insns[0].mnemonic=='b' else target
@@ -103,7 +103,7 @@ def setup_method_flow(cache, image, decoder, names, start, end):
             events[op.address] = 'call '+(', '.join(sorted(labels)) or hex(target))
         elif op.mnemonic in ('cbz','cbnz','tbz','tbnz','b') or op.mnemonic.startswith('b.'):
             events[op.address] = op.mnemonic+' -> '+hex(target-start)
-    if any('isCommCenterSupported' in n for n in names.get(start,())):
+    if any('iscommcentersupported' in n.lower() for n in names.get(start,())):
         for op in ops:
             if op.mnemonic in ('mov','movz','ret','tst','cmp','cset','and','orr','eor'):
                 events.setdefault(op.address,op.mnemonic+' '+op.op_str)
@@ -135,10 +135,25 @@ def write_setup_queries(cache, path):
         if uuid=='94dfc60c765d3f20b8aa376bdb44b49b':
             # Record the native unsupported-service gate and its initializers.
             owners = [addr for addr, ns in names.items() if any(
-                'isCommCenterSupported' in n or 'setCommCenterSupported:' in n or
+                'iscommcentersupported' in n.lower() or 'setCommCenterSupported:' in n or
                 ('CoreTelephonyClientMux ' in n and (' init' in n or 'shared' in n))
                 for n in ns)]
-            offsets = tuple(sorted(set(offsets)|{a-base+4 for a in owners if a in starts}))
+            gate={addr for addr,ns in names.items() if any('iscommcentersupported' in n.lower() for n in ns)}
+            active=set(gate)
+            for depth in range(3):
+                following=set()
+                for addr in active:
+                    idx=bisect_right(starts,addr)-1
+                    if idx<0 or idx+1>=len(starts) or starts[idx]!=addr:continue
+                    ops=decoder.disasm(cache.read(addr,min(starts[idx+1]-addr,1024),executable=True)[0],addr)
+                    for op in ops:
+                        if op.mnemonic in ('bl','b') and op.operands[-1].type==ARM64_OP_IMM:
+                            dst=op.operands[-1].imm
+                            if dst in names and dst not in gate and any('CT' in n or 'upport' in n or 'ellular' in n for n in names[dst]):
+                                following.add(dst)
+                gate.update(following);active=following
+                if len(gate)>40:raise ValueError('Unexpected support gate call graph')
+            offsets = tuple(sorted(set(offsets)|{a-base+4 for a in set(owners)|gate if a in starts}))
         for offset in offsets:
             # Stacks hold return PCs. Attribute the preceding instruction.
             idx = bisect_right(starts, base+offset-4)-1

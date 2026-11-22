@@ -1,0 +1,18 @@
+{
+  "NativeAdreno": {
+    "url": "https://github.com/zg7681/NativeAdreno-myron.git",
+    "commit": "5bbeb3b8d049a637a595090319835a49e58a8b56"
+  },
+  "AdrenoFirmware": {
+    "url": "https://github.com/UniXNU/AdrenoFirmware.git",
+    "commit": "40fdb8ea87606612ac6f1e80bbb49955d0ce4051"
+  },
+  "AdrenoPM4": {
+    "url": "https://github.com/UniXNU/AdrenoPM4.git",
+    "commit": "445f8fe6d115738352b9d78dc70af6d61aa7f62f"
+  },
+  "ArmSmmu4K": {
+    "url": "https://github.com/UniXNU/ArmSmmu4K.git",
+    "commit": "4d0d6598b1a36aeec3de01091893fa6660e49388"
+  }
+}

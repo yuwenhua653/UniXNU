@@ -28,7 +28,10 @@ TOUCH_SOURCES = ('board.patch', 'touch_build.py', 'MyronDigitizer.cpp', 'MyronTo
                  'MyronSE19Bus.h', 'MyronFirmwareTouch.h', 'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
                  'iphone12-1-hid-24A446.json', 'test_touch.c')
 def root_qualification_identity(fixture):
- return {name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
+ return {'gpu_mode':hashlib.sha256(os.environ.get('MYRON_GPU_NATIVE','0').encode()).hexdigest(),
+  **{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in {
+  **{'gpu/'+str(p.relative_to(here/'myron-gpu')):p
+     for p in (here/'myron-gpu').rglob('*') if p.is_file() and p.suffix in ('.py','.cpp','.c','.h','.json','.patch')},
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
   'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
   **{'touch/'+name:here/'myron-touch'/name for name in TOUCH_SOURCES},
@@ -41,7 +44,7 @@ def root_qualification_identity(fixture):
   'boot_artwork':here/'myron-graphical/MyronBootLogo.h',
   'root_bundle':fixture/'bundle/root-bundle.json',
   'data_seed_contract':fixture/'bundle/data-seed.json',
-  'data_volume_proof':fixture.parent/'data-volume/report.json'}.items()}
+  'data_volume_proof':fixture.parent/'data-volume/report.json'}.items()}}
 def qualify_root_inputs():
  d=root/'device/myron27';u=root/'upstream';qualification=root/'qualification'
  qualification.mkdir(exist_ok=True)
@@ -49,6 +52,11 @@ def qualify_root_inputs():
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(touch/'MyronFT3683.c'),
                  str(touch/'test_touch.c'),'-o',str(qualification/'touch-host-test')],check=True)
  subprocess.run([str(qualification/'touch-host-test')],check=True)
+ if os.environ.get('MYRON_GPU_NATIVE') == '1':
+  subprocess.run([sys.executable,str(here/'myron-gpu/check_host.py'),'--cc','clang',
+   '--firmware',os.environ['MYRON_GPU_FIRMWARE'],'--output',str(qualification/'gpu-portable.json')],check=True)
+  subprocess.run([sys.executable,str(d/'gpu/check_native_host.py'),'--references',str(root/'references/myron-gpu'),
+   '--cc','clang','--cxx','clang++','--output',str(qualification/'gpu-native-host.json')],check=True)
  (qualification/'host-checks.json').unlink(missing_ok=True)
  subprocess.run(['brew','install','openssl@3','mtools'],check=True)
  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
@@ -367,6 +375,14 @@ for line in (touch/'board.patch').read_text().splitlines():
 subprocess.run(['patch','-s','-p1','-i',str(touch/'board.patch')],cwd=board,check=True)
 (board/'graphical-board.patch').write_bytes((graphical/'board.patch').read_bytes())
 (board/'package/MyronBootLogo.h').write_bytes((graphical/'MyronBootLogo.h').read_bytes())
+gpu=board/'gpu'
+gpu.mkdir(exist_ok=True)
+for path in (here/'myron-gpu').glob('Myron*'):
+ if path.suffix in ('.c','.h'):(gpu/path.name).write_bytes(path.read_bytes())
+for path in (here/'myron-gpu/native').iterdir():
+ if path.is_file():(gpu/path.name).write_bytes(path.read_bytes())
+(gpu/'firmware-3.0.306.json').write_bytes((here/'myron-gpu/firmware-3.0.306.json').read_bytes())
+subprocess.run(['patch','-s','-p1','-i',str(gpu/'board.patch')],cwd=board,check=True)
 if options.source_only:
  print('Reconstructed reviewed source inputs:',root/'device',flush=True)
  raise SystemExit(0)
@@ -399,6 +415,13 @@ root_sources=[
  {'path':'upstream/kits/VerifiedRoot','url':'https://github.com/UniXNU/VerifiedRoot.git','commit':'974f043d0c71ba2e60331483a41c6c6d35274ee3'},
  {'path':'upstream/drivers/VirtioMmioBlock','url':'https://github.com/UniXNU/VirtioMmioBlock.git','commit':'4e1013eb8c45077b57f8d38d61b389fe899ea1c3'},
 ]
+if os.environ.get('MYRON_GPU_NATIVE') == '1':
+ sys.path.insert(0,str(board/'gpu'))
+ from gpu_build import firmware_inputs
+ if not os.environ.get('MYRON_GPU_FIRMWARE'):raise SystemExit('Set MYRON_GPU_FIRMWARE to the verified 3.0.306 directory')
+ firmware_inputs(board/'gpu',Path(os.environ['MYRON_GPU_FIRMWARE']))
+ for name,pin in json.loads((board/'gpu/dependencies.json').read_text()).items():
+  root_sources.append(dict(path='references/myron-gpu/'+name,**pin))
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
  for path in pool.map(fetch,snapshot['sources']+root_sources):print('Pinned source:',path,flush=True)
 d=root/'device/myron27';u=root/'upstream';out=root/'out'

@@ -1,8 +1,9 @@
 # Myron iPhone 27 GPU integration checkpoint
 
-This directory is **not enabled by the production build**. It contains reviewed
-portable components, a real HFI wire-length fix, and a target-specific accelerator
-ABI audit. No new phone package or GPU-success claim follows from these tests.
+The first native A840 board driver is now connected to source reconstruction,
+optional XNU compilation and the late boot boundary; see [native/README.md](native/README.md).
+Production defaults still use the working CPU display. Native kernel compilation,
+Metal userspace/addon integration and phone GPU execution remain unverified.
 The desktop baseline remains run 45008031354 / commit 682c5c4.
 
 ## Same-SoC references checked on 2026-11-22
@@ -57,8 +58,9 @@ phone UI correctness.
 
 ## Integration still required
 
-1. Adapt the native board service to this port's 2 GiB owned RAM, real interrupt
-   API and power/thermal policy. The reference's 1 GiB GPU pool and maximum
+1. Qualify the newly adapted native service against actual XNU and the phone.
+   Its first stage bounds the BO pool and OPP, and polls real fences.
+   A real interrupt attachment and thermal policy remain pending. The reference's 1 GiB GPU pool and maximum
    speed-bin vote must not be enabled unchanged. The stock DT chip ID is
    `0x44050a01`; `0x44050a31` is its three-active-slice user-space encoding.
    The staged path now derives it from checked hardware readback.
@@ -74,5 +76,5 @@ phone UI correctness.
    Apply UI configuration consistently to source reconstruction and final
    embedded-ADT verification before a combined test build.
 
-No kernel compilation is requested by this checkpoint commit. The current
+The source-check workflow compiles portable/backend host tests; it does not start a full kernel build. The current
 working desktop is not replaced by a partially connected GPU driver.

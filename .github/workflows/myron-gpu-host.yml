@@ -1,0 +1,46 @@
+name: Myron A840 native source checks
+on:
+  push:
+    branches: [codex/myron-iphone27]
+    paths:
+      - myron-gpu/**
+      - myron27-build.py
+      - .github/workflows/myron-gpu-host.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: myron-gpu-host
+  cancel-in-progress: false
+jobs:
+  native-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Reconstruct the actual board source
+        run: python3 myron27-build.py --source-only
+      - name: Fetch pinned A8xx dependencies
+        run: |
+          python3 myron-gpu/native/prepare_sources.py \
+            --references "$RUNNER_TEMP/gpu-references" --fetch
+      - name: Exercise portable board and real native backend algorithms
+        run: |
+          mkdir -p "$RUNNER_TEMP/gpu-checks"
+          python3 myron-gpu/check_host.py --cc gcc --output "$RUNNER_TEMP/gpu-checks/portable.json"
+          python3 myron-gpu/native/check_native_host.py \
+            --references "$RUNNER_TEMP/gpu-references" --cc gcc --cxx g++ \
+            --output "$RUNNER_TEMP/gpu-checks/native-host.json"
+          python3 tests/test_native_diagnostics.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: myron-a840-source-checks
+          path: ${{ runner.temp }}/gpu-checks
+          if-no-files-found: warn
+          retention-days: 7

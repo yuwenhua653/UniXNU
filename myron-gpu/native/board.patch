@@ -1,0 +1,61 @@
+--- a/MyronStorageBoot.cpp
++++ b/MyronStorageBoot.cpp
+@@ -17,6 +17,9 @@
+ extern "C" void myron_display_start(void);
+ extern "C" void myron_touch_start(void);
+ extern "C" void myron_keystore_start(void);
++#if MYRON_GPU_NATIVE
++extern "C" void myron_gpu_start(void);
++#endif
+ #endif
+ extern "C" {
+ volatile unsigned myron_storage_boot_claimed = 0;
+@@ -79,6 +82,9 @@
+             myron_keystore_start();
+             myron_display_start();
+             myron_touch_start();
++#if MYRON_GPU_NATIVE
++            myron_gpu_start();
++#endif
+         }
+     }
+ #endif
+--- a/build_ufs_dormant.py
++++ b/build_ufs_dormant.py
+@@ -308,6 +308,9 @@
+         flags = ([] if retained else ['-DIOBlockStorageDevice=' + PRIVATE_BASE]) + [f'-DMYRON_ROOT_POLICY={int(root_enabled)}',
+                  f'-DMYRON_ROOT_BOOT={int(root_enabled)}', '-Wno-missing-designated-field-initializers', '-Wno-error']
+         includes = ['-I', str(out/'headers/include')]
++        gpu_enabled = env.get('MYRON_GPU_NATIVE') == '1'
++        require(not gpu_enabled or root_enabled, 'GPU requires the actual root/display boot boundary')
++        flags += ['-DMYRON_GPU_NATIVE='+str(int(gpu_enabled))]
+         if root_enabled:
+             includes += root_include_flags(out, args.verified_root)
+             flags += ['-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1']
+@@ -323,6 +326,10 @@
+             from root_runtime import compile_preflight
+             result['root_preflight'] = compile_preflight(tree, args.verified_root, out,
+                 here, record, builder, target, env, includes, flags)
++            if gpu_enabled:
++                sys.path.insert(0, str(here/'gpu'))
++                from gpu_build import compile_gpu
++                _, _, result['gpu_build'] = compile_gpu(tree, here, out/'gpu', builder, target, env, record)
+             print('PASS all nine root source units, including UFS/RamBlock/shared-cache; native link/prelink still pending', flush=True)
+             return
+         for source in ((probe_source,) if retained else (base_source, probe_source)):
+@@ -428,6 +435,15 @@
+             objects += display_objects
+             keep += display_keep
+             for output in display_objects:
++                new_symbols.update(macho(output.read_bytes(), 1)['external_defined'])
++        if gpu_enabled:
++            sys.path.insert(0, str(here/'gpu'))
++            from gpu_build import compile_gpu
++            gpu_objects, gpu_keep, result['gpu_build'] = compile_gpu(
++                tree, here, out/'gpu', builder, target, env, record)
++            objects += gpu_objects
++            keep += gpu_keep
++            for output in gpu_objects:
+                 new_symbols.update(macho(output.read_bytes(), 1)['external_defined'])
+         root_bsd_object = None
+         root_exec_object = None

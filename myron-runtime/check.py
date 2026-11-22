@@ -15,7 +15,10 @@ with tempfile.TemporaryDirectory() as tmp:
  for name in ui_seed.PATHS:
   file=root/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(b'stale')
  keep=root/'mobile/Library/Preferences/com.apple.springboard.plist';keep.write_bytes(b'keep')
- assert len(ui_seed.clear(root))==3 and keep.read_bytes()==b'keep'
+ # APFS host may be case-insensitive: MobileGestalt/mobilegestalt can name
+ # the same inode; the iOS seed may be case-sensitive. Test both correctly.
+ distinct={(os.stat(root/name).st_dev,os.stat(root/name).st_ino) for name in ui_seed.PATHS}
+ assert len(ui_seed.clear(root))==len(distinct) and keep.read_bytes()==b'keep'
  assert not ui_seed.clear(root)
  (root/ui_seed.PATHS[1]).symlink_to(keep)
  try:ui_seed.clear(root)

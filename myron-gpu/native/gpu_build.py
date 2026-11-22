@@ -63,6 +63,7 @@ def compile_gpu(tree, here, out, builder, target, env, record):
         obj = out/(src.stem+'.o')
         rec = c_record if src.suffix == '.c' else record
         cmd = builder.compile_command(rec, src, obj, includes, ['-Wno-overloaded-virtual'])
+        (out/(src.stem+'-command.json')).write_text(json.dumps(list(map(str, cmd)), indent=2)+'\n')
         with (out/(src.stem+'-compile.log')).open('w') as log:
             status = subprocess.run(cmd, cwd=rec['directory'], env=env, stdout=log, stderr=subprocess.STDOUT)
         require(not status.returncode, (out/(src.stem+'-compile.log')).read_text()[-8000:])
@@ -82,8 +83,19 @@ def compile_gpu(tree, here, out, builder, target, env, record):
         objects.append(obj)
         evidence.append(dict(source=src.name, source_sha256=sha(src), object_sha256=sha(obj)))
 
+    failures = []
     for src in sources:
-        compile_one(src)
+        try:
+            compile_one(src)
+        except (ValueError, subprocess.SubprocessError) as error:
+            # Translation units are independent. Check every unit in this run,
+            # but never generate a boot entry or return a partial object set.
+            failures.append(dict(source=src.name, error=str(error)))
+    if failures:
+        report.update(objects=evidence, failures=failures, native_objects_compiled=False)
+        (out/'gpu-build.json').write_text(json.dumps(report, indent=2)+'\n')
+        raise ValueError('GPU native compilation failed:\n'+'\n'.join(
+            row['source']+': '+row['error'] for row in failures))
     # All registration is late, after the working storage/display/touch boot
     # boundary. The worker is started once and terminates on completion/failure.
     init_source = out/'MyronGpuStart.cpp'

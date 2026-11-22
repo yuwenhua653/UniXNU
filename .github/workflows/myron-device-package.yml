@@ -51,6 +51,8 @@ jobs:
               subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
               subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
               assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check GPU provider ordering and unresolved-import rejection
+        run: python3 tests/test_myron_gpu_preflight.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" -v
       - name: Check Data persistence and physical power key boundaries
         run: |
           git init "$RUNNER_TEMP/ramblock-runtime"

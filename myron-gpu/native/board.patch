@@ -32,18 +32,7 @@
          if root_enabled:
              includes += root_include_flags(out, args.verified_root)
              flags += ['-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1']
-@@ -323,6 +326,10 @@
-             from root_runtime import compile_preflight
-             result['root_preflight'] = compile_preflight(tree, args.verified_root, out,
-                 here, record, builder, target, env, includes, flags)
-+            if gpu_enabled:
-+                sys.path.insert(0, str(here/'gpu'))
-+                from gpu_build import compile_gpu
-+                _, _, result['gpu_build'] = compile_gpu(tree, here, out/'gpu', builder, target, env, record)
-             print('PASS all nine root source units, including UFS/RamBlock/shared-cache; native link/prelink still pending', flush=True)
-             return
-         for source in ((probe_source,) if retained else (base_source, probe_source)):
-@@ -428,6 +435,15 @@
+@@ -428,6 +431,15 @@
              objects += display_objects
              keep += display_keep
              for output in display_objects:
@@ -59,3 +48,26 @@
                  new_symbols.update(macho(output.read_bytes(), 1)['external_defined'])
          root_bsd_object = None
          root_exec_object = None
+--- a/root_runtime.py
++++ b/root_runtime.py
+@@ -674,6 +674,20 @@
+                 infos[path.name]=info
+         except (ValueError, subprocess.SubprocessError) as error:
+             failures.append(str(error))
++    # The boot object already imports myron_gpu_start when this stage is
++    # selected. Compile and audit its real provider (and all its dependencies)
++    # in the same object set before checking closure of the root imports.
++    if not failures and env.get('MYRON_GPU_NATIVE') == '1':
++        try:
++            sys.path.insert(0, str(here/'gpu'))
++            from gpu_build import compile_gpu
++            gpu_objects, _, gpu_report = compile_gpu(
++                tree, here, out/'gpu', builder, target, env, record)
++            evidence.append(gpu_report)
++            for path in gpu_objects:
++                infos['gpu/' + path.name] = macho(path.read_bytes(), 1)
++        except (ValueError, subprocess.SubprocessError) as error:
++            failures.append(str(error))
+     result = dict(passed=not failures, objects=evidence, failures=failures,
+                   kernel_linked=False, runtime_qualified=False)
+     if not failures:

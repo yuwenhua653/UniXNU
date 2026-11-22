@@ -9,3 +9,37 @@
      m.step = 3;
      if (!exchange(1, MHF_MSG_BW_TABLE, m.t.bw, MHF_BW_WORDS)) return;
      m.step = 4;
+@@ -586,9 +586,9 @@
+     m.status = gpuRd(A840_RBBM_STATUS);
+     m.int0 = gpuRd(A840_RBBM_INT_0_STATUS);
+     m.cp_int = gpuRd(A840_CP_INTERRUPT_STATUS_GLOBAL);
+-    grd(nullptr, MGM_WIN_CXMISC, A840_CX_MISC_SW_FUSE_FREQ_LIMIT_STATUS * 4, &m.fuse_freq);
+-    grd(nullptr, MGM_WIN_CXMISC, A840_CX_MISC_SW_FUSE_VALUE * 4, &m.fuse_value);
+-    grd(nullptr, MGM_WIN_CXMISC, A840_CX_MISC_SLICE_ENABLE_FINAL * 4, &m.slices);
++    if (grd(nullptr, MGM_WIN_CXMISC, A840_CX_MISC_SW_FUSE_FREQ_LIMIT_STATUS * 4, &m.fuse_freq)) ++m.io_errors;
++    if (grd(nullptr, MGM_WIN_CXMISC, A840_CX_MISC_SW_FUSE_VALUE * 4, &m.fuse_value)) ++m.io_errors;
++    if (grd(nullptr, MGM_WIN_CXMISC, A840_CX_MISC_SLICE_ENABLE_FINAL * 4, &m.slices)) ++m.io_errors;
+ }
+ 
+ // Mode 8. The command processor as a6xx_ucode_load and the rest of hw_init start it. The GPU's own SMMU context comes from
+@@ -944,7 +944,7 @@
+ // names the Adreno 840), 18 MiB of GMEM at the UCHE GMEM window hw_init programs, the trap base, a client window above every
+ // kernel buffer and the GMEM window inside the 2 GiB aperture, and kaanapali's UBWC 6.0 (highest bank bit 16, swizzle levels 2
+ // and 3, eight-channel macrotiles).
+-const NativeAdrenoAbiDeviceInfo gDeviceInfo = {0x44050a31u, 18u << 20, kGmemRangeMin, kUcheTrapBase, 0x20000000ull, 0x60000000ull,
++NativeAdrenoAbiDeviceInfo gDeviceInfo = {0, 18u << 20, kGmemRangeMin, kUcheTrapBase, 0x20000000ull, 0x60000000ull,
+                                                16, 6, 1, 6, NativeAdrenoDeviceClientIova, 0};
+ 
+ int ringWrite(void *, uint32_t reg, uint32_t value) {return gwr(nullptr, MGM_WIN_GPU, reg * 4, value);}
+@@ -1191,6 +1191,11 @@
+ 
+ void runSteps() {
+     Mode10 &m = gM10;
++    // Read the active slices before publishing a Mesa identity. The current
++    // GMEM/non-context setup is qualified only for all three A840 slices.
++    const uint32_t chip = mg_a840_chip_id(gM7.slices, !gM7.ran || gM7.io_errors);
++    if (chip != 0x44050a31u) return;
++    gDeviceInfo.chip_id = chip;
+     // The BO pool, which NativeAdrenoGpuContextBringup reserves while long contiguous runs remain: every client's buffers come from one
+     // block whose pages never go back to the VM and take the write-combine attribute once. sheng's NativeAdrenoService sets its size
+     // from sheng-gpu-pool (1536 MiB); myron did not link that, so boot-myron-28 had no pool: each BO changed its own pages' attribute,

@@ -236,6 +236,17 @@ static void test_gmu_clocks(void) {
 }
 
 int main(void) {
+    /* Chip selection must derive from hardware, not a copied three-slice ID. */
+    CHECK(mg_a840_chip_id(7, 0) == 0x44050a31u);
+    CHECK(mg_a840_chip_id(3, 0) == 0x44050a21u);
+    CHECK(mg_a840_chip_id(5, 0) == 0x44050a21u);
+    CHECK(mg_a840_chip_id(6, 0) == 0x44050a21u);
+    CHECK(mg_a840_chip_id(1, 0) == 0x44050a11u);
+    CHECK(mg_a840_chip_id(2, 0) == 0x44050a11u);
+    CHECK(mg_a840_chip_id(4, 0) == 0x44050a11u);
+    CHECK(mg_a840_chip_id(0, 0) == 0);
+    CHECK(mg_a840_chip_id(UINT32_MAX, 0) == 0);
+    CHECK(mg_a840_chip_id(7, -1) == 0);
     test_layout();
     test_read_only_cold();
     test_ahb_gate();

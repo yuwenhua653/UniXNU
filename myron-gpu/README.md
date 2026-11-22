@@ -12,6 +12,7 @@ The desktop baseline remains run 45008031354 / commit 682c5c4.
 | [YMGPwcca/OneiOS, SM8850 branch](https://github.com/YMGPwcca/OneiOS/blob/fc3bfd26fdce45df1ba3243260501693cbf5b21c/docs/SM8850_LIVE_STATUS_2026-11-20.md) | Galaxy S26 Ultra, iOS 27 hosted execution, first frame and active KGSL/drm2kgsl context/import/fence path; not sustained 60 FPS | Study iOS 27 frontend and fence contracts. Its Android-hosted KGSL path does not supply a bare-metal XNU GMU/SMMU driver. No OneiOS source is copied here. |
 | [Typeun/myron-device](https://github.com/Typeun/myron-device/tree/d9b6be4d75f5a8169aee65b02bb23cd88968c1eb) | Same board, native Adreno 840 work, iPadOS 17.7.11 reference | Board clocks, command DB, GMU startup, firmware parsing and HFI. These portable sources retain their license. |
 | [zg7681/NativeAdreno-myron, a8xx](https://github.com/zg7681/NativeAdreno-myron/tree/5bbeb3b8d049a637a595090319835a49e58a8b56) | A8xx register selection, ring, CP init, interrupt and timer implementation | Correct A840 backend candidate. Do not silently combine its older five-buffer backend with the current eleven-buffer upstream VM implementation. |
+| [u0er/unixnu-xiaomi17u](https://github.com/u0er/unixnu-xiaomi17u/tree/4c373f26d55f5db0af5e603437d080a5b833fa49) | Native SM8850 GPU stack; maintainer reports desktop rendering on iOS 16.7 | Hardware identity, submission lifetime and logical-display mapping. See [the detailed review](xiaomi17u-review.md); do not import its synthetic hang-fence completion. |
 | [UniXNU GPU porting](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md) | Native driver and iOS 27 Metal/Turnip packaging contract | Native client, target-specific bindings, GPU addon and matching owner trust. |
 
 The checked public sources did not establish a complete, directly reusable
@@ -24,6 +25,9 @@ sources checked, not proof that no other implementation exists.
   `power-hfi-length.patch` changes the reference caller to send that length.
   With a command DB limited to seven GX levels, the wire payload is 33 words,
   not the maximum 69. A wire-walking test checks the following CX table too.
+* The same power-path patch also derives the A840 user-space chip ID from the
+  hardware slice mask, propagates read failures, and checks that it matches
+  the three-slice GMEM setup before publishing. Portable identity tests pass.
 * GMU tests now check the owner's **OS3.0.306.0.WPMCNXM** image: version
   `0x50030023`, instruction-cache payload `0x1b260`. Its GMU and ZAP files differ
   from the reference board bundle; SQE and AQE match. Extracted file hashes are
@@ -56,7 +60,8 @@ phone UI correctness.
 1. Adapt the native board service to this port's 2 GiB owned RAM, real interrupt
    API and power/thermal policy. The reference's 1 GiB GPU pool and maximum
    speed-bin vote must not be enabled unchanged. The stock DT chip ID is
-   `0x44050a01`; do not publish the other board's `0x44050a31` without evidence.
+   `0x44050a01`; `0x44050a31` is its three-active-slice user-space encoding.
+   The staged path now derives it from checked hardware readback.
 2. Build the A840 backend and iPhone-specific arm64e accelerator against the
    actual XNU headers. Preserve firmware/SMMU ownership, fenced submissions
    and the existing real display retirement gates. Retain working FT3683 HID.

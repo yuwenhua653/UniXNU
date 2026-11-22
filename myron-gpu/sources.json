@@ -30,5 +30,11 @@
     "commit": "682c5c4887ba87aef1848ec1a191659a2450ac17",
     "kernel_sha256": "7e616ed8b916311ab93ef5a5b3c280e5f07a8bdee4d6f46b0782965c623318c2"
   },
-  "runtime_enabled": false
+  "runtime_enabled": false,
+  "xiaomi17u_reference": {
+    "repository": "https://github.com/u0er/unixnu-xiaomi17u",
+    "commit": "4c373f26d55f5db0af5e603437d080a5b833fa49",
+    "os_target": "iOS 16.7 / XNU 8796",
+    "read_only": true
+  }
 }

@@ -437,6 +437,16 @@ out:
     mg_rd(io, r, MG_WIN_GPUCC, MG_CC_HUB_AON_CLK, &o->hub_aon);
 }
 
+/* KGSL gen8_get_gpu_slice_info: user-space chip ID adds the active slice
+ * count in bits 4..7. The DT's base ID alone is not the Mesa identity.
+ * Call only after a successful, powered CX_MISC_SLICE_ENABLE_FINAL read. */
+static inline uint32_t mg_a840_chip_id(uint32_t slice_register, int read_status) {
+    if (read_status || slice_register == UINT32_MAX) return 0;
+    uint32_t mask = slice_register & 7u;
+    unsigned slices = (mask & 1u) + ((mask >> 1) & 1u) + ((mask >> 2) & 1u);
+    return slices ? 0x44050a01u | (slices << 4) : 0;
+}
+
 static inline const char *mg_state_text(enum mg_state s) {
     return s == MG_DONE ? "ok" : s == MG_SKIPPED_PREREQ ? "skip" : s == MG_SKIPPED_MODE ? "off" : s == MG_NOMAP ? "nomap" : "-";
 }

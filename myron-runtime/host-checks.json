@@ -1,0 +1,22 @@
+{
+  "host_passed": true,
+  "hardware_tested": false,
+  "tests": [
+    "bounded UFS ranges and failure closure",
+    "durable overlay reopen and seed mismatch",
+    "power debounce, boot-held suppression and read timeout",
+    "3x paired presentation properties"
+  ],
+  "physical_framebuffer_changed": false,
+  "firmware_refetch_passed": true,
+  "full_native_compile_passed": false,
+  "sources": {
+    "test_runtime.cpp": "dfc30f4cdc516a8afb0e7e01b5a621d4d1bf94f269e465608fa657faa5db39cb",
+    "check.py": "721debb7434435dc30debdfb6cb88da4af238d0bac00e834ae51c1e16d018121",
+    "MyronDataWindow.h": "78f708da0358a128b3a7c5b8348aa6187f43cdcefeafe87076177aa2b88f3854",
+    "prepare.py": "104c249b3d65f5af66da7e7e366331b0ceb7684924466dcbec3613574cb0330a",
+    "test_store.cpp": "12ed1702bfe724e69d0b3fa0b091a9da5c403c8f710e2ff83d0848a7a9b60c5b",
+    "MyronDataStore.h": "939f9b657b4c994c7bc02473b78563f11e9294e1d7aeaac5554965fea0214abb",
+    "ui_seed.py": "5c619d7f3919d5ecc2f806105f7bf91fad3dbe342f77c614dd590f8fb1984a54"
+  }
+}

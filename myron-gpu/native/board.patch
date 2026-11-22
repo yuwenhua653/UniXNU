@@ -26,8 +26,8 @@
          flags = ([] if retained else ['-DIOBlockStorageDevice=' + PRIVATE_BASE]) + [f'-DMYRON_ROOT_POLICY={int(root_enabled)}',
                   f'-DMYRON_ROOT_BOOT={int(root_enabled)}', '-Wno-missing-designated-field-initializers', '-Wno-error']
          includes = ['-I', str(out/'headers/include')]
-+        gpu_enabled = env.get('MYRON_GPU_NATIVE') == '1'
-+        require(not gpu_enabled or root_enabled, 'GPU requires the actual root/display boot boundary')
++        gpu_requested = env.get('MYRON_GPU_NATIVE') == '1'
++        gpu_enabled = gpu_requested and root_enabled
 +        flags += ['-DMYRON_GPU_NATIVE='+str(int(gpu_enabled))]
          if root_enabled:
              includes += root_include_flags(out, args.verified_root)

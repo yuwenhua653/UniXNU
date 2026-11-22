@@ -35,7 +35,10 @@ extern "C" void boot_process_start(){}
 extern "C" size_t myron_process_snapshot(char *p,size_t n){assert(n==24576);strcpy(p,"process snapshot\n");return strlen(p);}
 static int scenario,writes,syncs,locked,sleeps,gptCalls;static unsigned logArg;
 static constexpr unsigned kDataMax=131072;
-static struct {bool ready,poisoned;} gHost;
+static int transportLock;
+static struct {bool ready,poisoned;void *lock;} gHost;
+static void IOLockLock(void *){assert(!transportLock);transportLock=1;}
+static void IOLockUnlock(void *){assert(transportLock);transportLock=0;}
 static struct {bool valid;uint64_t imageBytes,first,last;} gStoreGeometry;
 static unsigned myron_root_start_ready;
 static bool gStoreOpen,gLogOpen;
@@ -45,7 +48,7 @@ static unsigned storeMode(){return scenario==4;}
 static unsigned logMode(){return scenario==5;}
 static uint64_t reserveBlocks(){return 1024;}
 static unsigned native_ufs_store_gpt_check(){++gptCalls;return scenario==6;}
-static bool hostLogOpen(uint64_t first,uint64_t blocks){assert(!gLogOpen);allowedFirst=first;allowedBlocks=blocks;gLogOpen=true;return true;}
+static bool hostLogOpen(uint64_t first,uint64_t blocks){assert(!gLogOpen && transportLock);allowedFirst=first;allowedBlocks=blocks;gLogOpen=true;return true;}
 static int hostWrite4k(unsigned lun,uint64_t first,uint32_t n,const void *p) {
  assert(!locked && lun==0 && p && first>=allowedFirst && first+n<=allowedFirst+allowedBlocks);
  ++writes;return scenario==7 ? -1 : 0;
@@ -71,7 +74,7 @@ extern "C" {struct msgbuf *msgbufp;}
 int main() {
  char ring[]="message ring";struct msgbuf m={MSG_MAGIC,(int)sizeof ring,0,0,ring};msgbufp=&m;
  for(scenario=0;scenario<=8;++scenario) {
-  gHost={true,false};gStoreGeometry={true,67108864ULL,256,65791};
+  gHost={true,false,nullptr};gStoreGeometry={true,67108864ULL,256,65791};
   myron_root_start_ready=1;gStoreOpen=gLogOpen=false;myronLogStarted=0;myronLogFirst=0;
   myron_log_state=myron_log_rounds=myron_log_errors=0;writes=syncs=sleeps=gptCalls=0;logArg=1;
   if(scenario==1)myron_root_start_ready=0;

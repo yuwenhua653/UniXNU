@@ -11,6 +11,7 @@ void myron_digitizer_static_init() __asm__("__GLOBAL__sub_I_MyronDigitizer.cpp")
 }
 
 extern "C" bool myron_publish_digitizer();
+extern "C" bool myron_publish_power_key();
 static void startTouch(void *, wait_result_t)
 {
     bool published = false;
@@ -18,8 +19,10 @@ static void startTouch(void *, wait_result_t)
         void *handle = OSMetaClass::preModLoad(g_kernel_kmod_info.name);
         if (handle) {
             myron_digitizer_static_init();
-            if (OSMetaClass::postModLoad(handle) == KERN_SUCCESS)
+            if (OSMetaClass::postModLoad(handle) == KERN_SUCCESS) {
                 published = myron_publish_digitizer();
+                IOLog("myron-power: %s\n",myron_publish_power_key()?"HID power button published":"PMIC key unavailable");
+            }
         }
     }
     IOLog("myron-touch: %s\n", published ? "FT3683 identified, digitizer started" : "digitizer startup failed");

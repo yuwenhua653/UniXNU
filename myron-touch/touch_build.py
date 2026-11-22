@@ -24,7 +24,8 @@ def matching(image):
     rule = entry['IOKitPersonalities']['HID Pointing/Consumer/System Control Driver']
     check(rule['CFBundleIdentifier'] == FAMILY and rule['IOClass'] == 'IOHIDEventDriver'
           and rule['IOProviderClass'] == 'IOHIDInterface'
-          and {'DeviceUsagePage': 13} in rule['DeviceUsagePairs'], 'Missing digitizer matching rule')
+          and {'DeviceUsagePage': 13} in rule['DeviceUsagePairs']
+          and {'DeviceUsagePage': 12} in rule['DeviceUsagePairs'], 'Missing digitizer matching rule')
     return hashlib.sha256(plistlib.dumps(entry['IOKitPersonalities'])).hexdigest()
 
 
@@ -133,6 +134,6 @@ def compile_touch(tree, here, out, builder, target, env, record, donor, native, 
     contract = dict(bindings=bindings, methods=rows, vtable_symbol=VTABLE, donor_sha256=fixture['kernelcache_sha256'],
                     data_imports=[n for n,r in bindings.items() if r['kind']=='data' and n in imports],
                     personality_sha256=personality, owners=[FAMILY])
-    keep = ('_geni_spi_transfer', '_geni_spi_read_info', '_myron_touch_start', '_myron_touch_snapshot', '_myron_publish_digitizer', '_myron_touch_read_contacts', VTABLE,'__GLOBAL__sub_I_MyronDigitizer.cpp') + tuple(
+    keep = ('_geni_spi_transfer', '_geni_spi_read_info', '_myron_touch_start', '_myron_touch_snapshot', '_myron_publish_digitizer', '_myron_publish_power_key', '_myron_touch_read_contacts', VTABLE,'__GLOBAL__sub_I_MyronDigitizer.cpp') + tuple(
         n+'.original' if r['kind']=='function' else n for n,r in bindings.items())
     return objects, keep, contract

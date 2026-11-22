@@ -1,0 +1,307 @@
+{
+  "url": "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS3.0.306.0.WPMCNXM/myron-ota_full-OS3.0.306.0.WPMCNXM-user-16.0-0b34ee6a73.zip",
+  "payload_metadata_sha256": "585e62303e57e216d55457b8d610030037d28d483d6bdb3163f12b0661ef266e",
+  "partitions": {
+    "odm": {
+      "image_bytes": 3750649856,
+      "operations": [
+        {
+          "index": 0,
+          "type": 8,
+          "offset": 302461689,
+          "bytes": 1406136,
+          "sha256": "71960745cee36c7a8a24e5109755fc3e8437d05becc818fc8a11d924929b49f9",
+          "spans": [
+            [
+              0,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 1,
+          "type": 8,
+          "offset": 303867825,
+          "bytes": 1458944,
+          "sha256": "ab14d66b4fdd8ec7931125c0c7d22efa2a520220f82d8b4d779eb1f828e07cc6",
+          "spans": [
+            [
+              2097152,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 2,
+          "type": 8,
+          "offset": 305326769,
+          "bytes": 1627492,
+          "sha256": "9bf140a7b7850cee626a81b40aaac0d30f45ec6fd365d81cbee9627a967c5016",
+          "spans": [
+            [
+              4194304,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 3,
+          "type": 8,
+          "offset": 306954261,
+          "bytes": 1704544,
+          "sha256": "187aca0bb0e90ed8f2b4c935c8e57437d7e2176164a57fafd558490386df928a",
+          "spans": [
+            [
+              6291456,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 4,
+          "type": 8,
+          "offset": 308658805,
+          "bytes": 1707760,
+          "sha256": "4fac4f1c91a3b77270d0709577629c4fd9874df9cedab0d12a6626794b88ebb1",
+          "spans": [
+            [
+              8388608,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 5,
+          "type": 8,
+          "offset": 310366565,
+          "bytes": 1630896,
+          "sha256": "047a7f440cc7532df59c0fc0d22e3bd56ceeb8ca35ff4c4efee7219d41625847",
+          "spans": [
+            [
+              10485760,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 6,
+          "type": 8,
+          "offset": 311997461,
+          "bytes": 1985316,
+          "sha256": "3bbf57ae5e7abe044c2f58b9e1492bf5b85cc42c39ee78f629c76e4d62a91f65",
+          "spans": [
+            [
+              12582912,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 7,
+          "type": 8,
+          "offset": 313982777,
+          "bytes": 2025316,
+          "sha256": "68bceec174354e68cfea8d9f666a64de1774e8d1be100508eb3779364697c915",
+          "spans": [
+            [
+              14680064,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 928,
+          "type": 8,
+          "offset": 2003264029,
+          "bytes": 1495256,
+          "sha256": "415659cfa7d0c19142b3e4e32b3c89b74102d02065675088417be28135e95303",
+          "spans": [
+            [
+              1946157056,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 933,
+          "type": 8,
+          "offset": 2009059933,
+          "bytes": 1248088,
+          "sha256": "bd2575e913e323341fb9195fd8aa489db3218fe108c019d101e8508bc4df87f2",
+          "spans": [
+            [
+              1956642816,
+              2097152
+            ]
+          ]
+        }
+      ]
+    },
+    "vendor": {
+      "image_bytes": 901787648,
+      "operations": [
+        {
+          "index": 0,
+          "type": 8,
+          "offset": 9143281094,
+          "bytes": 1703312,
+          "sha256": "9f055a3530505c4f7ab61e02c9f5251f3557a26997374a317a014561f360a243",
+          "spans": [
+            [
+              0,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 1,
+          "type": 8,
+          "offset": 9144984406,
+          "bytes": 1399400,
+          "sha256": "367260cdc66c5cf7f1ef84f3d79e6a86ee49a4b363191045c2071ad4aae6a2b0",
+          "spans": [
+            [
+              2097152,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 2,
+          "type": 8,
+          "offset": 9146383806,
+          "bytes": 1412732,
+          "sha256": "73c5af22a264be7fcb699863c1e98c654f5e3b312820818898851199b91a7431",
+          "spans": [
+            [
+              4194304,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 3,
+          "type": 8,
+          "offset": 9147796538,
+          "bytes": 1286784,
+          "sha256": "42c567ae0ebc869686962f4b012024f904e54899809330018d65abe478a5d462",
+          "spans": [
+            [
+              6291456,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 4,
+          "type": 8,
+          "offset": 9149083322,
+          "bytes": 1414232,
+          "sha256": "a292eae4ef7e6268ecdd45ed3334c32d43d68cc496619606cbb5a9c9e335c3d0",
+          "spans": [
+            [
+              8388608,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 5,
+          "type": 8,
+          "offset": 9150497554,
+          "bytes": 1234512,
+          "sha256": "c7b3a4cec9c94daecfdaf7cf12e045e3e08affd8532cc29a9db7610779beb364",
+          "spans": [
+            [
+              10485760,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 6,
+          "type": 8,
+          "offset": 9151732066,
+          "bytes": 901144,
+          "sha256": "42fdea920db377787de55ded275e5a01f6c2bbe3088f6c7348ee3fdf7ff6c68b",
+          "spans": [
+            [
+              12582912,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 7,
+          "type": 8,
+          "offset": 9152633210,
+          "bytes": 900604,
+          "sha256": "c5358f6d1491aabdaca2304cbeed5987d9486e95eb0608856e06697db0670724",
+          "spans": [
+            [
+              14680064,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 115,
+          "type": 8,
+          "offset": 9339184856,
+          "bytes": 1069008,
+          "sha256": "50dcfbecd80c9301c5a722b9c4a6bf00b62a6b63d4cb8f63d64d79341f69b1db",
+          "spans": [
+            [
+              241172480,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 119,
+          "type": 8,
+          "offset": 9344586372,
+          "bytes": 1169032,
+          "sha256": "ecd02bce869d1f62aa6cd435effa5eb5801ededb849613c7773c0d4d81b73f52",
+          "spans": [
+            [
+              249561088,
+              2097152
+            ]
+          ]
+        },
+        {
+          "index": 118,
+          "type": 8,
+          "offset": 9343214696,
+          "bytes": 1371676,
+          "sha256": "b24faef55ae6c11114f5f3b27fe559e7b0d562a857679b73c6669065a1c57be8",
+          "spans": [
+            [
+              247463936,
+              2097152
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "files": {
+    "gen80200_gmu.bin": {
+      "partition": "vendor",
+      "nid": 7773560
+    },
+    "gen80200_sqe.fw": {
+      "partition": "vendor",
+      "nid": 7773908
+    },
+    "gen80200_aqe.fw": {
+      "partition": "vendor",
+      "nid": 7586685
+    },
+    "gen80200_zap.mbn": {
+      "partition": "odm",
+      "nid": 61154693
+    }
+  }
+}

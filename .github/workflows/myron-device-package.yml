@@ -51,6 +51,12 @@ jobs:
               subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
               subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
               assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check Data persistence and physical power key boundaries
+        run: |
+          git init "$RUNNER_TEMP/ramblock-runtime"
+          git -C "$RUNNER_TEMP/ramblock-runtime" fetch --depth 1 https://github.com/UniXNU/RamBlock.git 4be2d7eb05ef5a98126c91e0302c149140c0e3e1
+          git -C "$RUNNER_TEMP/ramblock-runtime" checkout --detach FETCH_HEAD
+          python3 myron-runtime/check.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --ramblock "$RUNNER_TEMP/ramblock-runtime" --cxx clang++
       - name: Check fresh Data desktop provisioning before the full build
         run: |
           mkdir -p "$RUNNER_TEMP/geometry-check"
@@ -192,6 +198,34 @@ jobs:
             ${{ runner.temp }}/user-va-pac-check
           if-no-files-found: warn
           retention-days: 7
+  gpu-firmware:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build pinned EROFS extraction tool with file extraction support
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y autoconf automake libtool pkg-config liblz4-dev liblzma-dev libzstd-dev uuid-dev
+          git init "$RUNNER_TEMP/erofs-utils"
+          git -C "$RUNNER_TEMP/erofs-utils" fetch --depth 1 https://github.com/erofs/erofs-utils.git 3689cbc2349bff05807d2f939146e92eb1bfaea1
+          git -C "$RUNNER_TEMP/erofs-utils" checkout --detach FETCH_HEAD
+          cd "$RUNNER_TEMP/erofs-utils"
+          ./autogen.sh
+          ./configure --disable-fuse
+          make -j2
+      - name: Fetch and verify the exact myron 3.0.306 A840 firmware
+        run: python3 myron-gpu/fetch_firmware.py --output "$RUNNER_TEMP/gpu-firmware" --scratch "$RUNNER_TEMP/gpu-extraction" --dump-erofs "$RUNNER_TEMP/erofs-utils/dump/dump.erofs"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-a840-firmware-inputs
+          path: ${{ runner.temp }}/gpu-firmware
+          if-no-files-found: error
+          retention-days: 7
+
   inputs:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron device-bound iOS 27 package'
     # Draft release assets require push access. This job only downloads and
@@ -228,7 +262,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/myron-private-inputs"
           rm -f "$RUNNER_TEMP/device-inputs.zip"
   package:
-    needs: [inputs, handoff, macos-geometry]
+    needs: [inputs, handoff, macos-geometry, gpu-firmware]
     permissions:
       contents: read
     runs-on: macos-26
@@ -246,6 +280,10 @@ jobs:
         with:
           name: verified-device-inputs
           path: ${{ runner.temp }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: myron-a840-firmware-inputs
+          path: ${{ runner.temp }}/gpu-firmware
       - name: Check authenticated public-header access before build setup
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -278,6 +316,8 @@ jobs:
           # The pinned public-header fetcher already supports authenticated GitHub requests.
           # This job retains contents: read; do not expose this token as a command argument.
           GITHUB_TOKEN: ${{ github.token }}
+          MYRON_GPU_NATIVE: '1'
+          MYRON_GPU_FIRMWARE: ${{ runner.temp }}/gpu-firmware
           MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}
         run: python3 myron27-device-build.py --input-archive "$RUNNER_TEMP/device-inputs.zip"
       - name: Check retained root compatibility and prepare boot-only candidate

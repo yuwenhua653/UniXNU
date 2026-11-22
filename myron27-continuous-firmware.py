@@ -68,7 +68,7 @@ from payload_adt import parse as parse_adt
 embedded_adt=parse_adt(read('Payloads/kernel.macho.adt'))
 chosen=embedded_adt['/device-tree/chosen']
 board_adt=tomllib.loads((device/'board.toml').read_text())['adt']
-gop_mode={'display-scale':2,'display-rotation':0}
+gop_mode={'display-scale':3,'display-rotation':0}
 if a.source_repo:
     # Historical recovery verifies the display declarations of its own pinned board.
     board_words=board_adt['chosen']['u32']
@@ -78,12 +78,15 @@ for key,expected in gop_mode.items():
 product=embedded_adt.get('/device-tree/product',{})
 if not a.source_repo or 'product' in board_adt:
     phone_strings={'product-name':'iPhone 11','product-description':'iPhone 11',
-                  'artwork-device-idiom':'phone','compatible-device-fallback':'iPhone11,8'}
-    phone_words={'artwork-scale-factor':2,'artwork-device-subtype':1792,'thin-bezel':1}
+                  'artwork-device-idiom':'phone','compatible-device-fallback':'iPhone15,2'}
+    phone_words={'artwork-scale-factor':3,'artwork-device-subtype':2556,'thin-bezel':1}
+    if a.source_repo:
+        phone_strings=board_adt['product']['string']
+        phone_words=board_adt['product']['u32']
     for key,value in phone_strings.items():
-        need(product.get(key)==value.encode()+bytes(1),'Embedded /product/'+key+' differs from N104AP')
+        need(product.get(key)==value.encode()+bytes(1),'Embedded /product/'+key+' differs from reviewed myron UI profile')
     for key,value in phone_words.items():
-        need(product.get(key)==value.to_bytes(4,'little'),'Embedded /product/'+key+' differs from N104AP')
+        need(product.get(key)==value.to_bytes(4,'little'),'Embedded /product/'+key+' differs from reviewed myron UI profile')
 buttons=embedded_adt.get('/device-tree/buttons',{})
 if not a.source_repo or 'buttons' in board_adt:
     for key,value in {'compatible':b'buttons\0','device_type':b'buttons\0',
@@ -94,6 +97,9 @@ required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_b
 if (device/'touch/iphone12-1-hid-24A446.json').is_file():
     required |= {'_myron_touch_start', '_myron_publish_digitizer', '_myron_touch_read_contacts',
                  '__ZTV14MyronDigitizer'}
+if (device/'touch/MyronPowerHardware.h').is_file():
+    required |= {'_myron_publish_power_key', '_myron_data_store_open', '_myron_data_store_read',
+                 '_myron_data_store_write', '_myron_data_store_sync'}
 if (device/'touch/MyronSE19Bus.h').is_file():
     required |= {'_geni_spi_read_info', '_geni_spi_transfer'}
 need(required<=definitions.keys(),f'Continuous recorder missing from final prelinked kernel: {sorted(required-definitions.keys())}')

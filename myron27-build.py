@@ -25,7 +25,7 @@ if any(v is not None for v in owner_values):
 if options.original_root and not options.desktop:parser.error('--original-root requires --desktop')
 here=Path(__file__).resolve().parent;root=Path(os.environ['RUNNER_TEMP'])/'myron-iphone27';root.mkdir(parents=True,exist_ok=True)
 TOUCH_SOURCES = ('board.patch', 'touch_build.py', 'MyronDigitizer.cpp', 'MyronTouchStart.cpp', 'MyronTouchBoard.h', 'MyronTouchPower.h',
-                 'MyronSE19Bus.h', 'MyronFirmwareTouch.h', 'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
+                 'MyronPowerKey.h', 'MyronPowerHardware.h', 'MyronSE19Bus.h', 'MyronFirmwareTouch.h', 'MyronFT3683.c', 'MyronFT3683.h', 'fts_myron_frame.h',
                  'iphone12-1-hid-24A446.json', 'test_touch.c')
 def root_qualification_identity(fixture):
  return {'gpu_mode':hashlib.sha256(os.environ.get('MYRON_GPU_NATIVE','0').encode()).hexdigest(),
@@ -35,6 +35,7 @@ def root_qualification_identity(fixture):
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
   'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
   **{'touch/'+name:here/'myron-touch'/name for name in TOUCH_SOURCES},
+  **{'runtime/'+p.name:p for p in (here/'myron-runtime').iterdir() if p.is_file()},
   'ufs_medium_source':here/'myron-ufs-medium.patch',
   'setup_worker_source':here/'myron-setup-worker.patch',
   'setup_data_source':here/'myron-setup-data.patch',
@@ -383,6 +384,7 @@ for path in (here/'myron-gpu/native').iterdir():
  if path.is_file():(gpu/path.name).write_bytes(path.read_bytes())
 (gpu/'firmware-3.0.306.json').write_bytes((here/'myron-gpu/firmware-3.0.306.json').read_bytes())
 subprocess.run(['patch','-s','-p1','-i',str(gpu/'board.patch')],cwd=board,check=True)
+subprocess.run([sys.executable,str(here/'myron-runtime/prepare.py'),str(root)],check=True)
 if options.source_only:
  print('Reconstructed reviewed source inputs:',root/'device',flush=True)
  raise SystemExit(0)

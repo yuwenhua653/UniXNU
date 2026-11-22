@@ -78,3 +78,5 @@ phone UI correctness.
 
 The source-check workflow compiles portable/backend host tests; it does not start a full kernel build. The current
 working desktop is not replaced by a partially connected GPU driver.
+
+The runtime integration now pairs chosen/artwork scale at 3 and adds physical power input and seed-bound Data persistence. The combined device workflow fetches pinned OTA operation ranges and compiles A840 native code with real XNU recipes. Its boot hook remains opt-in; Metal userspace and accelerator publication are still pending.

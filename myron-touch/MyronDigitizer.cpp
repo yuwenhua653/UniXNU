@@ -10,6 +10,7 @@
 #include "MyronTouchBoard.h"
 #include "MyronTouchPower.h"
 #include "MyronSE19Bus.h"
+#include "MyronPowerHardware.h"
 
 /* The periodic boot snapshot outlives the early kernel message ring. */
 static uint32_t rscId, rscConfig, touchChip, hidReports;
@@ -28,6 +29,8 @@ static_assert(sizeof(IOHIDDevice) == 0xd0, "Wrong iPhone HID superclass ABI");
 
 class MyronDigitizer : public IOHIDDevice {
     OSDeclareDefaultStructors(MyronDigitizer);
+    bool keysOnly = false;
+    MyronPowerHardware power;
     struct Pad {
         IOMemoryMap *map;
         volatile uint32_t *regs;
@@ -203,7 +206,21 @@ class MyronDigitizer : public IOHIDDevice {
     }
     static void tick(OSObject *owner, IOTimerEventSource *source) {
         auto self = OSDynamicCast(MyronDigitizer, owner);
-        if (!self || !self->configured) return;
+        if (!self) return;
+        if (self->keysOnly) {
+            self->power.poll();
+            if (self->power.state.pending()) {
+                uint8_t report[]={5,(uint8_t)self->power.state.stable};
+                auto buffer=IOBufferMemoryDescriptor::withBytes(report,sizeof(report),kIODirectionIn);
+                if(buffer){
+                    auto status=self->handleReport(buffer,kIOHIDReportTypeInput,0);
+                    buffer->release();
+                    if(status==kIOReturnSuccess){self->power.state.accepted();++self->power.reports;}
+                }
+            }
+            source->setTimeoutMS(20);return;
+        }
+        if (!self->configured) return;
         unsigned next = 5;
         if (!self->sensor.ready) {
             next = myron_touch_identify_and_start(&self->sensor) == 0 ? 5 : 500;
@@ -229,11 +246,12 @@ class MyronDigitizer : public IOHIDDevice {
     }
 public:
     IOWorkLoop *getWorkLoop() const override { return loop; }
-    OSString *newTransportString() const override { return OSString::withCString("SPI"); }
-    OSString *newProductString() const override { return OSString::withCString("Myron FT3683"); }
+    OSString *newTransportString() const override { return OSString::withCString(keysOnly ? "SPMI" : "SPI"); }
+    OSString *newProductString() const override { return OSString::withCString(keysOnly ? "Myron Power Button" : "Myron FT3683"); }
     IOReturn newReportDescriptor(IOMemoryDescriptor **out) const override {
         if (!out) return kIOReturnBadArgument;
-        *out = IOBufferMemoryDescriptor::withBytes(myron_touch_descriptor, myron_touch_descriptor_bytes, kIODirectionNone);
+        *out = IOBufferMemoryDescriptor::withBytes(keysOnly ? myron_power_descriptor : myron_touch_descriptor,
+            keysOnly ? sizeof(myron_power_descriptor) : myron_touch_descriptor_bytes, kIODirectionNone);
         return *out ? kIOReturnSuccess : kIOReturnNoMemory;
     }
     IOReturn getReport(IOMemoryDescriptor *out, IOHIDReportType type, IOOptionBits options) override {
@@ -242,6 +260,19 @@ public:
         uint8_t report[] = {4, MYRON_FINGERS};
         return out && out->writeBytes(0, report, sizeof(report)) == sizeof(report) ?
             kIOReturnSuccess : kIOReturnNoSpace;
+    }
+    bool prepareKeys(IOService *provider) {
+        if(!provider || strcmp(provider->getName(),"myron-power-key"))return false;
+        keysOnly=true;
+        if(!power.open())return false;
+        setProperty("Built-In",kOSBooleanTrue);
+        setProperty("HIDDefaultBehavior",kOSBooleanTrue);
+        loop=IOWorkLoop::workLoop();ownsLoop=loop!=nullptr;
+        timer=IOTimerEventSource::timerEventSource(this,tick);
+        if(!loop || !timer || loop->addEventSource(timer)!=kIOReturnSuccess){
+            OSSafeReleaseNULL(timer);OSSafeReleaseNULL(loop);ownsLoop=false;power.close();return false;
+        }
+        return true;
     }
     bool prepare(IOService *provider) {
         // Only a nub matched explicitly to this board is allowed to touch its pads.
@@ -269,7 +300,8 @@ public:
     void handleStop(IOService *) override { closeBoard(); }
     void closeBoard() {
         cancelTimer();
-        myron_touch_release(&sensor, submit, this);
+        if(!keysOnly)myron_touch_release(&sensor, submit, this);
+        power.close();
         shutdownPads();
         if (ownsLoop) { OSSafeReleaseNULL(loop); ownsLoop = false; }
     }
@@ -304,4 +336,27 @@ done:
     OSSafeReleaseNULL(touch);
     OSSafeReleaseNULL(nub);
     return false;
+}
+
+// Reuse the same retained 207-slot IOHIDDevice ABI with a separate consumer
+// collection/service; PMIC errors never block the FT3683 digitizer work loop.
+extern "C" bool myron_publish_power_key()
+{
+    auto parent=IOService::getResourceService();
+    if(!parent)return false;
+    auto nub=new IOService;
+    auto key=new MyronDigitizer;
+    bool attached=false,started=false,keyAttached=false;
+    if(!nub || !key || !nub->init() || !key->init())goto fail;
+    nub->setName("myron-power-key");
+    attached=nub->attach(parent);if(!attached)goto fail;
+    started=nub->start(parent);if(!started)goto fail;
+    keyAttached=key->attach(nub);
+    if(!keyAttached || !key->prepareKeys(nub) || !key->start(nub))goto fail;
+    key->arm();key->release();nub->release();return true;
+fail:
+    if(keyAttached){key->closeBoard();key->detach(nub);}
+    if(started)nub->stop(parent);
+    if(attached)nub->detach(parent);
+    OSSafeReleaseNULL(key);OSSafeReleaseNULL(nub);return false;
 }

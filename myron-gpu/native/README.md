@@ -51,10 +51,10 @@ before compilation. Firmware bytes are not committed here.
 initializers, and emits explicit late registration. The kernel's existing
 undefined-symbol and unchanged-initializer checks still apply. At boot,
 `myron-gpu=1` starts this stage after the existing storage/display/touch boundary.
-Neither build selection nor that boot argument is added to production defaults.
+The combined device build now selects native compilation; the runtime boot argument remains off until the compiled kernel is audited.
 
 The current build does not link `NativeAdrenoAccelerator.cpp`, install a Metal
-plugin, relax sandbox/AMFI policy, enable GPU scanout, or change the UI scale.
+plugin, relax sandbox/AMFI policy, enable GPU scanout, or advertise hardware rendering. UI scale is handled separately by myron-runtime.
 The iPhone-specific accelerator audit in the parent directory is retained for
 the next integration stage. Passing these tests does not establish Metal ABI
 compatibility or hardware startup.
@@ -71,8 +71,7 @@ The host suite compiles the real ring, CP-init, IRQ decoder and timer against
 upstream software peers; it checks A8xx register selection, failed writes,
 poisoned rings, and bounded timeouts. It also tests pool/OPP/admission policy
 and fragments/reassembles all 20480 possible BO extents using the staged
-allocator functions. The CI job runs these source checks only; it does not
-start the hour-long kernel/package build.
+allocator functions. The source-check CI job runs these host tests. The separate device-package workflow now fetches exact OTA firmware and compiles the native stage with the kernel.
 
 Next required checks are real XNU compile/link and retained ABI validation,
 then matched iOS27 Metal/Turnip code, signed addon capacity, a known rendered

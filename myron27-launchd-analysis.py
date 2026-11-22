@@ -317,13 +317,110 @@ def inspect_setup_flow(mount, audit, trust):
     names=re.compile(r'(Multilingual|WrittenAndSpoken|LanguageAndLocale|KeyboardController|KeyboardData)',re.I)
     chosen=observed|{s for s,k in labels.items() if names.search(k)}
     chosen.update(s for s,v in funcs.items() if any('buddyDefaultKeyboards' in a or 'buddySuggestedKeyboards' in a for _,a in v))
+    # Selector stubs in this signed app load a bound selector reference with
+    # ADRP/LDR. Resolve image-relative chained rebases in the original file.
+    data=exe.data
+    base=0x100000000
+    sections=[]
+    cur=32
+    for _ in range(unpack('<I',data,16)[0]):
+        typ,n=unpack('<II',data,cur)
+        if typ==0x19:
+            count=unpack('<I',data,cur+64)[0]
+            for j in range(count):
+                off=cur+72+j*80
+                key,seg,va,size,fo=unpack('<16s16sQQI',data,off)
+                if fo and fo+size<=len(data):
+                    sections.append((va,va+size,fo,key.rstrip(b'\0').decode()))
+        cur+=n
+    def loc(va):
+        for lo,hi,fo,k in sections:
+            if lo<=va<hi:return fo+va-lo,k
+        return None,None
+    def ptr(va):
+        o,_=loc(va)
+        if o is None:return 0
+        v=unpack('<Q',data,o)[0]
+        if not v:return 0
+        for t in [v,base+(v&0xffffffff),v&0x7ffffffffff,base+(v&0x7ffffffffff)]:
+            if loc(t)[0] is not None:return t
+        return 0
+    def cs(v):
+        o,k=loc(v)
+        if o is None or k not in ('__cstring','__objc_methname','__objc_classname'):return ''
+        e=data.find(b'\0',o,o+400)
+        return data[o:e].decode(errors='replace') if e>o else ''
+    def adr(pc,w):
+        return (pc&~4095)+(signed(((w>>5&0x7ffff)<<2)|(w>>29&3),21)<<12)
+    def stub(va):
+        o,k=loc(va)
+        if k!='__objc_stubs':return ''
+        ws=unpack('<4I',data,o)
+        for j,w in enumerate(ws[:-1]):
+            if w&0x9f00001f!=0x90000001:continue
+            z=ws[j+1]
+            if z&0xffc003ff==0xf9400021:return cs(ptr(adr(va+j*4,w)+(z>>10&4095)*8))
+        return ''
+    methods={}
+    for lo,hi,fo,k in sections:
+        if k!='__objc_classlist':continue
+        for va in range(lo,hi,8):
+            cls=ptr(va)
+            for obj,prefix in [(cls,'-'),(ptr(cls),'+')]:
+                ro=ptr(obj+32)&~7
+                name=cs(ptr(ro+24))
+                m=ptr(ro+32)
+                off,_=loc(m)
+                if not name or off is None:continue
+                flags,count=unpack('<II',data,off)
+                if count>10000:continue
+                small=bool(flags&0x80000000)
+                length=(flags&0xffff)&~3
+                if length!=(12 if small else 24):continue
+                for i in range(count):
+                    item=m+8+i*length
+                    io,_=loc(item)
+                    if io is None:break
+                    if small:
+                        ns,_,imp=unpack('<iii',data,io)
+                        nm=cs(item+ns) or cs(ptr(item+ns))
+                        impl=item+8+imp
+                    else:nm=cs(ptr(item));impl=ptr(item+16)
+                    if nm and exe.low<=impl<exe.high:methods[impl]=prefix+'['+name+' '+nm+']'
+    labels.update(methods)
+    match=re.compile(r'Multilingual|DictationSelector|LanguageAndLocale|KeyboardData|WrittenAndSpoken',re.I)
+    chosen.update(s for s,k in methods.items() if match.search(k))
+    for s,v in funcs.items():
+        for i,(at,a) in enumerate(v):
+            parts=a.split()
+            if len(parts)!=2 or parts[0] not in ('b','bl') or not parts[1].startswith('0x'):continue
+            to=int(parts[1],16)
+            dest=stub(to) or methods.get(to,'')
+            if dest:v[i]=(at,parts[0]+' '+dest)
+            if dest in ('buddyDefaultKeyboards','buddySuggestedKeyboards'):chosen.add(s)
+        if s not in chosen:continue
+        end=next((e for e in exe.starts if e>s),exe.high)
+        for pc in range(s,end,4):
+            w=exe.word(pc)
+            if w&0x7e000000==0x36000000:
+                v.append([hex(pc-s),'test bit '+str((w>>19&31)+(w>>26&32))+' reg '+str(w&31)+' -> '+hex(pc+signed(w>>5&0x3fff,14)*4)])
+            if w&0x9f000000!=0x90000000 or pc+4>=end:continue
+            z=exe.word(pc+4);reg=w&31
+            if z>>5&31!=reg:continue
+            if z&0xffc00000==0x91000000:t=adr(pc,w)+(z>>10&4095)
+            elif z&0xffc00000==0xf9400000:t=ptr(adr(pc,w)+(z>>10&4095)*8)
+            else:continue
+            _,sk=loc(t)
+            literal=cs(t) or (cs(ptr(t+16)) if sk=='__cfstring' else '')
+            if literal:v.append([hex(pc-s),'constant '+literal[:150]])
+        v.sort(key=lambda r:int(r[0],16))
     jobs=[]
     for p in (mount/'System/Library/LaunchDaemons').glob('*[Cc]omm[Cc]enter*'):
         try: job=plistlib.loads(p.read_bytes())
         except (OSError, ValueError,plistlib.InvalidFileException):continue
-        jobs.append({k:v for k,v in job.items() if k in ('Label','_LimitLoadToDeviceTree','Program','ProgramArguments')})
+        jobs.append({k:v for k,v in job.items() if k in ('Label','_LimitLoadToDeviceTree','Program','ProgramArguments','Disabled','MachServices')})
     return dict(uuid=exe.uuid,query_owner=hex(first),jobs=jobs,
-        sites=[dict(start=hex(s),name=labels.get(s),events=funcs.get(s,[])[:280]) for s in sorted(chosen) if s])
+        method_count=len(methods), sites=[dict(start=hex(s),name=labels.get(s),events=funcs.get(s,[])[:500]) for s in sorted(chosen) if s])
 
 
 def main():

@@ -791,3 +791,140 @@
 +            'boot-ui-focus4=Setup']
      (out/'boot-assets.json').write_text(json.dumps(report,indent=2)+'\n')
      return report
+--- a/device/myron27/package/MyronSystemOSLibraries.h
++++ b/device/myron27/package/MyronSystemOSLibraries.h
+@@ -6,12 +6,14 @@
+ volatile unsigned myron_systemos_libraries_state = 0;
+ volatile int myron_systemos_libraries_status = -1;
+ 
+-__attribute__((noinline)) int
+-myron_systemos_libraries_prepare(proc_t p, user_addr_t scratch)
++struct myron_systemos_view {
++    const char *directory, *mountpoint, *library, *target, *os_executable;
++    uint64_t bytes;
++};
++
++static int
++myron_mount_systemos_view(proc_t p, user_addr_t scratch, const struct myron_systemos_view *v)
+ {
+-    if (!myron_dyld_startup_state) return 0;
+-    if (myron_systemos_libraries_state) return EALREADY;
+-    myron_systemos_libraries_state = 1;
+     int error = EAUTH;
+     vnode_t original = rootvnode;
+     dev_t os = rootdev, cache = native_owner_cache_mounted_device;
+@@ -23,9 +25,6 @@
+     VATTR_WANTED(&expected, va_data_size);
+     VATTR_WANTED(&actual, va_fileid);
+     VATTR_WANTED(&actual, va_data_size);
+-    static const char directory[] = "/private/preboot/usr/lib";
+-    static const char library[] = "/private/preboot/usr/lib/libobjc-trampolines.dylib";
+-    static const char target[] = "/usr/lib/libobjc-trampolines.dylib";
+     struct mount_args request = {.type = scratch + 0x800, .path = scratch + 0x820,
+         .flags = MNT_RDONLY | MNT_UNION, .data = scratch + 0x880};
+     int32_t result = 0;
+@@ -33,38 +32,37 @@
+         native_bindfs_boot_mount || !original || os == NODEV || cache == NODEV || os == cache ||
+         native_owner_root_accepted != 1 || native_owner_cache_status ||
+         !native_verified_block_root_authorized(os) || !native_verified_block_root_authorized(cache) ||
+-        !myron_startup_volume("/usr/lib", os, 1, VDIR) ||
+-        !myron_startup_volume("/usr/lib/dyld", os, 1, VREG) ||
+-        !myron_startup_volume(directory, cache, 1, VDIR) ||
+-        !myron_startup_volume(library, cache, 1, VREG)) goto done;
+-    error = vnode_lookup("/usr/lib/dyld", 0, &loader, vfs_context_current());
++        !myron_startup_volume(v->mountpoint, os, 1, VDIR) ||
++        !myron_startup_volume(v->os_executable, os, 1, VREG) ||
++        !myron_startup_volume(v->directory, cache, 1, VDIR) ||
++        !myron_startup_volume(v->library, cache, 1, VREG)) goto done;
++    error = vnode_lookup(v->os_executable, 0, &loader, vfs_context_current());
+     if (error) goto done;
+-    error = vnode_lookup(library, 0, &source, vfs_context_current());
++    error = vnode_lookup(v->library, 0, &source, vfs_context_current());
+     if (error) goto done;
+     error = vnode_getattr(source, &expected, vfs_context_current());
+     if (error) goto done;
+     if (!VATTR_IS_SUPPORTED(&expected, va_fileid) ||
+-        !VATTR_IS_SUPPORTED(&expected, va_data_size) || expected.va_data_size != 68176) {
++        !VATTR_IS_SUPPORTED(&expected, va_data_size) || expected.va_data_size != v->bytes) {
+         error = EAUTH;
+         goto done;
+     }
+     /* Keep launchd's environment at 0x400/0x500 intact. This runs once on the
+      * serialized init thread, using upstream's boot-time bindfs mount entry. */
+     if ((error = copyout("bindfs", request.type, 7)) ||
+-        (error = copyout("/usr/lib", request.path, sizeof("/usr/lib"))) ||
+-        (error = copyout(directory, request.data, sizeof(directory)))) goto done;
++        (error = copyout(v->mountpoint, request.path, strlen(v->mountpoint) + 1)) ||
++        (error = copyout(v->directory, request.data, strlen(v->directory) + 1))) goto done;
+     native_bindfs_boot_mount = 1;
+     error = mount(p, &request, &result);
+     native_bindfs_boot_mount = 0;
+     if (error) goto done;
+-    myron_systemos_libraries_state = 2;
+     /* A failed post-mount check stops init. The mount is never retried. */
+-    error = vnode_lookup(target, 0, &visible, vfs_context_current());
++    error = vnode_lookup(v->target, 0, &visible, vfs_context_current());
+     if (error) goto done;
+     mount_t view = vnode_mount(visible);
+     if (vnode_vtype(visible) != VREG || !view ||
+         strcmp(vfs_statfs(view)->f_fstypename, "bindfs") ||
+-        strcmp(vfs_statfs(view)->f_mntfromname, directory) ||
++        strcmp(vfs_statfs(view)->f_mntfromname, v->directory) ||
+         (vfs_flags(view) & (MNT_RDONLY | MNT_UNION)) != (MNT_RDONLY | MNT_UNION)) {
+         error = EAUTH;
+         goto done;
+@@ -78,24 +76,47 @@
+     }
+     vnode_put(visible);
+     visible = NULLVP;
+-    error = vnode_lookup("/usr/lib/dyld", 0, &visible, vfs_context_current());
++    error = vnode_lookup(v->os_executable, 0, &visible, vfs_context_current());
+     if (error) goto done;
+     if (visible != loader || rootvnode != original || rootdev != os ||
+         native_owner_cache_mounted_device != cache ||
+-        !myron_startup_volume("/usr/lib/dyld", os, 1, VREG) ||
+-        !myron_startup_volume(library, cache, 1, VREG) ||
++        !myron_startup_volume(v->os_executable, os, 1, VREG) ||
++        !myron_startup_volume(v->library, cache, 1, VREG) ||
+         !native_verified_block_root_authorized(os) || !native_verified_block_root_authorized(cache)) {
+         error = EAUTH;
+         goto done;
+     }
+-    myron_systemos_libraries_state = 3;
+ done:
+     if (visible) vnode_put(visible);
+     if (source) vnode_put(source);
+     if (loader) vnode_put(loader);
+-    myron_systemos_libraries_status = error;
+-    printf("myron SystemOS libraries: stage=%u error=%d; /usr/lib view\n",
+-        myron_systemos_libraries_state, error);
+     return error;
+ }
++
++__attribute__((noinline)) int
++myron_systemos_libraries_prepare(proc_t p, user_addr_t scratch)
++{
++    static const struct myron_systemos_view views[] = {
++        {"/private/preboot/usr/lib", "/usr/lib",
++         "/private/preboot/usr/lib/libobjc-trampolines.dylib", "/usr/lib/libobjc-trampolines.dylib",
++         "/usr/lib/dyld", 68176},
++        /* pkd loads this standalone dylib by absolute install name on 24A446. */
++        {"/private/preboot/System/Library/PrivateFrameworks", "/System/Library/PrivateFrameworks",
++         "/private/preboot/System/Library/PrivateFrameworks/PlugInKitDaemon.framework/PlugInKitDaemon",
++         "/System/Library/PrivateFrameworks/PlugInKitDaemon.framework/PlugInKitDaemon",
++         "/usr/libexec/pkd", 306400},
++    };
++    if (!myron_dyld_startup_state) return 0;
++    if (myron_systemos_libraries_state) return EALREADY;
++    myron_systemos_libraries_state = 1;
++    for (unsigned i = 0; i < sizeof(views) / sizeof(views[0]); ++i) {
++        const struct myron_systemos_view *view = &views[i];
++        int error = myron_mount_systemos_view(p, scratch, view);
++        myron_systemos_libraries_status = error;
++        printf("myron SystemOS libraries: %s error=%d\n", view->mountpoint, error);
++        if (error) return error;
++        ++myron_systemos_libraries_state;
++    }
++    return 0;
++}
+ /* MYRON_SYSTEMOS_LIBRARIES_END */

@@ -40,6 +40,62 @@ def write_index(cache,path):
  return dict(images=len(result['images']),indexed=len(result['selected']),bytes=len(encoded))
 # Static attribution for the first-frame path in the pinned iPhone system image.
 # Keep this separate from the capped general index and emit no original code.
+def setup_method_flow(cache, image, decoder, names, start, end):
+    """Branch destinations and referenced selectors/configuration keys, without image bytes."""
+    import struct
+    from capstone.arm64 import ARM64_OP_IMM, ARM64_OP_MEM
+    def refer(address):
+        try:
+            data = cache.read(address, 120)[0]
+        except (ValueError, RuntimeError):
+            return None
+        for indirect in [None, 0, 16]:
+            if indirect is None:
+                texts = [data]
+            else:
+                pointer = struct.unpack_from('<Q', data, indirect)[0]
+                texts = []
+                for va in [pointer, cache.region_start+(pointer & 0x3ffffffff)]:
+                    try:
+                        texts.append(cache.read(va,120)[0])
+                    except (ValueError, RuntimeError):
+                        pass
+            for value in texts:
+                key, sep, _ = value.partition(bytes(1))
+                if sep and 3 <= len(key) <= 110 and all(32 <= b < 127 for b in key):
+                    return key.decode()
+    def references(instructions):
+        pages = {}
+        for op in instructions:
+            operands = op.operands
+            if op.mnemonic == 'adrp':
+                pages[operands[0].reg] = operands[1].imm
+            elif op.mnemonic == 'add' and len(operands)==3 and operands[2].type==ARM64_OP_IMM and operands[1].reg in pages:
+                yield op.address, refer(pages[operands[1].reg]+operands[2].imm)
+            elif op.mnemonic == 'adr':
+                yield op.address, refer(operands[1].imm)
+            elif op.mnemonic == 'ldr' and operands[1].type==ARM64_OP_MEM and operands[1].mem.base in pages:
+                yield op.address, refer(pages[operands[1].mem.base]+operands[1].mem.disp)
+    ops = list(decoder.disasm(cache.read(start, min(end-start,2048), executable=True)[0], start))
+    events = {addr:key for addr,key in references(ops) if key}
+    for op in ops:
+        if not op.operands or op.operands[-1].type != ARM64_OP_IMM:
+            continue
+        target = op.operands[-1].imm
+        if op.mnemonic in ('b','bl') and not start <= target < end:
+            labels = set(names.get(target,()))
+            try:
+                stub = list(decoder.disasm(cache.read(target,24,executable=True)[0], target))
+                if stub and stub[0].mnemonic=='adrp' and stub[0].reg_name(stub[0].operands[0].reg)=='x1':
+                    labels.update(v for _,v in references(stub[:3]) if v)
+            except (ValueError, RuntimeError):
+                pass
+            events[op.address] = 'call '+(', '.join(sorted(labels)) or hex(target))
+        elif op.mnemonic in ('cbz','cbnz','tbz','tbnz','b') or op.mnemonic.startswith('b.'):
+            events[op.address] = op.mnemonic+' -> '+hex(target-start)
+    return [(hex(addr-start), events[addr]) for addr in sorted(events)]
+
+
 def write_setup_queries(cache, path):
     """Resolve 24A446 Setup call sites, retaining names and offsets only."""
     from bisect import bisect_right
@@ -77,7 +133,7 @@ def write_setup_queries(cache, path):
                         calls.append(dict(site=hex(op.address-base), names=sorted(names[target])))
             rows.append(dict(image=image['path'], uuid=uuid, return_offset=hex(offset),
                              start=hex(start-base), names=sorted(names.get(start,())),
-                             calls=calls[:128]))
+                             calls=calls[:128], flow=setup_method_flow(cache,image,decoder,names,start,end)))
     path.write_text(json.dumps(rows, indent=2)+'\n')
     for row in rows:
         print('Setup CT site', row['return_offset'], row['start'], row['names'], flush=True)

@@ -32,6 +32,8 @@ def root_qualification_identity(fixture):
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
   'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
   **{'touch/'+name:here/'myron-touch'/name for name in TOUCH_SOURCES},
+  'ufs_medium_source':here/'myron-ufs-medium.patch',
+  'setup_worker_source':here/'myron-setup-worker.patch',
   'setup_data_source':here/'myron-setup-data.patch',
   'graphical_source':here/'myron-graphical/device.patch',
   'graphical_firmware':here/'myron-graphical/board.patch',
@@ -348,6 +350,8 @@ for name,item in snapshot['files'].items():
 graphical=here/'myron-graphical'
 subprocess.run(['patch','-s','-p1','-i',str(graphical/'device.patch')],cwd=root,check=True)
 subprocess.run(['patch','-s','-p1','-i',str(here/'myron-setup-data.patch')],cwd=root,check=True)
+subprocess.run(['patch','-s','-p1','-i',str(here/'myron-ufs-medium.patch')],cwd=root,check=True)
+subprocess.run(['patch','-s','-p1','-i',str(here/'myron-setup-worker.patch')],cwd=root,check=True)
 board=root/'device/myron27'
 touch=board/'touch'
 touch.mkdir(exist_ok=True)

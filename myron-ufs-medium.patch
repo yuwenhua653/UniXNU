@@ -1,0 +1,29 @@
+--- a/device/myron27/prepare_ufs_transport.py
++++ b/device/myron27/prepare_ufs_transport.py
+@@ -130,6 +130,26 @@
+ 
+ def patch_driver(data):
+     text = patch_verified_vm(data).decode()
++    # The verified windows expose 512-byte sectors of physical UFS flash.
++    # IOStorageFamily reads this nested dictionary via DKIOCISSOLIDSTATE.
++    decl = '  bool configure (const char *name, uint64_t absoluteOffset, uint64_t size);'
++    text = replace_once(text, decl, '''  bool initFlashWindow () {
++    OSDictionary *properties = OSDictionary::withCapacity (1);
++    OSDictionary *device = OSDictionary::withCapacity (1);
++    OSString *type = OSString::withCString ("Solid State");
++    bool populated = properties && device && type &&
++        device->setObject ("Medium Type", type) &&
++        properties->setObject ("Device Characteristics", device);
++    // Metadata allocation is optional. Preserve the ordinary init failure path.
++    bool initialized = init (populated ? properties : static_cast<OSDictionary *> (nullptr));
++    OSSafeReleaseNULL (type);
++    OSSafeReleaseNULL (device);
++    OSSafeReleaseNULL (properties);
++    return initialized;
++  }
++''' + decl)
++    text = replace_once(text, 'if (!device || !device->init (static_cast<OSDictionary *> (nullptr)) ||',
++                        'if (!device || !device->initFlashWindow () ||')
+     # The optional observer is absent in this board's XNU_BOOT_PROGRESS=0
+     # kernel. arm64e cannot link its authenticated undefined weak pointer.
+     # Use the same compile-time feature guard as the kernel, without a stub.

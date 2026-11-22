@@ -1,0 +1,89 @@
+--- a/device/myron27/package/BootUiTraceCore.h
++++ b/device/myron27/package/BootUiTraceCore.h
+@@ -17,6 +17,8 @@
+  uint64_t pc,lr,fp,frames[BT_FRAMES],regs[8],trap;
+  int peer;unsigned peer_code;
+  unsigned index,count,error;
++ uint64_t tid,cpu_ticks;
++ unsigned switches,state,hint;
+  char role;
+ };
+ struct bt_groups {struct bt_entry entries[BT_MAX_GROUPS];unsigned count,threads,read_failures;};
+--- a/device/myron27/package/BootUiTraceProbe.c
++++ b/device/myron27/package/BootUiTraceProbe.c
+@@ -102,6 +102,18 @@
+ static int read_user(void *context,uint64_t address,void *bytes,unsigned size) {
+  return vm_map_read_user((vm_map_t)context,address,bytes,size)!=KERN_SUCCESS;
+ }
++// The grouped walk already read this saved frame chain. Reuse its completed
++// remote reads. If a read failed, retain the original bounded retry.
++_Static_assert(BT_HOT_FRAMES == BT_FRAMES, "group and hot stack depth");
++static void bt_hot_frames(struct bt_hotrow *row, const struct bt_entry *sample, vm_map_t map) {
++ if (!sample->error) {
++  memcpy(row->frames,sample->frames,sizeof(row->frames));
++  return;
++ }
++ struct bt_entry deep=*sample;
++ deep.error=0;
++ bt_walk_n(&deep,read_user,map,row->frames,BT_HOT_FRAMES);
++}
+ static void lookup_peer(struct bt_entry *e,ipc_space_t space) {
+  e->peer=-1;e->peer_code=1;
+  if(e->trap!=UINT64_MAX-46)return;
+@@ -131,6 +143,8 @@
+   arm_saved_state_t *state=thread->machine.upcb;
+   if(state && is_saved_state64(state)) {
+    struct bt_entry *e=&samples[count];memset(e,0,sizeof(*e));sample_tid[count]=thread->thread_id;sample_cs[count]=thread->c_switch;sample_cpu[count]=recount_thread_time_mach(thread);bt_kernel_stack(thread,sample_k[count]);sample_event[count]=(uint64_t)thread->wait_event;sample_state[count]=(unsigned)thread->state;sample_hint[count]=(unsigned)thread->block_hint;sample_pri[count]=thread->sched_pri;++count;
++   e->tid=sample_tid[count-1];e->cpu_ticks=sample_cpu[count-1];
++   e->switches=sample_cs[count-1];e->state=sample_state[count-1];e->hint=sample_hint[count-1];
+    e->index=visited;e->role=role?"BSTU"[role&3]:(!strcmp(name,"chronod")?'C':(!strcmp(name,"liveactivitiesd")?'L':'B'));
+    e->pc=BT_STRIP_USER_PC((uint64_t)get_saved_state_pc(state));e->lr=BT_STRIP_USER_PC((uint64_t)get_saved_state_lr(state));
+    e->fp=(uint64_t)get_saved_state_fp(state);
+@@ -188,7 +202,7 @@
+      row->rate=rate;row->cpu=cpu;row->role=samples[i].role;row->peer=samples[i].peer;row->tid=sample_tid[i];
+      row->pc=samples[i].pc;row->lr=samples[i].lr;
+      memcpy(row->kernel,sample_k[i],sizeof(row->kernel));row->event=sample_event[i];row->state=sample_state[i];row->hint=sample_hint[i];row->pri=sample_pri[i];
+-     {struct bt_entry deep=samples[i];deep.error=0;bt_walk_n(&deep,read_user,map,row->frames,BT_HOT_FRAMES);}
++     bt_hot_frames(row, &samples[i], map);
+     }
+    }
+    const int64_t trap=(int64_t)samples[i].trap;
+@@ -199,7 +213,7 @@
+      row->pc=samples[i].pc;row->lr=samples[i].lr;
+      memcpy(row->kernel,sample_k[i],sizeof(row->kernel));row->event=sample_event[i];row->state=sample_state[i];row->hint=sample_hint[i];row->pri=sample_pri[i];
+      row->trap=samples[i].trap;for(unsigned a=0;a<3;++a)row->args[a]=samples[i].regs[a];
+-     {struct bt_entry deep=samples[i];deep.error=0;bt_walk_n(&deep,read_user,map,row->frames,BT_HOT_FRAMES);}
++     bt_hot_frames(row, &samples[i], map);
+      break;
+     }
+    }
+@@ -213,7 +227,7 @@
+       row->rate=rate;row->role=samples[i].role;row->peer=samples[i].peer;row->tid=sample_tid[i];
+       row->pc=samples[i].pc;row->lr=samples[i].lr;
+       memcpy(row->kernel,sample_k[i],sizeof(row->kernel));row->event=sample_event[i];row->state=sample_state[i];row->hint=sample_hint[i];row->pri=sample_pri[i];
+-      {struct bt_entry deep=samples[i];deep.error=0;bt_walk_n(&deep,read_user,map,row->frames,BT_HOT_FRAMES);}   /* deeper than the grouped 8 frames: names the thread */
++      bt_hot_frames(row, &samples[i], map);   /* deeper than the grouped 8 frames: names the thread */
+      }
+     }
+    }
+@@ -269,6 +283,10 @@
+   int at=snprintf(rows[n],120,"STK%c#%u x%u p%d(%.12s) %llx %llx",t->role,t->index,t->count,t->peer,peer,t->pc,t->lr);
+   for(unsigned i=0;i<7 && at>0 && at<119;++i)at+=snprintf(rows[n]+at,120-at," %llx",t->frames[i]);
+   ++n;
++  if(detail>=2 && role==3 && !strcmp(published_names[role],"Setup") && t->count==1 && n<max) {
++   snprintf(rows[n++],120,"STK%c#%u sched tid=%llx st=%x hint=%u ticks=%llx switches=%u",
++    c,t->index,(unsigned long long)t->tid,t->state,t->hint,(unsigned long long)t->cpu_ticks,t->switches);
++  }
+   // detail 2 (the boot log): the group's next frames in a row of their own, so a thread blocked in a lock or a sync wait shows who called it.
+   if(detail>=2 && t->frames[7] && n<max) {
+    int more=snprintf(rows[n],120,"STK%c#%u+",t->role,t->index);
+--- a/device/myron27/package/process-trace-source.json
++++ b/device/myron27/package/process-trace-source.json
+@@ -10,6 +10,7 @@
+   },
+   "changes": [
+     "Retain host-tested sampler/formatters only; omit PMU and optional hardware diagnostics.",
++    "Reuse completed grouped frame reads for hot rows; record native scheduler counters for individual Setup workers.",
+     "Persistent formatter prints peer PID without proc_name traversal.",
+     "Myron adapter bounds the snapshot to 24576 bytes; log writes never capture stacks."
+   ],

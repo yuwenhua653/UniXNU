@@ -44,6 +44,31 @@ with tempfile.TemporaryDirectory() as tmp:
             main=main.replace('got==6&&strstr(live.rows[0]', 'got==7&&strstr(live.rows[0]')
             main=main.replace('strstr(live.rows[5],"STKS#1 x2 p-1")','strstr(live.rows[5],"STKS kern st=")&&strstr(live.rows[6],"STKS#1 x2 p-1")')
             prefix+='#define VM_KERNEL_UNSLIDE(x) (x)\n#define VM_KERNEL_UNSLIDE_OR_PERM(x) (x)\n'
+
+            checks=r"""
+ {
+  struct bt_entry sample={0};
+  struct bt_hotrow hot={0};
+  sample.frames[BT_FRAMES-1]=0x170001000;
+  bt_hot_frames(&hot,&sample,NULL); // No remote read on a completed walk.
+  assert(hot.frames[BT_HOT_FRAMES-1]==0x170001000);
+  char report[16][120];
+  memset(&published,0,sizeof(published));
+  memset(&published_main[3],0,sizeof(published_main[3]));
+  strcpy(published_names[3],"Setup");
+  published.count=1;struct bt_entry *worker=&published.entries[0];
+  worker->role='U';worker->index=5;worker->count=1;worker->frames[0]=0x1234;
+  worker->tid=19;worker->state=1;worker->hint=16;worker->cpu_ticks=0x4242;worker->switches=12;
+  unsigned n=boot_ui_trace_role_rows(3,report,16,2);
+  int seen=0;for(unsigned i=0;i<n;i++)seen+=strstr(report[i],"sched tid=13 st=1 hint=16 ticks=4242 switches=12")!=NULL;
+  assert(seen==1);
+  worker->count=2;
+  n=boot_ui_trace_role_rows(3,report,16,2);
+  for(unsigned i=0;i<n;i++)assert(!strstr(report[i],"sched tid="));
+ }
+"""
+            main=main.replace('int main(void){','int main(void){'+checks,1)
+
         run(kind,prefix+body+main,['-pthread'] if kind=='ui' else [])
     body=(package/'MyronProcessLog.c').read_text().replace('#include <kern/misc_protos.h>','#include <stdio.h>')
     main=r'''

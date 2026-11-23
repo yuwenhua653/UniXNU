@@ -100,6 +100,22 @@ The later run above passed fileset layout and compiled-kernel firmware checks.
 The retained iPhone IOAcceleratorES base was also checked in its actual final
 kernel: 136-byte instances and 168 authenticated virtual entries, with three
 binary negative controls. Its candidate is compiled separately and is not yet
-linked or published. Next are the iOS27 Metal/Turnip artifact, real producer
-fences for both CPU display-copy paths, retained accelerator binding, target
-trust merge, signed addon capacity, and a known rendered image on the phone. Follow the [official GPU porting sequence](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md).
+linked or published. Run 45134750180 (78dc7d57) now built the real arm64e iOS27
+Turnip, Rust bridge and signed plugin. The downloaded artifact digest is
+`982b039c9796fc0bd6fb9701780d127f21c39db507dd850b86422de9ff384740`;
+`audit_userspace_artifact.py` independently verifies each 4 KiB code page,
+CodeDirectory special slots, CDHashes, build target and decompressed addon.
+The addon is 15,295,600 bytes; it has no publication marker or probe daemon.
+
+The board now registers a lifetime-stable producer-fence query only after the
+existing two hardware submission/readback rounds pass. The query uses the
+submission lock nonblockingly and reads the real CP timestamp. Pending work,
+busy locks and poisoned rings never become completion. The common validated
+surface path waits before CPU scaling, normal copies and direct scanout;
+no scanout MMIO, original family retirement gate or Data seed is changed.
+Host tests exercise the actual query and display decisions with software peers.
+Native compilation and phone qualification remain separate requirements.
+
+Remaining work includes the phone's pre-CP startup failure, retained accelerator
+binding/publication, target trust merge, signed addon capacity, and a known
+rendered image on the phone. Follow the [official GPU porting sequence](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md).

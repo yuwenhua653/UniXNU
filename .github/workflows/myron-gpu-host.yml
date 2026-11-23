@@ -39,6 +39,8 @@ jobs:
         run: |
           python3 myron-gpu/native/prepare_sources.py \
             --references "$RUNNER_TEMP/gpu-references" --fetch
+      - name: Exercise actual display producer fence gate
+        run: python3 myron-gpu/native/test_display_fences.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx g++
       - name: Exercise portable board and real native backend algorithms
         run: |
           mkdir -p "$RUNNER_TEMP/gpu-checks"
@@ -56,3 +58,15 @@ jobs:
           path: ${{ runner.temp }}/gpu-checks
           if-no-files-found: warn
           retention-days: 7
+  arm64e-boundaries:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reconstruct and check actual arm64e display and power boundaries
+        run: |
+          python3 myron27-build.py --source-only
+          python3 myron-gpu/native/test_display_fences.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx clang++
+          python3 myron-runtime/test_power.py --cxx clang++

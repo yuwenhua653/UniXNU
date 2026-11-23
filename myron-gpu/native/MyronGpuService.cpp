@@ -14,6 +14,7 @@
 #include <pexpert/pexpert.h>
 #include <mach/kmod.h>
 #include "MyronGpuPolicy.h"
+#include "MyronGpuFence.h"
 extern "C" {
 #include "MyronGpuBoard.h"
 #include "MyronGmu.h"
@@ -996,7 +997,8 @@ extern "C" void myron_gpu_run(void *, wait_result_t)
     gpuResult[3]=gM6.step;gpuResult[4]=gM8.step;gpuResult[5]=gM9.stage;
     gpuResult[6]=gM10.step;gpuResult[7]=gM10.rounds[0];gpuResult[8]=gM10.rounds[1];
     gpuResult[9]=gM10.round_err;gpuResult[10]=native_adreno_pool_status;
-    if(passed)__atomic_store_n(&myron_gpu_ready,1,__ATOMIC_RELEASE);
+    if(passed && myron_display_register_gpu_fences(myron_gpu_query_fences))
+        __atomic_store_n(&myron_gpu_ready,1,__ATOMIC_RELEASE);
     __atomic_store_n(&myron_gpu_complete,1,__ATOMIC_RELEASE);
     IOLog("myron-gpu: native A840 stage=%u readback=%d/%d qualified=%u; Metal not published\n",
           gM10.step, gM10.rounds[0], gM10.rounds[1], unsigned(passed));

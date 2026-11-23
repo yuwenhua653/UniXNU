@@ -62,6 +62,8 @@ def qualify_root_inputs():
    '--cc','clang','--cxx','clang++','--output',str(qualification/'gpu-native-host.json')],check=True)
   subprocess.run([sys.executable,str(here/'myron-gpu/native/test_userspace.py'),'--references',str(root/'references/myron-gpu'),
    '--root',str(here),'--cxx','clang++'],check=True)
+  subprocess.run([sys.executable,str(here/'myron-gpu/native/test_display_fences.py'),
+   '--device',str(d),'--cxx','clang++'],check=True)
  (qualification/'host-checks.json').unlink(missing_ok=True)
  subprocess.run(['brew','install','openssl@3','mtools'],check=True)
  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())

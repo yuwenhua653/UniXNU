@@ -129,6 +129,8 @@ def stage(references, destination):
         IOLockUnlock(g.lock);
         owner->release();''')
     path.write_text(text)
+    with path.open('a') as stream:
+        stream.write('\n'+(HERE/'MyronGpuFenceProvider.h').read_text())
     report['staged_sha256'] = {str(p.relative_to(destination)): hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in destination.rglob('*') if p.is_file()}
     return report

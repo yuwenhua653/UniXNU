@@ -66,6 +66,8 @@ int main() {
         power=added[begin:start]
         (root/'arm64e.cpp').write_text('#include <stdint.h>\n'+power+
             '\nextern "C" int power_probe(bool hvc,uint32_t fn){return platformPowerCall(hvc,fn);}\n')
-        subprocess.run(['xcrun','clang++','-target','arm64e-apple-ios27.0',
+        sdk=subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-path'],text=True).strip()
+        if not sdk or not Path(sdk).is_dir():raise ValueError('iPhone SDK unavailable')
+        subprocess.run(['xcrun','--sdk','iphoneos','clang++','-isysroot',sdk,'-target','arm64e-apple-ios27.0',
             '-std=c++17','-Wall','-Wextra','-Werror','-c',root/'arm64e.cpp','-o',root/'arm64e.o'],check=True)
         print('PASS: actual PSCI instruction wrapper cross-compiled for arm64e; not executed')

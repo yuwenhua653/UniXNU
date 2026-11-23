@@ -1,9 +1,13 @@
 # Native A840 integration stage
 
-This is the first board-driver integration into the myron iPhone27 build.
-It is **not a GPU-enabled phone package**. The kernel C++ compile recipe is
-connected but has not yet been run against a prepared arm64e XNU tree.
-Metal publication, userspace, GPU scanout and hardware rendering remain pending.
+The native board driver compiled and linked into the iPhone27 package in run
+45117385166 (commit 8fc39d1e8afe0c1e0d61bd08597b461331682d98). Its final
+embedded kernel SHA-256 is
+`1af397687b3f7eca2a7f546885eca72389e5bedbe52e3eeaeba6335813e6ac7d`.
+The package enables native bring-up with `myron-gpu=1`; actual phone readback
+has not been established by these host audits. This remains **not a
+GPU-accelerated desktop package**. Metal publication and display integration
+are pending; userspace is built separately by `myron-gpu-userspace.yml`.
 
 ## Implemented
 
@@ -51,7 +55,9 @@ before compilation. Firmware bytes are not committed here.
 initializers, and emits explicit late registration. The kernel's existing
 undefined-symbol and unchanged-initializer checks still apply. At boot,
 `myron-gpu=1` starts this stage after the existing storage/display/touch boundary.
-The combined device build now selects native compilation; the runtime boot argument remains off until the compiled kernel is audited.
+The combined device build selects native compilation, and the qualified package
+above enables the boot argument. User admission still requires both real client
+readback rounds to pass on the phone.
 
 The current build does not link `NativeAdrenoAccelerator.cpp`, install a Metal
 plugin, relax sandbox/AMFI policy, enable GPU scanout, or advertise hardware rendering. UI scale is handled separately by myron-runtime.
@@ -90,6 +96,10 @@ A layout projection using the failed kernel and pinned donor fits with a
 0x1f0000 TEXT upper bound, 0x120000 DATA_CONST and 0x1000 LASTDATA_CONST;
 this projection is not a new native build or successful full prelink.
 
-Next required checks are the rebuilt fileset layout and retained ABI validation,
-then matched iOS27 Metal/Turnip code, signed addon capacity, a known rendered
-image, and phone verification. Follow the [official GPU porting sequence](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md).
+The later run above passed fileset layout and compiled-kernel firmware checks.
+The retained iPhone IOAcceleratorES base was also checked in its actual final
+kernel: 136-byte instances and 168 authenticated virtual entries, with three
+binary negative controls. Its candidate is compiled separately and is not yet
+linked or published. Next are the iOS27 Metal/Turnip artifact, real producer
+fences for both CPU display-copy paths, retained accelerator binding, target
+trust merge, signed addon capacity, and a known rendered image on the phone. Follow the [official GPU porting sequence](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md).

@@ -54,6 +54,15 @@ def prepare(refs, native_refs, out, download=False):
         shutil.copyfile(source, destination)
     for name in RECIPES:
         copy(refs/'UniXNU/scripts'/name, 'scripts/'+name)
+    # AdrenoMetal's presentation frontend includes these sibling protocol and
+    # conversion headers even while the board rejects the scanout tunnel.
+    # Resolve the exact GopFramebuffer gitlink from the pinned UniXNU tree.
+    link = subprocess.check_output(['git', '-C', refs/'UniXNU', 'rev-parse',
+                                    'HEAD:drivers/GopFramebuffer'], text=True).strip()
+    if link != pins['GopFramebuffer']['commit']:
+        raise ValueError('GOP interface differs from the selected upstream tree')
+    for name in ('NativeGOPWire.h', 'NativeHalfCodes.h', 'LICENSE'):
+        copy(refs/'GopFramebuffer'/name, 'drivers/GopFramebuffer/'+name)
     for name in ('build-turnip-darwin.py', 'mesa_patch_identity.py',
                  'data/adreno-compiler-inputs.json', 'requirements-adreno-compiler.txt'):
         copy(ROOT/'scripts'/name, 'scripts/'+name)
@@ -75,6 +84,15 @@ def prepare(refs, native_refs, out, download=False):
                    "if args.target != 'ios27': raise SystemExit('This resolved tree is iPhone27/A840 only')\n"
                    "args.no_replay = True")
     text = replace(text, "'-fstack-protector-strong']", "'-fstack-protector-strong', '-DNATIVE_MYRON_IPHONE27=1']")
+    text = replace(text, 'BRIDGE_TARGET = args.target', '''# Check the actual frontend before the expensive Rust/LTO build.
+frontend_check = [*(['xcrun', 'clang++'] + base[2:]), '-std=c++17',
+    '-fobjc-arc', '-Wno-deprecated-declarations', '-fsyntax-only',
+    '-I', ROOT / 'drivers/NativeAdreno', '-I', ROOT / 'kits/AdrenoPM4',
+    '-I', VULKAN_INCLUDE, '-I', ROOT / 'build/turnip-smoke', '-x', 'objective-c++']
+subprocess.run([*frontend_check, ROOT / 'drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm',
+    ROOT / 'drivers/AdrenoMetal/NativeBridgeMetalFrontend.mm'], check=True)
+print('PASS: iOS27 Metal frontend syntax and header closure', flush=True)
+BRIDGE_TARGET = args.target''')
     recipe.write_text(text)
     bridge = out/'scripts/build-adreno-metal-bridge.py'
     text = replace(bridge.read_text(), "'0064-copies-leave-unreachable-pages-alone.patch']]",

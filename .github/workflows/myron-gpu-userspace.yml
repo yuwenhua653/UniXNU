@@ -32,6 +32,14 @@ jobs:
             --references "$RUNNER_TEMP/metal-references" \
             --native-references "$RUNNER_TEMP/native-references" \
             --out "$RUNNER_TEMP/myron-gpu-userspace"
+      - name: Restore compiler cache for unchanged Rust inputs
+        id: rust-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ${{ runner.temp }}/myron-gpu-userspace/build/m2v-target
+          key: myron-arm64e-ios27-rust198-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('myron-gpu/userspace-inputs.json', 'myron-gpu/patches/**') }}
       - name: Build Turnip, arm64e bridge and signed Metal plugin
         run: |
           python3 myron-gpu/native/test_userspace.py --references "$RUNNER_TEMP/native-references" --cxx clang++
@@ -39,6 +47,14 @@ jobs:
           python3 myron-gpu/test_userspace_transport.py --tree "$RUNNER_TEMP/myron-gpu-userspace" \
             --references "$RUNNER_TEMP/native-references" --cxx clang++
           python3 myron-gpu/build_userspace.py --tree "$RUNNER_TEMP/myron-gpu-userspace"
+      - name: Preserve completed Rust objects even if later frontend linking fails
+        if: always() && steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ${{ runner.temp }}/myron-gpu-userspace/build/m2v-target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -47,6 +63,7 @@ jobs:
             ${{ runner.temp }}/myron-gpu-userspace/userspace-source.json
             ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-plugin27/
             ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-bridge/*.log
+            ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-bridge/ios27/*.a.json
             ${{ runner.temp }}/myron-gpu-userspace/.cache/*.log
           if-no-files-found: warn
           include-hidden-files: true

@@ -6,5 +6,9 @@
   "AdrenoMetal": {
     "url": "https://github.com/UniXNU/AdrenoMetal.git",
     "commit": "c9ebd2fb17253996f0a8d835c9ab7c2f740778e1"
+  },
+  "GopFramebuffer": {
+    "url": "https://github.com/UniXNU/GopFramebuffer.git",
+    "commit": "b0d812d578efa2acb005b66f73168891719af09a"
   }
 }

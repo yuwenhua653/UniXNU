@@ -9,7 +9,7 @@ import shutil
 
 EXCLUDED = {'private-userland', 'root-media', 'device-package', '.cache', '.git',
             'references', 'refer', 'node_modules', 'myron-private-inputs'}
-NAMES = {'setup-seed-check.json', 'desktop-integration.json', 'native-link.log', 'build-report.json',
+NAMES = {'system-apps-plan.json', 'setup-seed-check.json', 'desktop-integration.json', 'native-link.log', 'build-report.json',
          'root-preflight.json', 'display-abi.json', 'display-build.json',
          'storage-abi.json', 'ram-storage-abi.json', 'gpu-build.json',
          'gpu-native-host.json', 'gpu-portable.json'}

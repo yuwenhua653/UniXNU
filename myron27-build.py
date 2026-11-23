@@ -171,6 +171,9 @@ if options.desktop:
   require_device_reference(options.device_capture is not None or options.device_history is not None,options.reference_boot)
   recover(options.reference_boot)
  if options.original_root:
+  apps=json.loads((d/'myron-apps-plan.json').read_text())
+  if apps.get('build')!='24A446' or not apps.get('selected') or not 0<apps.get('allocation_bytes',0)<=384*1024*1024:
+   raise SystemExit('Require the reviewed bounded original system-app plan before native packaging')
   openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())
   original=root/'qualification/original-root'
   owner_args=[]
@@ -408,7 +411,8 @@ if options.userland:
  archive_tool=shutil.which('ipsw')
  if not archive_tool:raise SystemExit('Install blacktop/tap/ipsw first')
  run(['sudo','-n',sys.executable,d/'prepare_userland.py','--upstream',u,'--archive-tool',Path(archive_tool).resolve(),
-      '--out',root/'private-userland','--report',root/'reports/original-userland.json'])
+      '--out',root/'private-userland','--report',root/'reports/original-userland.json',
+      '--data-seed',Path(os.environ['MYRON_DATA_SEED']).resolve()])
  raise SystemExit(0)
 root_sources=[
  {'path':'references/QcomGeniSpi','url':'https://github.com/UniXNU/QcomGeniSpi.git','commit':'eac47baefe6a5d2368a70351e6ad1b6361bedbe2'},

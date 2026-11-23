@@ -150,6 +150,6 @@ extern "C" void myron_gpu_run(void *, wait_result_t);
         evidence.append(dict(source=filename, source_sha256=pins[filename]['sha256'], object_sha256=sha(obj)))
     report.update(objects=evidence, late_initializers=late_symbols, native_objects_compiled=True)
     (out/'gpu-build.json').write_text(json.dumps(report, indent=2)+'\n')
-    keep = ('_myron_gpu_start', '_myron_gpu_run', '_myron_gpu_ready', '_myron_gpu_stage',
+    keep = ('_myron_gpu_start', '_myron_gpu_run', '_myron_gpu_ready', '_myron_gpu_stage', '_myron_gpu_snapshot', '_myron_gpu_complete',
             '_native_adreno_publish', '_native_adreno_new_user_client') + tuple(late_symbols)
     return objects, keep, report

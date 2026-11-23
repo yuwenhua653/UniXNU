@@ -23,6 +23,8 @@ extern "C" {
 #include "AdrenoPM4.h"
 volatile uint32_t myron_gpu_stage;
 volatile uint32_t myron_gpu_ready;
+volatile uint32_t myron_gpu_complete;
+static uint32_t gpuResult[11];
 // Exact OS3.0.306 inputs, checked and embedded by gpu_build.py.
 extern const uint8_t myron_gmu_firmware[], myron_sqe_firmware[], myron_aqe_firmware[], myron_zap_firmware[];
 extern const uint64_t myron_gmu_firmware_size, myron_sqe_firmware_size, myron_aqe_firmware_size, myron_zap_firmware_size;
@@ -82,7 +84,7 @@ unsigned mapWindows(Window *windows, unsigned count) {
 
 int mmio(Window *windows, unsigned count, unsigned base, unsigned window, uint32_t offset, uint32_t *out, const uint32_t *in) {
     if (window >= count || !windows[window].va || offset + 4 > windows[window].length || (offset & 3)) return -1;
-    myron_gpu_stage = (base + window + 1) << 24 | offset | (in ? 1u << 23 : 0);   // a faulting access leaves itself here
+    __atomic_store_n(&myron_gpu_stage,(base + window + 1) << 24 | offset | (in ? 1u << 23 : 0),__ATOMIC_RELAXED);   // a faulting access leaves itself here
     volatile uint32_t *reg = reinterpret_cast<volatile uint32_t *>(windows[window].va + offset);
     if (in) {*reg = *in; __asm__ volatile("dsb sy" ::: "memory");}
     else *out = *reg;
@@ -952,6 +954,19 @@ void runSteps() {
 
 // Called after the generated late initializer registration. There is one
 // startup per boot; failed hardware resources remain quarantined for reset.
+extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
+    if(!out || !cap)return 0;
+    // Publish the result array only after the worker stops changing it.
+    const uint32_t complete=__atomic_load_n(&myron_gpu_complete,__ATOMIC_ACQUIRE);
+    int n=snprintf(out,cap,"[myron gpu] complete=%u mmio=%08x ready=%u cc=%u cx=%u gmu=%u hfi=%u cp=%u zap=%u submit=%u rounds=%u/%u error=%08x pool=%u metal=0\n",
+        complete,__atomic_load_n(&myron_gpu_stage,__ATOMIC_RELAXED),
+        __atomic_load_n(&myron_gpu_ready,__ATOMIC_ACQUIRE),
+        complete?gpuResult[0]:0,complete?gpuResult[1]:0,complete?gpuResult[2]:0,
+        complete?gpuResult[3]:0,complete?gpuResult[4]:0,complete?gpuResult[5]:0,
+        complete?gpuResult[6]:0,complete?gpuResult[7]:0,complete?gpuResult[8]:0,
+        complete?gpuResult[9]:0,complete?gpuResult[10]:0);
+    return n<0?0:((size_t)n<cap?(size_t)n:cap-1);
+}
 extern "C" void myron_gpu_run(void *, wait_result_t)
 {
     const unsigned have = mapWindows(gWindows, MG_WINDOWS);
@@ -967,7 +982,12 @@ extern "C" void myron_gpu_run(void *, wait_result_t)
     }
     const bool passed = myron_gpu_submission_ready(gM10.step, gM10.rounds[0], gM10.rounds[1],
         gM10.round_err, gM10.opened, gM10.closed);
+    gpuResult[0]=result.cc;gpuResult[1]=result.cx_hwctrl;gpuResult[2]=gM5.gmu.phase;
+    gpuResult[3]=gM6.step;gpuResult[4]=gM8.step;gpuResult[5]=gM9.stage;
+    gpuResult[6]=gM10.step;gpuResult[7]=gM10.rounds[0];gpuResult[8]=gM10.rounds[1];
+    gpuResult[9]=gM10.round_err;gpuResult[10]=native_adreno_pool_status;
     if(passed)__atomic_store_n(&myron_gpu_ready,1,__ATOMIC_RELEASE);
+    __atomic_store_n(&myron_gpu_complete,1,__ATOMIC_RELEASE);
     IOLog("myron-gpu: native A840 stage=%u readback=%d/%d qualified=%u; Metal not published\n",
           gM10.step, gM10.rounds[0], gM10.rounds[1], unsigned(passed));
     thread_terminate(current_thread());

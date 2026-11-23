@@ -57,6 +57,14 @@ int main(){
     assert(key.pending());key.accepted();assert(!key.pending()); // failed submit retries
     key.sample(false,false);assert(!key.pending());key.sample(false,false);assert(key.pending()&&!key.stable);
     key.accepted();key.sample(true,true);key.sample(true,true);assert(!key.pending()); // require release
+    MyronPowerDebounce side,volume;
+    for(int i=0;i<2;++i){side.sample(true,false);volume.sample(true,false);}
+    for(int i=0;i<2;++i){side.sample(true,true);volume.sample(true,true);}
+    assert(myronButtonBits(side,volume)==3);side.accepted();volume.accepted();
+    for(int i=0;i<2;++i)side.sample(true,false);
+    assert(myronButtonBits(side,volume)==2 && side.pending() && !volume.pending());
+    side.accepted();for(int i=0;i<2;++i)volume.sample(true,false);
+    assert(!myronButtonBits(side,volume) && volume.pending());
     IO io;uint8_t value=0;assert(myronPowerRead(io,7,&value)&&value==0x80&&io.writes==1);
     io.status=0;assert(!myronPowerRead(io,7,&value)&&io.delays==500);
     io.status=3;assert(!myronPowerRead(io,7,&value));

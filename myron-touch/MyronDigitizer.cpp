@@ -15,13 +15,22 @@
 /* The periodic boot snapshot outlives the early kernel message ring. */
 static uint32_t rscId, rscConfig, touchChip, hidReports;
 static int railResult = -1, probeResult = -1, busResult = -1;
+static uint64_t keyObservedUs, keyAcceptedUs, keyMaxPollGapUs;
+static uint32_t keyReports, keyErrors, keyStable;
+static int keyStatus;
+
 extern "C" size_t myron_touch_snapshot(char *out, size_t cap) {
     if (!out || !cap) return 0;
-    int n = snprintf(out, cap, "[myron touch] se=%d rail=%d rsc_id=%08x config=%08x probe=%d chip=%04x hid_reports=%u\n",
+    int n = snprintf(out, cap, "[myron touch] se=%d rail=%d rsc_id=%08x config=%08x probe=%d chip=%04x hid_reports=%u\n[myron key] bits=%u reports=%u errors=%u status=%d observed_us=%llu accepted_us=%llu max_poll_gap_us=%llu\n",
         __atomic_load_n(&busResult,__ATOMIC_RELAXED), __atomic_load_n(&railResult,__ATOMIC_RELAXED),
         __atomic_load_n(&rscId,__ATOMIC_RELAXED), __atomic_load_n(&rscConfig,__ATOMIC_RELAXED),
         __atomic_load_n(&probeResult,__ATOMIC_RELAXED), __atomic_load_n(&touchChip,__ATOMIC_RELAXED),
-        __atomic_load_n(&hidReports,__ATOMIC_RELAXED));
+        __atomic_load_n(&hidReports,__ATOMIC_RELAXED),
+        __atomic_load_n(&keyStable,__ATOMIC_RELAXED), __atomic_load_n(&keyReports,__ATOMIC_RELAXED),
+        __atomic_load_n(&keyErrors,__ATOMIC_RELAXED), __atomic_load_n(&keyStatus,__ATOMIC_RELAXED),
+        (unsigned long long)__atomic_load_n(&keyObservedUs,__ATOMIC_RELAXED),
+        (unsigned long long)__atomic_load_n(&keyAcceptedUs,__ATOMIC_RELAXED),
+        (unsigned long long)__atomic_load_n(&keyMaxPollGapUs,__ATOMIC_RELAXED));
     return n < 0 ? 0 : ((size_t)n < cap ? (size_t)n : cap-1);
 }
 
@@ -31,6 +40,14 @@ class MyronDigitizer : public IOHIDDevice {
     OSDeclareDefaultStructors(MyronDigitizer);
     bool keysOnly = false;
     MyronPowerHardware power;
+    IOBufferMemoryDescriptor *keyBuffer = nullptr;
+    uint64_t lastKeyPollUs = 0;
+    static uint64_t nowUs() {
+        uint64_t ticks, frequency;
+        __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(ticks) :: "memory");
+        __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frequency));
+        return frequency ? ticks / frequency * 1000000 + ticks % frequency * 1000000 / frequency : 0;
+    }
     struct Pad {
         IOMemoryMap *map;
         volatile uint32_t *regs;
@@ -208,14 +225,32 @@ class MyronDigitizer : public IOHIDDevice {
         auto self = OSDynamicCast(MyronDigitizer, owner);
         if (!self) return;
         if (self->keysOnly) {
+            const uint64_t now=nowUs();
+            if(self->lastKeyPollUs && now>=self->lastKeyPollUs) {
+                const uint64_t gap=now-self->lastKeyPollUs;
+                if(gap>__atomic_load_n(&keyMaxPollGapUs,__ATOMIC_RELAXED))
+                    __atomic_store_n(&keyMaxPollGapUs,gap,__ATOMIC_RELAXED);
+            }
+            self->lastKeyPollUs=now;
+            const uint8_t before=self->power.report();
             self->power.poll();
-            if (self->power.state.pending()) {
-                uint8_t report[]={5,(uint8_t)self->power.state.stable};
-                IOBufferMemoryDescriptor *buffer=IOBufferMemoryDescriptor::withBytes(report,sizeof(report),kIODirectionIn);
-                if(buffer){
-                    auto status=self->handleReport(buffer,kIOHIDReportTypeInput,0);
-                    buffer->release();
-                    if(status==kIOReturnSuccess){self->power.state.accepted();++self->power.reports;}
+            if(before!=self->power.report()) {
+                __atomic_store_n(&keyObservedUs,now,__ATOMIC_RELAXED);
+                __atomic_store_n(&keyStable,(uint32_t)self->power.report(),__ATOMIC_RELAXED);
+            }
+            __atomic_store_n(&keyErrors,self->power.errors,__ATOMIC_RELAXED);
+            if (self->power.pending()) {
+                uint8_t report[]={5,self->power.report()};
+                // The workloop owns this preallocated descriptor until stop.
+                // Do not allocate from the kernel heap on a physical key edge.
+                IOReturn status=kIOReturnNoMemory;
+                if(self->keyBuffer && self->keyBuffer->writeBytes(0,report,sizeof report)==sizeof report)
+                    status=self->handleReport(self->keyBuffer,kIOHIDReportTypeInput,0);
+                __atomic_store_n(&keyStatus,(int)status,__ATOMIC_RELAXED);
+                if(status==kIOReturnSuccess){
+                    self->power.accepted();++self->power.reports;
+                    __atomic_store_n(&keyReports,self->power.reports,__ATOMIC_RELAXED);
+                    __atomic_store_n(&keyAcceptedUs,nowUs(),__ATOMIC_RELAXED);
                 }
             }
             source->setTimeoutMS(20);return;
@@ -247,7 +282,7 @@ class MyronDigitizer : public IOHIDDevice {
 public:
     IOWorkLoop *getWorkLoop() const override { return loop; }
     OSString *newTransportString() const override { return OSString::withCString(keysOnly ? "SPMI" : "SPI"); }
-    OSString *newProductString() const override { return OSString::withCString(keysOnly ? "Myron Power Button" : "Myron FT3683"); }
+    OSString *newProductString() const override { return OSString::withCString(keysOnly ? "Myron Physical Buttons" : "Myron FT3683"); }
     IOReturn newReportDescriptor(IOMemoryDescriptor **out) const override {
         if (!out) return kIOReturnBadArgument;
         *out = IOBufferMemoryDescriptor::withBytes(keysOnly ? myron_power_descriptor : myron_touch_descriptor,
@@ -265,6 +300,9 @@ public:
         if(!provider || strcmp(provider->getName(),"myron-power-key"))return false;
         keysOnly=true;
         if(!power.open())return false;
+        const uint8_t initial[]={5,0};
+        keyBuffer=IOBufferMemoryDescriptor::withBytes(initial,sizeof initial,kIODirectionIn);
+        if(!keyBuffer){power.close();return false;}
         setProperty("Built-In",kOSBooleanTrue);
         setProperty("HIDDefaultBehavior",kOSBooleanTrue);
         loop=IOWorkLoop::workLoop();ownsLoop=loop!=nullptr;
@@ -302,6 +340,7 @@ public:
         cancelTimer();
         if(!keysOnly)myron_touch_release(&sensor, submit, this);
         power.close();
+        OSSafeReleaseNULL(keyBuffer);
         shutdownPads();
         if (ownsLoop) { OSSafeReleaseNULL(loop); ownsLoop = false; }
     }

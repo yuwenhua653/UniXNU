@@ -14,10 +14,70 @@ def apply(root):
     here=Path(__file__).resolve().parent
     for name in ('MyronDataWindow.h','MyronDataStore.h'):shutil.copyfile(here/name,u/name)
     shutil.copyfile(here/'ui_seed.py',d/'ui_seed.py')
+    shutil.copyfile(here/'reuse_data_seed.py',d/'reuse_data_seed.py')
+    shutil.copyfile(here/'staged_apps.py',d/'staged_apps.py')
+    replace(d/'prepare_userland.py',"            checkpoint('original-data-copy-plan',plan)",
+        "            checkpoint('original-data-copy-plan',plan)\n"
+        "            import staged_apps\n"
+        "            apps=staged_apps.plan(var/'staged_system_apps',Path(__file__).with_name('myron-apps-plan.json'))\n"
+        "            checkpoint('system-apps-plan',apps)\n"
+        "            (report_path.parent/'system-apps-plan.json').write_text(json.dumps(apps,indent=2)+'\\n')")
+    replace(d/'root_runtime.py',"        replace(addon, '// Myron Data mount: device-specific addons are not compiled.\\n')",
+        "        import staged_apps\n"
+        "        replace(addon, staged_apps.source(addon,Path(__file__).with_name('myron-apps-plan.json')))")
+    replace(d/'root_runtime.py',"        replace('\\tif (!error) native_staged_apps_prepare(p, scratch, data_mount);\\n', '')",
+        "        replace('\\tif (!error) native_staged_apps_prepare(p, scratch, data_mount);\\n',\n"
+        "                '\\tif (!error) myron_staged_apps_prepare(p, data_mount);\\n')")
+    replace(d/'boot_assets.py',"'myron27-keystore=1','boot-ui-trace=1'",
+        "'myron27-keystore=1','staged-apps=1','boot-ui-trace=1'")
+
+    replace(d/'boot_assets.py', "        report['required_boot_arguments'] += ['myron27-dyld-startup=1'",
+        "        native=json.loads(Path(root_report).read_text())\n"
+        "        gpu=native.get('gpu_build',{})\n"
+        "        report['gpu_hardware_start_enabled']=gpu.get('native_objects_compiled') is True\n"
+        "        if report['gpu_hardware_start_enabled']:\n"
+        "            require(bool(native.get('gpu_firmware_link')), 'GPU firmware must be checked in the actual linked native kernel')\n"
+        "            report['required_boot_arguments'] += ['myron-gpu=1']\n"
+        "        report['required_boot_arguments'] += ['myron27-dyld-startup=1'")
+    replace(u/'MyronBootLog.h','extern "C" size_t myron_touch_snapshot(char *,size_t);',
+        'extern "C" size_t myron_touch_snapshot(char *,size_t);\n'
+        '#if MYRON_GPU_NATIVE\nextern "C" size_t myron_gpu_snapshot(char *,size_t);\n#endif')
+    replace(u/'MyronBootLog.h','touchRemaining<256?touchRemaining:256','touchRemaining<768?touchRemaining:768')
+    replace(u/'MyronBootLog.h','  const size_t processRemaining=',
+        '#if MYRON_GPU_NATIVE\n'
+        '  const size_t gpuRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
+        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<512?gpuRemaining:512);\n'
+        '#endif\n  const size_t processRemaining=')
+
+    # This board owns a state-only service and has no keybag/passcode support.
+    # SLS 3 is no-passcode; 0 incorrectly describes an unlocked passcode state.
+    replace(d/'display/MyronKeyStoreProbe.cpp',
+        'uint32_t native_aks_lock_state(void) {return 0;}',
+        'uint32_t native_aks_lock_state(void) {return 3; /* no keybag / no passcode */}')
+    p=d/'prepare_userland.py'
+    replace(p,'def prepare(upstream,out,report_path,archive_tool):',
+        'def prepare(upstream,out,report_path,archive_tool,data_seed_path=None):')
+    replace(p,"            data=volume.build_volume(out/'data',plan['volume_mib'],lambda target:volume.copy_var(var,target))",
+        "            from reuse_data_seed import reuse\n"
+        "            require(data_seed_path is not None, 'Persistent myron install requires its original Data seed')\n"
+        "            data=reuse(data_seed_path,out/'data')")
+    replace(p,'    a=p.parse_args();prepare(a.upstream,a.out,a.report,a.archive_tool)',
+        "    p.add_argument('--data-seed',type=Path,required=True)\n"
+        '    a=p.parse_args();prepare(a.upstream,a.out,a.report,a.archive_tool,a.data_seed)')
+
     replace(d/'prepare_data_volume.py','    set_render_preferences(target)',
         '    import ui_seed\n    ui_seed.clear(target)\n    set_render_preferences(target)')
     replace(d/'build_ufs_dormant.py', '            from ram_data import stage as stage_ram_data',
         "            keep += ('_myron_data_store_open','_myron_data_store_read','_myron_data_store_write','_myron_data_store_sync')\n            from ram_data import stage as stage_ram_data")
+    p=d/'tests/test_root_runtime.py'
+    replace(p,"        end = source.index('\\n}\\n#endif', start) + len('\\n}\\n#endif')\n        block = source[start:end]",
+        "        end = source.index('\\n}\\n#endif', start) + len('\\n}\\n#endif')\n"
+        "        block = source[start:end]\n"
+        "        apps_start=block.index('/* The deletable system apps')\n"
+        "        apps_end=block.index('extern volatile unsigned myron_data_start_state;',apps_start)\n"
+        "        block=block[:apps_start]+'static unsigned appCalls; static void myron_staged_apps_prepare(proc_t p,mount_t m){assert(!p && m);++appCalls;}\\n'+block[apps_end:]")
+    replace(p,'  int rc=myron_data_prepare(0,(uintptr_t)scratch_memory);',
+        '  appCalls=0;\n  int rc=myron_data_prepare(0,(uintptr_t)scratch_memory);\n  assert(appCalls==(unsigned)(rc==0));')
     # Keep the original symbol registrations and all signed root/seed checks.
     replace(d/'ram_data.py',"source = source.replace(old, 'unsigned mode = 0; // myron: volatile Data only')",
         "source = source.replace(old, 'unsigned mode = myron_data_store_mode();')\n"
@@ -54,6 +114,12 @@ def apply(root):
     replace(p,"self.assertIn('unsigned mode = 0;', text)","self.assertIn('unsigned mode = myron_data_store_mode();', text)")
     replace(p,".replace('#include \"ram-data/NativeRamBlock.cpp\"', '')",
         ".replace('#include \"ram-data/NativeRamBlock.cpp\"', '').replace('#include \"MyronDataStore.h\"', '')")
+    # The medium is now a durable seed-bound UFS overlay. Declaring it ephemeral
+    # prevents the native first-boot SystemAppMigrator from installing apps.
+    replace(d/'build_payload.py','packed_data_ramdisk=True,persistent_data=False)',
+        'packed_data_ramdisk=True,persistent_data=True)')
+    replace(d/'payload_adt.py',"        assert chosen['ephemeral-storage'] == struct.pack('<I',1)",
+        "        assert 'ephemeral-storage' not in chosen")
     # @3x phone presentation on the actual 1200x2608 GOP; no cropped canvas or
     # coordinate rescaling, and no change to the N104 kernel/security donor.
     p=d/'board.toml'

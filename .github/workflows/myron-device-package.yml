@@ -61,6 +61,8 @@ jobs:
           git -C "$RUNNER_TEMP/ramblock-runtime" fetch --depth 1 https://github.com/UniXNU/RamBlock.git 4be2d7eb05ef5a98126c91e0302c149140c0e3e1
           git -C "$RUNNER_TEMP/ramblock-runtime" checkout --detach FETCH_HEAD
           python3 myron-runtime/check.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --ramblock "$RUNNER_TEMP/ramblock-runtime" --cxx clang++
+      - name: Check preserved Data and bounded original app provisioning
+        run: python3 tests/test_myron_runtime_upgrade.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" -v
       - name: Check fresh Data desktop provisioning before the full build
         run: |
           mkdir -p "$RUNNER_TEMP/geometry-check"
@@ -269,6 +271,7 @@ jobs:
     needs: [inputs, handoff, macos-geometry, gpu-firmware]
     permissions:
       contents: read
+      actions: read
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -288,6 +291,21 @@ jobs:
         with:
           name: myron-a840-firmware-inputs
           path: ${{ runner.temp }}/gpu-firmware
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: myron-ios27-native-continuous-input
+          run-id: 45074791666
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/retained-data-source
+      - name: Retain the exact installed persistent Data seed
+        run: |
+          python3 myron-runtime/reuse_data_seed.py --boot "$RUNNER_TEMP/retained-data-source/root-startup.img" --manifest "$RUNNER_TEMP/retained-data-source/deployment.json" --out "$RUNNER_TEMP/retained-data.dbr"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-retained-data-seed
+          path: ${{ runner.temp }}/retained-data.dbr
+          if-no-files-found: error
+          retention-days: 90
       - name: Check authenticated public-header access before build setup
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -315,11 +333,16 @@ jobs:
         run: |
           python3 -m pip install capstone==5.0.6
           brew install cmake ninja llvm lld unifdef dtc mtools openssl@3 blacktop/tap/ipsw
+      - name: Check retained Data byte identity before native compilation
+        run: |
+          python3 myron27-build.py --source-only
+          python3 tests/test_myron_runtime_upgrade.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --seed "$RUNNER_TEMP/retained-data.dbr" -v
       - name: Build and export exact device package
         env:
           # The pinned public-header fetcher already supports authenticated GitHub requests.
           # This job retains contents: read; do not expose this token as a command argument.
           GITHUB_TOKEN: ${{ github.token }}
+          MYRON_DATA_SEED: ${{ runner.temp }}/retained-data.dbr
           MYRON_GPU_NATIVE: '1'
           MYRON_GPU_FIRMWARE: ${{ runner.temp }}/gpu-firmware
           MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}

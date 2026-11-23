@@ -64,7 +64,7 @@ static void thread_deallocate(thread_t){}
 static void IOSleep(unsigned ms){assert(ms==2000);++sleeps;gHost.ready=false;}
 static bool PE_parse_boot_argn(const char *key,void *v,unsigned n){assert(std::string(key)=="log"&&n==4);*(unsigned*)v=logArg;return true;}
 extern "C" size_t myron_display_snapshot(char *p,size_t n){++displaySnapshots;assert(n==1024);memset(p,'x',n-1);p[n-1]=0;return n-1;}
-extern "C" size_t myron_touch_snapshot(char *p,size_t n){assert(n==256);strcpy(p,"touch snapshot\n");return strlen(p);}
+extern "C" size_t myron_touch_snapshot(char *p,size_t n){assert(n==768);strcpy(p,"touch snapshot\n");return strlen(p);}
 extern "C" size_t myron_keystore_snapshot(char *p,size_t n){++keystoreSnapshots;assert(n==1024&&displaySnapshots==keystoreSnapshots);strcpy(p,"keystore snapshot\n");return strlen(p);}
 extern "C" size_t myron_boot_log_snapshot(char *p,size_t n){assert(!locked&&n>12);strcpy(p,"test snapshot");return strlen(p);}
 extern "C" void bsd_log_lock_safe(){assert(!locked);locked=1;}

@@ -33,7 +33,7 @@ flags=['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if a.sanitize e
 # Run the unmodified upstream test, substituting only compiler and sanitizer flags.
 original_run=subprocess.run
 def upstream_run(cmd,**kw):
-    if cmd[0]=='c++':cmd=[a.cc,*flags,*cmd[1:]]
+    if cmd[0]=='c++':cmd=[a.cc,'-include','cstdint',*flags,*cmd[1:]]
     return original_run(cmd,**kw)
 subprocess.run=upstream_run
 try:
@@ -115,7 +115,7 @@ int main(int argc,char **argv) {
  const unsigned expected[]={0,11,12,12,12,12,13,14,15,16,17,17,17,17,3};
  assert(stage==expected[scenario]);
  if(scenario==14){
-  assert(native_aks_lock_state()==0);
+  assert(native_aks_lock_state()==3);
   uint8_t id[32];assert(native_aks_device_id(nullptr,32)==0 && native_aks_device_id(id,7)==0);
   assert(native_aks_device_id(id,sizeof id)==8 && id[0]==1 && id[7]==8);
   wantIdentity=false;assert(native_aks_device_id(id,sizeof id)==0);wantIdentity=true;

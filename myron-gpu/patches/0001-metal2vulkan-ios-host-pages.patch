@@ -1,0 +1,82 @@
+diff --git a/crates/metal2vulkan-runtime/src/copied.rs b/crates/metal2vulkan-runtime/src/copied.rs
+--- a/crates/metal2vulkan-runtime/src/copied.rs
++++ b/crates/metal2vulkan-runtime/src/copied.rs
+@@ -2669,8 +2669,8 @@
+     true
+ }
+ 
+-/// [`read_pages`] on macOS.
+-#[cfg(target_os = "macos")]
++/// [`read_pages`] on macOS and iOS: the same Mach task-memory interface.
++#[cfg(any(target_os = "macos", target_os = "ios"))]
+ pub(crate) fn read_pages(pages: NonNull<u8>, into: &mut [u8]) -> bool {
+     unsafe extern "C" {
+         /// `<mach/mach_init.h>`: the port of this process's task.
+diff --git a/crates/metal2vulkan-runtime/src/host_memory.rs b/crates/metal2vulkan-runtime/src/host_memory.rs
+--- a/crates/metal2vulkan-runtime/src/host_memory.rs
++++ b/crates/metal2vulkan-runtime/src/host_memory.rs
+@@ -899,8 +899,14 @@
+     regions_allow(start, end, |info| protection_allows(info, false), &mut 0)
+ }
+ 
++/// [`mapped_readable`] on iOS: the current Mach regions, with read permission.
++#[cfg(target_os = "ios")]
++pub(super) fn mapped_readable(start: u64, end: u64) -> bool {
++    mapped_with(start, end, libc::VM_PROT_READ)
++}
++
+ /// [`mapped_readable`] where the runtime does not ask the system for its mappings: `false`.
+-#[cfg(not(any(target_os = "linux", windows)))]
++#[cfg(not(any(target_os = "linux", target_os = "ios", windows)))]
+ pub(super) fn mapped_readable(_start: u64, _end: u64) -> bool {
+     false
+ }
+@@ -914,8 +920,8 @@
+     mappings_permitted(start, end, Access::Write, &mut 0) == Some(true)
+ }
+ 
+-/// [`mapped_writable`] on macOS ([`mapped_with`]).
+-#[cfg(target_os = "macos")]
++/// [`mapped_writable`] on macOS and iOS ([`mapped_with`]).
++#[cfg(any(target_os = "macos", target_os = "ios"))]
+ pub(super) fn mapped_writable(start: u64, end: u64) -> bool {
+     mapped_with(start, end, libc::VM_PROT_WRITE)
+ }
+@@ -925,7 +931,7 @@
+ /// there frees or remaps memory under a no-copy buffer it still holds (Core Animation's render
+ /// server, whose buffers outlive their memory in its caches), which Metal keeps no address of
+ /// after it wired the pages.
+-#[cfg(target_os = "macos")]
++#[cfg(any(target_os = "macos", target_os = "ios"))]
+ pub(super) fn reachable_now(start: u64, end: u64, writes: bool) -> bool {
+     let needs = match writes {
+         true => libc::VM_PROT_READ | libc::VM_PROT_WRITE,
+@@ -933,16 +939,16 @@
+     };
+     mapped_with(start, end, needs)
+ }
+-/// [`reachable_now`] off macOS: the pages stay mapped until their release runs
++/// [`reachable_now`] off macOS/iOS: the pages stay mapped until their release runs
+ /// (`HostMemory::new`), and no comparison asks.
+-#[cfg(not(target_os = "macos"))]
++#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+ pub(super) fn reachable_now(_start: u64, _end: u64, _writes: bool) -> bool {
+     true
+ }
+ /// Whether the regions of this task over `[start, end)` cover it without a gap, each with all of
+ /// the protection `needs` now (`mach_vm_region`, `VM_REGION_BASIC_INFO_64`); `false` where the
+ /// kernel answers no region.
+-#[cfg(target_os = "macos")]
++#[cfg(any(target_os = "macos", target_os = "ios"))]
+ fn mapped_with(start: u64, end: u64, needs: libc::vm_prot_t) -> bool {
+     unsafe extern "C" {
+         /// `<mach/mach_init.h>`: the port of this process's task.
+@@ -1067,7 +1073,7 @@
+ 
+ /// [`mapped_writable`] where the runtime does not ask the system for its mappings: `false` (and no
+ /// copy is made here: the runtime reads no caller's page, [`mapped_readable`]).
+-#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
++#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", windows)))]
+ pub(super) fn mapped_writable(_start: u64, _end: u64) -> bool {
+     false
+ }

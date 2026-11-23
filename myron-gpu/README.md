@@ -30,6 +30,19 @@ It is a component artifact, **not a flashable package**. The accelerator's
 retained iPhone bindings, target trust-module merge, boot capacity and real
 display handoff still have to be connected before a phone test package.
 
+The iOS bridge carries the translator's existing Mach page-read and mapping
+permission implementation over to iOS; it does not treat an unreadable or
+unwritable range as valid. The complete arm64e bridge build qualifies this
+source change; a host compile alone does not verify phone rendering.
+
+In particular, the current `MyronDisplayProbe` fence-query exports still report
+no GPU provider. The CPU scaled-copy path has not acquired a GPU producer fence;
+the existing fence timer is created by the direct-DPU path. Publishing Metal
+before wiring that ownership boundary could read an unfinished GPU surface.
+Do not enable the plugin merely because the userspace build passes. Likewise,
+the upstream `make-owner-trust-bundle.py` fixture belongs to a different target;
+merge only this build's signed CDHashes with this iPhone's unchanged trust input.
+
 ```sh
 python3 myron-gpu/prepare_userspace.py --fetch --references /tmp/metal-refs \
   --native-references /tmp/native-refs --out /tmp/myron-gpu-userspace

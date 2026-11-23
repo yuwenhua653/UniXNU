@@ -66,7 +66,7 @@ def prepare(refs, native_refs, out, download=False):
     for name in ('NativeAdreno', 'AdrenoPM4'):
         prefix = 'drivers/NativeAdreno' if name == 'NativeAdreno' else 'kits/AdrenoPM4'
         for source in (native_refs/name).iterdir():
-            if source.is_file() and source.suffix in ('.h', '.c'):
+            if source.is_file() and (source.suffix in ('.h', '.c') or source.name.startswith('LICENSE')):
                 copy(source, prefix+'/'+source.name)
     copy(ROOT/'myron-gpu/native/MyronGpuMailbox.h', 'drivers/NativeAdreno/MyronGpuMailbox.h')
     recipe = out/'scripts/build-adreno-metal-plugin.py'
@@ -76,6 +76,13 @@ def prepare(refs, native_refs, out, download=False):
                    "args.no_replay = True")
     text = replace(text, "'-fstack-protector-strong']", "'-fstack-protector-strong', '-DNATIVE_MYRON_IPHONE27=1']")
     recipe.write_text(text)
+    bridge = out/'scripts/build-adreno-metal-bridge.py'
+    text = replace(bridge.read_text(), "'0064-copies-leave-unreachable-pages-alone.patch']]",
+                   "'0064-copies-leave-unreachable-pages-alone.patch',\n"
+                   "    '0001-metal2vulkan-ios-host-pages.patch']]")
+    bridge.write_text(text)
+    copy(ROOT/'myron-gpu/patches/0001-metal2vulkan-ios-host-pages.patch',
+         'drivers/AdrenoMetal/bridge/patches/0001-metal2vulkan-ios-host-pages.patch')
     plugin = out/'drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm'
     text = plugin.read_text()
     # Exact source boundary: keep common API/env behavior, exclude all of the

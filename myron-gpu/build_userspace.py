@@ -74,12 +74,26 @@ def audit_image(path, expected_type):
     magic, cpu, subtype, kind = struct.unpack_from('<4I',data)
     if (magic,cpu,subtype & 0xffffff,kind) != (0xfeedfacf,0x100000c,2,expected_type):
         raise ValueError('Expected thin arm64e Mach-O of the selected type: '+str(path))
+    count, command_bytes = struct.unpack_from('<II',data,16)
+    cursor, platforms = 32, []
+    if command_bytes > len(data)-32: raise ValueError('Truncated Mach-O commands')
+    for _ in range(count):
+        if cursor+8 > 32+command_bytes: raise ValueError('Truncated Mach-O command')
+        command, size = struct.unpack_from('<II',data,cursor)
+        if size < 8 or cursor+size > 32+command_bytes: raise ValueError('Invalid Mach-O command')
+        if command == 0x32:
+            if size < 24: raise ValueError('Truncated build-version command')
+            platforms.append(struct.unpack_from('<II',data,cursor+8))
+        cursor += size
+    if cursor != 32+command_bytes or platforms != [(2,27 << 16)]:
+        raise ValueError('Expected actual iOS 27.0 build target, not a host or iPadOS17 artifact')
     run(['codesign','--verify','--strict',path])
     detail = subprocess.run(['codesign','-d','--verbose=4',path],capture_output=True,text=True,check=True).stderr
     digest = re.search(r'^CDHash=([0-9a-f]{40})$',detail,re.M)
     if not digest or not re.search(r'^Page size=4096$',detail,re.M):
         raise ValueError('Missing 4 KiB owner signature: '+str(path))
-    return dict(sha256=hashlib.sha256(data).hexdigest(),bytes=len(data),cdhash=digest[1],arm64e=True)
+    return dict(sha256=hashlib.sha256(data).hexdigest(),bytes=len(data),cdhash=digest[1],
+                arm64e=True,platform='iOS',minimum_os='27.0')
 
 
 def build(root):

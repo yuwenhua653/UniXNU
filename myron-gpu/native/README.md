@@ -1,5 +1,11 @@
 # Native A840 integration stage
 
+> Current source checkpoint: see [client lifecycle and native-header fixes](../LIFECYCLE-INTEGRATION.md)
+> and [Metal payload integration](../TRANSPORT-INTEGRATION.md). The older sections
+> below describe intermediate states; capacity, addon installation and source
+> publication wiring have since been implemented. Native compile/link and phone
+> CP/rendering qualification are still outstanding.
+
 The native board driver compiled and linked into the iPhone27 package in run
 45117385166 (commit 8fc39d1e8afe0c1e0d61bd08597b461331682d98). Its final
 embedded kernel SHA-256 is

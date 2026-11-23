@@ -128,7 +128,8 @@ def stage(references, destination):
                    '''        __atomic_store_n(gMailboxWords+2,request,__ATOMIC_RELEASE);
         IOLockUnlock(g.lock);
         owner->release();''')
-    path.write_text(text)
+    from publish_lifecycle import patch as patch_lifecycle
+    path.write_text(patch_lifecycle(text, replace))
     with path.open('a') as stream:
         stream.write('\n'+(HERE/'MyronGpuFenceProvider.h').read_text())
     report['staged_sha256'] = {str(p.relative_to(destination)): hashlib.sha256(p.read_bytes()).hexdigest()

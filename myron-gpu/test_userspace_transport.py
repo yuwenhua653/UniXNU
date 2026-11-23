@@ -31,7 +31,10 @@ def check(tree, references, cxx):
 #include "MyronGpuMailbox.h"
 using IOReturn=int;using wait_result_t=int;
 constexpr int kIOReturnBadArgument=-10;
-struct AGXDeviceUserClient {int refs=1;void retain(){++refs;}void release(){--refs;}};
+struct AGXDeviceUserClient {
+ int refs=1;void *mailbox_task_=this;void retain(){++refs;}void release(){--refs;}
+ IOReturn run(uint32_t,const void *,size_t,void *,size_t,void *);
+};
 struct {void *lock;} g;
 void IOLockLock(void *){} void IOLockUnlock(void *){}
 void *current_thread(){return nullptr;} void thread_set_thread_name(void *,const char *){}
@@ -45,7 +48,8 @@ void IOSleep(unsigned){if(++sleeps>1)throw Stop{};}
 unsigned calls=0,mode=0;bool stalled=false;
 unsigned unmaps=0;
 NativeAdrenoAbiSubmit expected{};
-IOReturn runCore(AGXDeviceUserClient *owner,uint32_t method,const void *input,size_t is,void *output,size_t os){
+IOReturn AGXDeviceUserClient::run(uint32_t method,const void *input,size_t is,void *output,size_t os,void *task){
+ auto *owner=this;assert(task==mailbox_task_);
  ++calls;assert(owner==&first && owner->refs==2);
  assert(method==NativeAdrenoMethodSubmit && is==sizeof expected);
  assert(memcmp(input,&expected,is)==0);

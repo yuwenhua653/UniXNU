@@ -5,7 +5,8 @@ from pathlib import Path
 
 HERE=Path(__file__).resolve().parent
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('--cxx',default='c++');a=p.parse_args()
-source='\n'.join(x for x in (HERE/'MyronMetalPublish.cpp').read_text().splitlines() if not x.startswith('#include'))
+source='\n'.join(x for x in (HERE/'MyronMetalPublish.cpp').read_text().splitlines()
+                 if not x.startswith('#include') or x == '#include <IOKit/IOPlatformExpert.h>')
 fixture=r'''
 #include <cassert>
 #include <cstdint>
@@ -33,9 +34,9 @@ const OSMetaClass *OSMetaClass::getMetaClassWithName(const OSSymbol *s){
  if(!strcmp(s->name,"AGXAccelerator"))return scenario==6?&foreign:nullptr;
  return scenario==3?nullptr:scenario==5?&foreign:&parent;
 }
-struct OSDictionary{};struct IOUserClient{};
+struct OSDictionary{};struct IOUserClient{};struct IOPlatformExpert;
 struct IOService {
- static IOService *getPlatform(){static IOService p;return scenario==13?nullptr:&p;}
+ static IOPlatformExpert *getPlatform();
  bool init(){return scenario!=10;}
  bool setProperty(const char *k,const char *v){
   ++properties;const char *keys[]={"MetalPluginName","MetalPluginClassName","NativeSandboxGrantProcess"};
@@ -94,7 +95,17 @@ int main(){
 }
 '''
 with tempfile.TemporaryDirectory() as tmp:
+ header=Path(tmp)/'IOKit/IOPlatformExpert.h';header.parent.mkdir()
+ header.write_text('struct IOPlatformExpert:IOService {};\n'
+                   'IOPlatformExpert *IOService::getPlatform(){static IOPlatformExpert p;return scenario==13?nullptr:&p;}\n')
  src=Path(tmp)/'test.cpp';exe=Path(tmp)/'test';src.write_text(fixture)
- subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined',src,'-o',exe],check=True)
+ flags=[a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-I',tmp]
+ # IOService.h only forward-declares IOPlatformExpert. The previous peer
+ # returned IOService* and hid a genuine native C++ conversion error.
+ negative=Path(tmp)/'missing-platform.cpp'
+ negative.write_text(fixture.replace('#include <IOKit/IOPlatformExpert.h>',''))
+ result=subprocess.run([*flags,'-fsyntax-only',negative],capture_output=True,text=True)
+ assert result.returncode and 'IOPlatformExpert' in result.stderr and 'IOService' in result.stderr
+ subprocess.run([*flags,'-fsanitize=undefined',src,'-o',exe],check=True)
  subprocess.run([exe],check=True)
 print('PASS actual Metal publication: disabled/not-ready, 15 IOKit failures, cleanup, one-time registration and real client type gate; host peers only')

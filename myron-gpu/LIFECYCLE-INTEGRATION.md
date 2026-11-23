@@ -68,5 +68,15 @@ This Linux workspace has GCC but no `clang++`, Apple SDK or iPhone compiler.
 A requested secondary Clang check could not start. Full native compile/link,
 final image qualification and CP/fence/known-image rendering on the phone remain
 required. Host peers do not establish MMIO behavior, IOKit mapping behavior or
-hardware rendering. Preserve the no-full-build constraint until source review
-and targeted native qualification are ready; do not relabel an old boot image.
+hardware rendering.
+
+## Native integration build follow-up
+
+The user explicitly requested the full build after this checkpoint. Before
+launch, the current lifecycle/UBWC6/CP host suite passed again and both the
+verified Metal component (run 45134750180, artifact 14801780008) and retained
+Data seed (run 45074791666, artifact 14776143605) were confirmed unexpired.
+The next device-package run compiles this source with the real XNU/IOKit
+headers and checks the final native image contract. Its success is pending;
+it does not establish CP readiness or rendering on the phone. Never relabel
+an older boot image as the result of this run.

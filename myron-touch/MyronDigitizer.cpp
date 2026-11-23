@@ -17,11 +17,13 @@ static uint32_t rscId, rscConfig, touchChip, hidReports;
 static int railResult = -1, probeResult = -1, busResult = -1;
 static uint64_t keyObservedUs, keyAcceptedUs, keyMaxPollGapUs;
 static uint32_t keyReports, keyErrors, keyStable;
+static uint32_t keyPon, keyVolumeLevel=1, keyVolumeConfig, keyVolumeAvailable;
+static uint32_t keyVolumeUpPresses, keyVolumeDownPresses;
 static int keyStatus;
 
 extern "C" size_t myron_touch_snapshot(char *out, size_t cap) {
     if (!out || !cap) return 0;
-    int n = snprintf(out, cap, "[myron touch] se=%d rail=%d rsc_id=%08x config=%08x probe=%d chip=%04x hid_reports=%u\n[myron key] bits=%u reports=%u errors=%u status=%d observed_us=%llu accepted_us=%llu max_poll_gap_us=%llu\n",
+    int n = snprintf(out, cap, "[myron touch] se=%d rail=%d rsc_id=%08x config=%08x probe=%d chip=%04x hid_reports=%u\n[myron key] bits=%u reports=%u errors=%u status=%d observed_us=%llu accepted_us=%llu max_poll_gap_us=%llu pon=%02x vol_up_ready=%u cfg=%08x level=%u up_presses=%u down_presses=%u\n",
         __atomic_load_n(&busResult,__ATOMIC_RELAXED), __atomic_load_n(&railResult,__ATOMIC_RELAXED),
         __atomic_load_n(&rscId,__ATOMIC_RELAXED), __atomic_load_n(&rscConfig,__ATOMIC_RELAXED),
         __atomic_load_n(&probeResult,__ATOMIC_RELAXED), __atomic_load_n(&touchChip,__ATOMIC_RELAXED),
@@ -30,7 +32,10 @@ extern "C" size_t myron_touch_snapshot(char *out, size_t cap) {
         __atomic_load_n(&keyErrors,__ATOMIC_RELAXED), __atomic_load_n(&keyStatus,__ATOMIC_RELAXED),
         (unsigned long long)__atomic_load_n(&keyObservedUs,__ATOMIC_RELAXED),
         (unsigned long long)__atomic_load_n(&keyAcceptedUs,__ATOMIC_RELAXED),
-        (unsigned long long)__atomic_load_n(&keyMaxPollGapUs,__ATOMIC_RELAXED));
+        (unsigned long long)__atomic_load_n(&keyMaxPollGapUs,__ATOMIC_RELAXED),
+        __atomic_load_n(&keyPon,__ATOMIC_RELAXED), __atomic_load_n(&keyVolumeAvailable,__ATOMIC_RELAXED),
+        __atomic_load_n(&keyVolumeConfig,__ATOMIC_RELAXED), __atomic_load_n(&keyVolumeLevel,__ATOMIC_RELAXED),
+        __atomic_load_n(&keyVolumeUpPresses,__ATOMIC_RELAXED), __atomic_load_n(&keyVolumeDownPresses,__ATOMIC_RELAXED));
     return n < 0 ? 0 : ((size_t)n < cap ? (size_t)n : cap-1);
 }
 
@@ -234,6 +239,10 @@ class MyronDigitizer : public IOHIDDevice {
             self->lastKeyPollUs=now;
             const uint8_t before=self->power.report();
             self->power.poll();
+            __atomic_store_n(&keyPon,self->power.rawPon,__ATOMIC_RELAXED);
+            __atomic_store_n(&keyVolumeLevel,self->power.rawVolume,__ATOMIC_RELAXED);
+            __atomic_store_n(&keyVolumeUpPresses,self->power.volumeUpPresses,__ATOMIC_RELAXED);
+            __atomic_store_n(&keyVolumeDownPresses,self->power.volumeDownPresses,__ATOMIC_RELAXED);
             if(before!=self->power.report()) {
                 __atomic_store_n(&keyObservedUs,now,__ATOMIC_RELAXED);
                 __atomic_store_n(&keyStable,(uint32_t)self->power.report(),__ATOMIC_RELAXED);
@@ -300,6 +309,8 @@ public:
         if(!provider || strcmp(provider->getName(),"myron-power-key"))return false;
         keysOnly=true;
         if(!power.open())return false;
+        __atomic_store_n(&keyVolumeAvailable,(uint32_t)power.volumeAvailable(),__ATOMIC_RELAXED);
+        __atomic_store_n(&keyVolumeConfig,power.originalVolumeConfig(),__ATOMIC_RELAXED);
         const uint8_t initial[]={5,0};
         keyBuffer=IOBufferMemoryDescriptor::withBytes(initial,sizeof initial,kIODirectionIn);
         if(!keyBuffer){power.close();return false;}

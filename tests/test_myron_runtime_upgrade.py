@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Exercise seed identity and app budgeting before a native build."""
 import argparse
+import ast
 import hashlib
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -15,6 +17,40 @@ import reuse_data_seed as seed
 import prepare_data_volume as volume
 
 class Upgrade(unittest.TestCase):
+    def test_payload_argument_reaches_actual_app_copy_guard(self):
+        # Use the generated payload argument and the generated production guard,
+        # rather than separately reimplementing an enable flag in this test.
+        tree=ast.parse((a.device/'boot_assets.py').read_text())
+        values={n.value for n in ast.walk(tree) if isinstance(n,ast.Constant) and isinstance(n.value,str)}
+        arg,=[v for v in values if v.startswith('staged-apps=')]
+        upstream=(Path(__file__).parent/'fixtures/myron-staged-apps-upstream.c').read_text()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);plan=root/'plan.json'
+            plan.write_text(json.dumps(dict(build='24A446',selected=['Calculator.app'],allocation_bytes=6<<20)))
+            code=apps.source(upstream,plan)
+            start=code.index('static void\nnative_staged_apps_prepare(')
+            end=code.index('\tvfs_context_t ctx =',start)
+            guard=code[start:end]+'    (void)p;(void)scratch;(void)data_mount;++entered;\n}\n'
+            shim='''#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+typedef void *proc_t; typedef uintptr_t user_addr_t; typedef void *mount_t;
+static unsigned entered;static const char *bootarg;
+static int PE_parse_boot_argn(const char *name,void *out,int size){
+ size_t n=strlen(name);if(size!=4 || strncmp(bootarg,name,n) || bootarg[n]!='=')return 0;
+ *(uint32_t*)out=(uint32_t)atoi(bootarg+n+1);return 1;
+}
+'''+guard+'''int main(int argc,char **argv){
+ assert(argc==3);bootarg=argv[1];native_staged_apps_prepare(0,0,0);
+ assert(entered==(unsigned)atoi(argv[2]));return 0;
+}
+'''
+            src=root/'guard.c';src.write_text(shim);exe=root/'guard'
+            subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(src),'-o',str(exe)],check=True)
+            for value,expected in [(arg,'1'),('','0'),('staged-apps=0','0'),('staged-apps=2','0'),('sheng-staged-apps=1','0')]:
+                subprocess.run([str(exe),value,expected],check=True)
+
     def test_budget_skips_oversized_tree_and_symlinks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);src=root/'apps';src.mkdir()

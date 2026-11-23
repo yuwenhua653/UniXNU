@@ -5,7 +5,6 @@ class MyronPowerHardware {
     IOMemoryMap *maps[4]{};
     volatile uint32_t *core=nullptr,*map=nullptr,*owners=nullptr,*observer=nullptr;
     uint16_t apid=8192;
-    bool failed=false;
     IOMemoryMap *volumeMap=nullptr;
     volatile uint32_t *volumePad=nullptr;
     uint32_t volumeConfig=0;
@@ -35,11 +34,15 @@ class MyronPowerHardware {
         memory->release();return result;
     }
 public:
-    MyronPowerDebounce state,volume;
-    uint8_t report()const{return myronButtonBits(state,volume);}
-    bool pending()const{return state.pending()||volume.pending();}
-    void accepted(){state.accepted();volume.accepted();}
+    MyronPowerDebounce state,volume,down;
+    uint8_t report()const{return myronButtonBits(state,volume,down);}
+    bool pending()const{return state.pending()||volume.pending()||down.pending();}
+    void accepted(){state.accepted();volume.accepted();down.accepted();}
     unsigned errors=0,reports=0;
+    uint32_t rawPon=0,rawVolume=1;
+    unsigned volumeUpPresses=0,volumeDownPresses=0;
+    bool volumeAvailable()const{return volumePad!=nullptr;}
+    uint32_t originalVolumeConfig()const{return volumeConfig;}
     void close(){
         if(volumeChanged && volumePad && volumePad[0]==((volumeConfig&~3u)|3u)){
             volumePad[0]=volumeConfig;__asm__ volatile("dsb sy":::"memory");
@@ -68,6 +71,16 @@ public:
     uint32_t read(unsigned off){uint32_t v=observer[off/4];__asm__ volatile("dmb oshld":::"memory");return v;}
     void write(unsigned off,uint32_t v){__asm__ volatile("dmb oshst":::"memory");observer[off/4]=v;__asm__ volatile("dsb osh":::"memory");}
     void delay(){IODelay(1);}
-    void poll(){uint8_t value=0;bool ok=!failed && observer && myronPowerRead(*this,apid,&value);if(!ok){++errors;failed=true;}state.sample(ok,(value&0x80)!=0);
-        volume.sample(volumePad!=nullptr,volumePad && !(volumePad[1]&1));}
+    void poll(){
+        uint8_t value=0;bool ok=observer && myronPowerRead(*this,apid,&value);
+        // A failed read releases held keys through debounce; a later valid
+        // read can re-arm them. Do not permanently disable PON on one timeout.
+        if(!ok)++errors;else rawPon=value;
+        bool wasDown=down.stable,wasUp=volume.stable;
+        myronPonSample(state,down,ok,value);
+        if(volumePad){rawVolume=volumePad[1]&1;__asm__ volatile("dmb oshld":::"memory");}
+        volume.sample(volumePad!=nullptr,rawVolume==0);
+        if(!wasUp && volume.stable)++volumeUpPresses;
+        if(!wasDown && down.stable)++volumeDownPresses;
+    }
 };

@@ -56,6 +56,10 @@ def source(addon, plan_path):
         nonlocal text
         if text.count(old)!=1:raise ValueError('Staged app source boundary changed: '+old[:60])
         text=text.replace(old,new)
+    # The pinned helper predates upstream's unprefixed boot arguments. Match
+    # the actual myron payload; otherwise the helper exits before copying.
+    replace('PE_parse_boot_argn("sheng-staged-apps",',
+            'PE_parse_boot_argn("staged-apps",')
     replace('"/private/var/db/.sheng-staged-apps"',json.dumps('/private/var/db/.myron-staged-24A446-'+digest))
     # Traverse only complete app trees selected against actual source sizes.
     allow=' || '.join('!strcmp(name,'+json.dumps(n)+')' for n in names) or '0'

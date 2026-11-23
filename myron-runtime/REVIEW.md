@@ -55,3 +55,38 @@ or display, HID, keystore, app migration or GPU path is relaxed by this correcti
 From a freshly reconstructed tree, all 11 boot-assets, 8 Data-volume, 6 RamBlock
 and 6 Data-seed tests passed locally. Native compilation and macOS APFS integration
 still require the replacement CI run.
+
+## After device test of 45105158334
+
+The owner confirmed shutdown no longer asks for a passcode. Apps are still absent;
+neither volume key has an observable effect. These are device observations, not
+host-test conclusions.
+
+The pinned staged-app helper still parsed `sheng-staged-apps`, while the actual
+payload supplied `staged-apps=1`. Normalize this specific upstream boundary to
+`staged-apps`; keep the app allowlist, capacity reserve, exact migration-record
+comparison, signed root authorization, persistent seed and completion fsync.
+The new regression compiles the generated production enable guard and feeds it
+the argument extracted from the reconstructed payload builder, with off/missing
+and obsolete-prefix negative controls.
+
+Add Volume Decrement as report 5 bit 2, sampled from PMK8850 SID0 PON 0x13
+RT_STS bit 6. Source: K90PM-Development/android_kernel_xiaomi_sm8850-devicetrees
+e94223220b86a2b8fb3103682f36f29b2ba7f309, qcom/pmk8850.dtsi (RESIN,
+KEY_VOLUMEDOWN), canoe-mtp.dtsi and canoe-pinctrl.dtsi (GPIO101 Volume Up).
+UniXNU docs/porting/input.md and its linked Sheng ButtonProbe implement the same
+PON/RESIN press/release semantics; the myron SPMI v8 layout remains unchanged.
+Keep the original Power and Volume Increment report bits and preserve independent
+debounce, boot-held suppression and release. Remove the permanent failed-read
+latch: retries stay bounded at 500 microseconds per 20 ms poll. Successful reads
+after a fault re-arm only after a stable release. No PMIC registers are written.
+
+Volume Up remains on the reviewed GPIO101 input with pull-only ownership checks.
+Its remaining device failure is not established as fixed. Preserve raw PON and
+GPIO level/config/availability and per-volume-key press counts in the existing
+snapshot to distinguish no physical input from accepted HID without UI response.
+The tests execute the production MMIO reader with fake windows, including pin
+ownership rejection, pull restoration, both volume keys, timeout recovery and
+all eight key combinations; they do not qualify physical GPIO or iOS audio UI.
+GPU enablement and the known lack of a Metal/display-acceleration frontend are
+unchanged in this correction.

@@ -12,6 +12,15 @@ def replace(path, old, new):
 def apply(root):
     d=root/'device/myron27'; u=root/'device/sm8850/drivers/NativeUfs'
     here=Path(__file__).resolve().parent
+    shutil.copyfile(here/'platform-power.patch',d/'platform-power.patch')
+    replace(d/'install_upstream.py', "prelink=u/'kits/XnuPrelink'", """platform=u/'drivers/ArmDTPlatform'
+revision=subprocess.check_output(['git','-C',str(platform),'rev-parse','HEAD'],text=True).strip()
+if revision!='417ff95d6a6e8607ddea9309ec45c3bfd4a67c60':raise SystemExit('Unexpected platform power source')
+power_patch=here/'platform-power.patch'
+if subprocess.run(['git','-C',str(platform),'apply','--reverse','--check',str(power_patch)],capture_output=True).returncode:
+ subprocess.run(['git','-C',str(platform),'apply','--check',str(power_patch)],check=True)
+ subprocess.run(['git','-C',str(platform),'apply',str(power_patch)],check=True)
+prelink=u/'kits/XnuPrelink'""")
     for name in ('MyronDataWindow.h','MyronDataStore.h'):shutil.copyfile(here/name,u/name)
     shutil.copyfile(here/'ui_seed.py',d/'ui_seed.py')
     shutil.copyfile(here/'reuse_data_seed.py',d/'reuse_data_seed.py')
@@ -41,13 +50,17 @@ def apply(root):
         "        report['required_boot_arguments'] += ['myron27-dyld-startup=1'")
     replace(u/'MyronBootLog.h','extern "C" size_t myron_touch_snapshot(char *,size_t);',
         'extern "C" size_t myron_touch_snapshot(char *,size_t);\n'
+        'extern "C" size_t myron_staged_apps_snapshot(char *,size_t);\n'
         '#if MYRON_GPU_NATIVE\nextern "C" size_t myron_gpu_snapshot(char *,size_t);\n#endif')
     replace(u/'MyronBootLog.h','touchRemaining<256?touchRemaining:256','touchRemaining<768?touchRemaining:768')
     replace(u/'MyronBootLog.h','  const size_t processRemaining=',
         '#if MYRON_GPU_NATIVE\n'
         '  const size_t gpuRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
-        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<512?gpuRemaining:512);\n'
-        '#endif\n  const size_t processRemaining=')
+        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<768?gpuRemaining:768);\n'
+        '#endif\n'
+        '  const size_t appsRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
+        '  prefix+=(int)myron_staged_apps_snapshot((char *)slot+prefix,appsRemaining<256?appsRemaining:256);\n'
+        '  const size_t processRemaining=')
 
     # This board owns a state-only service and has no keybag/passcode support.
     # SLS 3 is no-passcode; 0 incorrectly describes an unlocked passcode state.

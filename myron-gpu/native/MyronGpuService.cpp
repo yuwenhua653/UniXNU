@@ -965,7 +965,17 @@ extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
         complete?gpuResult[3]:0,complete?gpuResult[4]:0,complete?gpuResult[5]:0,
         complete?gpuResult[6]:0,complete?gpuResult[7]:0,complete?gpuResult[8]:0,
         complete?gpuResult[9]:0,complete?gpuResult[10]:0);
-    return n<0?0:((size_t)n<cap?(size_t)n:cap-1);
+    size_t used=n<0?0:((size_t)n<cap?(size_t)n:cap-1);
+    if(complete && used<cap-1) {
+        n=snprintf(out+used,cap-used,
+            "gpu_init ran=%u io_errors=%u checked=%u matched=%u slices=%08x chip=%08x smmu=%u\n"
+            "gpu_bad1 reg=%08x got=%08x want=%08x bad2 reg=%08x got=%08x want=%08x\n",
+            unsigned(gM7.ran),gM7.io_errors,gM7.checked,gM7.matched,gM7.slices,
+            mg_a840_chip_id(gM7.slices,!gM7.ran || gM7.io_errors),unsigned(gSmmu.va!=0),
+            gM7.bad_reg,gM7.bad_got,gM7.bad_want,gM7.bad2_reg,gM7.bad2_got,gM7.bad2_want);
+        if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+    }
+    return used;
 }
 extern "C" void myron_gpu_run(void *, wait_result_t)
 {

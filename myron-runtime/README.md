@@ -37,3 +37,24 @@ The first marker consumes one block; the upstream overlay begins at 257522167.
 `check.py` exercises real callbacks, range overflow/overlap refusals, write
 failure closure, overlay reopen/foreign-seed refusal and power input filtering.
 Upstream RamBlock sparse/direct/persistence algorithm tests remain enabled.
+
+## Platform power and app migration follow-up
+
+The pinned ArmDTPlatform has no device power override. Its inherited final
+kernel vtable uses IODTPlatformExpert::haltRestart and the initial
+PE_halt_restart pointer is zero. `platform-power.patch` adds normal halt/reset
+handling through the DT's exact SMC/HVC conduit, cached during configuration.
+PSCI SYSTEM_OFF/RESET is invoked only at XNU's platform shutdown boundary,
+after its existing storage and driver notifications. Unknown conduits refuse;
+panic, paging and other notifications keep their original path. A returning
+firmware is an error, including an unexpected zero return. No PMIC address is
+guessed. Source dispatch tests pass; final native compilation and phone power
+removal remain unverified.
+
+An existing app-copy marker no longer skips the narrowly scoped migration
+request: only the byte-exact synthetic preference created by this port is
+eligible for removal. Changed userland preferences remain intact. The source
+test exercises both first-copy and already-copied paths and error propagation.
+The persistent boot snapshot also retains the existing copy stage, failure,
+errno and current path, so a late capture can distinguish copying from app
+registration. A selected host inventory does not establish phone installation.

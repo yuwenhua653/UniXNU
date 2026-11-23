@@ -82,28 +82,40 @@ def source(addon, plan_path):
     # Only remove the exact synthetic migration-complete record we created.
     # Preserve any userland-modified record, all SetupDone state and all keys.
     expected=plistlib.dumps(volume.desktop_preferences()['com.apple.migration'],fmt=plistlib.FMT_BINARY)
-    helper='''static int
+    helper='''static volatile int myron_apps_migration_result;
+/* 0 not reached, 1 absent, 2 exact synthetic record removed, 3 changed record
+ * preserved; negative values are the actual failed operation's errno. */
+static int
 myron_apps_request_migration(proc_t p, user_addr_t scratch, vfs_context_t ctx)
 {
     static const uint8_t expected[] = {'''+','.join(str(x) for x in expected)+'''};
     const char *path="/private/var/mobile/Library/Preferences/com.apple.migration.plist";
     vnode_t vp=NULLVP;
     int error=vnode_lookup(path,VNODE_LOOKUP_NOFOLLOW,&vp,ctx);
-    if(error==ENOENT)return 0;
-    if(error)return error;
+    if(error==ENOENT){myron_apps_migration_result=1;return 0;}
+    if(error){myron_apps_migration_result=-error;return error;}
     uint8_t bytes[sizeof(expected)+1]; int resid=0;
-    if(vnode_vtype(vp)!=VREG){vnode_put(vp);return EINVAL;}
+    if(vnode_vtype(vp)!=VREG){vnode_put(vp);myron_apps_migration_result=-EINVAL;return EINVAL;}
     error=vn_rdwr(UIO_READ,vp,(caddr_t)bytes,sizeof(bytes),0,UIO_SYSSPACE,IO_NOAUTH,
         vfs_context_ucred(ctx),&resid,vfs_context_proc(ctx));
     vnode_put(vp);
-    if(error)return error;
-    if(resid!=1 || memcmp(bytes,expected,sizeof expected))return 0;
+    if(error){myron_apps_migration_result=-error;return error;}
+    if(resid!=1 || memcmp(bytes,expected,sizeof expected)){myron_apps_migration_result=3;return 0;}
     struct unlink_args request={.path=scratch+0xa00};int32_t result=0;
     error=copyout(path,request.path,strlen(path)+1);
-    return error?error:unlink(p,&request,&result);
+    if(!error)error=unlink(p,&request,&result);
+    myron_apps_migration_result=error?-error:2;
+    return error;
 }
 '''
     replace('static void\nnative_staged_apps_prepare(',helper+'static void\nnative_staged_apps_prepare(')
+    # A completed copy marker is not proof that first-boot app migration ran.
+    # Revisit only our exact synthetic preference, even after a previous copy;
+    # leave changed preferences and all installed apps untouched.
+    replace('\t\tnative_staged_apps_stage = 3;\n\t\treturn;',
+        '\t\tnative_staged_apps_stage = 3;\n'
+        '\t\tint migration_error=myron_apps_request_migration(p,scratch,ctx);\n'
+        '\t\tif(migration_error)native_staged_apps_fail(migration_error);\n\t\treturn;')
     replace('\t\tif (!native_staged_apps_failed) {',
         '\t\tif (!native_staged_apps_failed) {\n'
         '\t\t\terror=myron_apps_request_migration(p,scratch,ctx);\n'
@@ -126,6 +138,14 @@ myron_staged_apps_prepare(proc_t p, mount_t data_mount)
     (void)mach_vm_deallocate(map,scratch,4096);
     printf("myron-apps: stage=%d files=%d MiB=%d failed=%d error=%d\\n",native_staged_apps_stage,
         native_staged_apps_files,native_staged_apps_mib,native_staged_apps_failed,native_staged_apps_error);
+}
+size_t myron_staged_apps_snapshot(char *out,size_t cap)
+{
+    if(!out || !cap)return 0;
+    int n=snprintf(out,cap,"[myron apps] stage=%d files=%d MiB=%d failed=%d error=%d migration=%d path=%.95s\\n",
+        native_staged_apps_stage,native_staged_apps_files,native_staged_apps_mib,
+        native_staged_apps_failed,native_staged_apps_error,myron_apps_migration_result,native_staged_apps_path);
+    return n<0?0:((size_t)n<cap?(size_t)n:cap-1);
 }
 '''
     return text

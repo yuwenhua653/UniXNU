@@ -30,8 +30,37 @@ class Upgrade(unittest.TestCase):
             function=re.sub(r'\b(proc_t|user_addr_t|vfs_context_t|vnode_t|unlink_args|unlink)\b',
                             r'test_\1',code[start:end]).replace('(caddr_t)','(char *)')
             expected=plistlib.dumps(volume.desktop_preferences()['com.apple.migration'],fmt=plistlib.FMT_BINARY)
-            source=(fixture/'myron-app-migration-host.c').read_text().replace('/* GENERATED_FUNCTION */',function)
+            source=(fixture/'myron-app-migration-host.c').read_text().replace('/* GENERATED_FUNCTION */',
+                'static volatile int myron_apps_migration_result;\n'+function)
             source=source.replace('EXPECTED_BYTES',','.join(map(str,expected)))
+            # Execute the production already-copied branch as well: its marker
+            # must not suppress repair of our exact synthetic migration record.
+            start=code.index('\tif (!vnode_lookup(native_staged_apps_marker,')
+            end=code.index('\tint error = covered ?',start)
+            cached=code[start:end]
+            wrapper='''
+static int native_staged_apps_stage, native_staged_apps_failed;
+static const char native_staged_apps_marker[]="/marker";
+static void native_staged_apps_fail(int error){native_staged_apps_failed=error;}
+static void cached_prepare(test_proc_t p,test_user_addr_t scratch) {
+    test_vfs_context_t ctx=0;test_vnode_t vp=NULLVP;
+'''+cached+'}\n'
+            source=source.replace('int main(void){',wrapper+'int main(void){')
+            source=source.replace('    assert(!strcmp(path,"/private/var/mobile/Library/Preferences/com.apple.migration.plist"));',
+                '    if(!strcmp(path,"/marker")){*vp=record;return 0;}\n'
+                '    assert(!strcmp(path,"/private/var/mobile/Library/Preferences/com.apple.migration.plist"));',1)
+            source=source.replace('    return 0;\n}', '''
+    unlink_error=0;unlinks=0;
+    cached_prepare(0,(uintptr_t)scratch);
+    assert(native_staged_apps_stage==3 && unlinks==1 && !native_staged_apps_failed && myron_apps_migration_result==2);
+    unlinks=0;record[0]^=1;
+    cached_prepare(0,(uintptr_t)scratch);
+    assert(!unlinks && !native_staged_apps_failed && myron_apps_migration_result==3);
+    record[0]^=1;read_error=EIO;
+    cached_prepare(0,(uintptr_t)scratch);
+    assert(!unlinks && native_staged_apps_failed==EIO && myron_apps_migration_result==-EIO);
+    return 0;
+}''')
             (root/'test.c').write_text(source)
             subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(root/'test.c'),'-o',str(root/'test')],check=True)
             subprocess.run([str(root/'test')],check=True)

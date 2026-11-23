@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "base_commit": "acfe6258e836a8cc83b389155e20adc49e63001d",
+  "capacity": {
+    "kernel_virtual_span": 82984960,
+    "loader_used_upper_bound": 99975168,
+    "fat_content_upper_bound": 49390842,
+    "fat_reserved_bytes": 1048576,
+    "owned_memory_bytes": 2147483648,
+    "fat_bytes": 92274688,
+    "test_only": true,
+    "kernel_sha256": "1af397687b3f7eca2a7f546885eca72389e5bedbe52e3eeaeba6335813e6ac7d"
+  },
+  "fat": {
+    "files": {
+      "kernel.macho": "b430da7471adc0a508bc8f0de63d8b65c916a896b6701821a873e741e5673588",
+      "kernel.macho.adt": "6336648ddb683f4e2e2ae7f2be2001f3d10508089cfc89d9fff1ecbe8829a236",
+      "kernel.macho.trustcache": "f546613a7f312cc0f2b19ace78e91e0c07875e2122677f2f7750537210384dfb",
+      "kernel.macho.gpuaddon": "ec71013c7b2afbcdd4acc094d3eb3a5bced0e7c422f0d15f400f601e11db7c29"
+    },
+    "fat_bytes": 92274688,
+    "data_unchanged": true,
+    "actual_fat_readback": true,
+    "host_fixture_only": true,
+    "flashable": false
+  },
+  "loader": {
+    "result": "passed",
+    "entire_staged_boot_executed": true,
+    "uefi_mocked": true,
+    "adt": "supplied device ADT",
+    "adt_sha256": "6336648ddb683f4e2e2ae7f2be2001f3d10508089cfc89d9fff1ecbe8829a236",
+    "adt_bytes_checked_at_handoff": true,
+    "hardware_registers_mocked": true,
+    "capsule_execution_mocked": true,
+    "owned_memory_bytes": 2147483648,
+    "arm_execution_emulated": false,
+    "phone_tested": false,
+    "desktop_reached": false,
+    "sanitizer": "undefined",
+    "scenario_count": 90,
+    "root_sidecars_checked": true,
+    "gpu_addon_sha256": "ec71013c7b2afbcdd4acc094d3eb3a5bced0e7c422f0d15f400f601e11db7c29",
+    "gpu_addon_handoff_checked": true,
+    "gpu_addon_failure_cases": 5,
+    "root_sidecar_failure_cases": 12,
+    "packed_data_preserved_at_handoff": true,
+    "sidecar_ranges_and_padding_checked": true,
+    "ramdisk_sha256": "528d1c330b73d799ef1b6fa49c4b46d4d4ad69b8537e6acec617468c45568611",
+    "trust_cache_sha256": "f546613a7f312cc0f2b19ace78e91e0c07875e2122677f2f7750537210384dfb",
+    "kernel_args": "-v serial=3 cpus=1",
+    "capture_written": false,
+    "pool_and_file_balance_asserted": true,
+    "root_closed_after_kernel": true,
+    "byte_equality_at_handoff": true,
+    "ebs_retry_tested": true,
+    "kernel_sha256": "1af397687b3f7eca2a7f546885eca72389e5bedbe52e3eeaeba6335813e6ac7d",
+    "kernel_transport_sha256": "b430da7471adc0a508bc8f0de63d8b65c916a896b6701821a873e741e5673588",
+    "edk2_headers_pin": "cfb93724a06ff86ff5ba971413368a7809ee42a5",
+    "driver_sha256": "c21bc24673461f9e73dd7ce9377e4378745de55bab373d15cc721d3b095a0393",
+    "stream_source_sha256": "504f83a423b1efbe3c1056500d5e4d5c9311789fba66db1a7cd4033cadefbb81"
+  },
+  "native_host": {
+    "host_tests": {
+      "hwinit": "PASS: actual hw_init, UBWC6 and 20 bicubic writes; 128 bit corruptions and IO/power/SMMU faults still refuse CP\nPASS negative: old UBWC6 write reproduces pre-CP refusal (117/118 readbacks)",
+      "metal_publication": "PASS actual Metal publication: disabled/not-ready, 15 IOKit failures, cleanup, one-time registration and real client type gate; host peers only",
+      "ring": "PASS: 1 exact ring programming and submission, 1 BR user-thread prologue, 1 one-shot user thread, 1 A8XX ring and context entry, 1 wrap submission, 1 refused re-attach, 7 write/1 read attach failures and 4 post-commit poison cases over a software CP register peer (12 failure cases)",
+      "cpinit": "PASS: 1 exact CP_ME_INIT sequence with SQE base, 1 A8XX sequence, 8 pre-MMIO refusals, 1 SQE write failure and 1 ring commit failure over a software CP register peer",
+      "irq": "PASS: 1 exact A7XX mask programming, 10 decoded interrupt/status cases, 4 A8XX cases, 5 poison-on-unacknowledged cases over a software register peer",
+      "timer": "PASS: 1 derived-offset check, 2 stable reads, 1 A8XX read, 1 rollover retry, 1 I/O failure and 1 bounded torn-loop timeout over a software counter peer",
+      "policy": "PASS: bounded pool/OPP and both real client readbacks required",
+      "pool_fragmentation": "PASS: 20480 fragmented BO extents coalesce without lost memory"
+    }
+  },
+  "native_compiled_this_checkpoint": false,
+  "phone_tested": false,
+  "flashable": false,
+  "actions_started": false
+}

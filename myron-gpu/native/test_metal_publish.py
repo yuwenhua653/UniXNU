@@ -66,7 +66,7 @@ extern "C" int native_adreno_new_user_client(IOService*,task_t,void*,UInt32 type
 int main(){
  for(scenario=0;scenario<=17;++scenario){
   loads=inits=posts=allocs=releases=attaches=detaches=starts=pubs=properties=0;
-  attached=false;claimed=0;published=nullptr;myron_metal_stage=myron_metal_registered=0;myron_metal_status=0;
+  attached=false;claimed=0;addonReady=1;published=nullptr;myron_metal_stage=myron_metal_registered=0;myron_metal_status=0;
   enabled=scenario==0?0:1;myron_gpu_ready=scenario==1?0:1;
   myron_gpu_publish_metal();
   if(scenario<2)assert(!loads && !inits && !pubs);
@@ -75,6 +75,15 @@ int main(){
   if((scenario>=10 && scenario<=15)||scenario==17)assert(releases==1);
   if(scenario==15)assert(detaches==1);
   const int before=pubs;myron_gpu_publish_metal();assert(pubs==before);
+ }
+ // Exercise both completion orders and repeated notifications, no premature claim.
+ for(int gpuFirst=0;gpuFirst<2;gpuFirst++){
+  scenario=16;loads=inits=posts=allocs=releases=attaches=detaches=starts=pubs=properties=0;
+  attached=false;claimed=0;published=nullptr;addonReady=0;myron_gpu_ready=gpuFirst;enabled=1;
+  myron_gpu_publish_metal();assert(!loads&&!claimed&&!pubs);
+  if(gpuFirst)myron_gpu_addon_available();
+  else {myron_gpu_addon_available();assert(!loads&&!claimed&&!pubs);myron_gpu_ready=1;myron_gpu_publish_metal();}
+  assert(pubs==1);myron_gpu_addon_available();assert(pubs==1);
  }
  AGXAccelerator s;IOUserClient *out=(IOUserClient*)1;
  assert(s.newUserClient(nullptr,nullptr,0x4147,nullptr,nullptr)==kIOReturnBadArgument);

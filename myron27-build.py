@@ -33,7 +33,7 @@ def root_qualification_identity(fixture):
   **{'gpu/'+str(p.relative_to(here/'myron-gpu')):p
      for p in (here/'myron-gpu').rglob('*') if p.is_file() and p.suffix in ('.py','.cpp','.c','.h','.json','.patch')},
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
-  'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
+  'build_entry':Path(__file__).resolve(),'continuous_contract':here/'myron_continuous_contract.py','display_overlay':here/'myron27-display-delta.json',
   'turnip_build':here/'scripts/build-turnip-darwin.py',
   'turnip_kmd':here/'patches/mesa/turnip-darwin-kmd.patch',
   **{'touch/'+name:here/'myron-touch'/name for name in TOUCH_SOURCES},
@@ -443,7 +443,7 @@ qualify_root_inputs()
 # No Apple image or device identity is needed for this empty-FAT smoke test.
 import shutil
 run(['brew','install','qemu'])
-run([sys.executable,'-m','pip','install','pyelftools==0.32','unicorn==2.1.4'])
+run([sys.executable,'-m','pip','install','pyelftools==0.32','unicorn==2.1.4','lz4==4.4.5'])
 llvm_bin=Path(subprocess.check_output(['brew','--prefix','llvm'],text=True).strip())/'bin'
 lld_bin=Path(subprocess.check_output(['brew','--prefix','lld'],text=True).strip())/'bin'
 firmware_clang=root/'qualification/firmware-bin';firmware_clang.mkdir(exist_ok=False)

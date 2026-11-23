@@ -58,7 +58,8 @@ bp.checkout('https://github.com/UniXNU/DarwinBoot.git','3c75734014cdab0acd9541e8
 payload=a.work/'payload';payload.mkdir();fat=raw[bp.FAT_OFFSET:];(payload/'payload.img').write_bytes(fat)
 def read(name):return subprocess.check_output(['mtype','-i',str(payload/'payload.img'),'::/EFI/UniXNU/'+name])
 hashes=r['embedded_files']
-need(set(hashes)=={'EFI/UniXNU/Payloads/'+n for n in ('kernel.macho','kernel.macho.adt','kernel.macho.trustcache','scratch-data.img')},'Unexpected payload inventory')
+has_metal='EFI/UniXNU/Payloads/kernel.macho.gpuaddon' in hashes
+need(set(hashes)=={'EFI/UniXNU/Payloads/'+n for n in ('kernel.macho','kernel.macho.adt','kernel.macho.trustcache','scratch-data.img')+(('kernel.macho.gpuaddon',) if has_metal else ())},'Unexpected payload inventory')
 for name,digest in hashes.items():need(sha(read(name[len('EFI/UniXNU/'):]))==digest,'Embedded file mismatch '+name)
 setup_capacity = None
 if not a.source_repo or (repo/'myron-setup-data.patch').exists():
@@ -92,7 +93,24 @@ if not a.source_repo or 'buttons' in board_adt:
     for key,value in {'compatible':b'buttons\0','device_type':b'buttons\0',
                       'button-names':b'hold\0voldown\0volup\0','home-button-type':(2).to_bytes(4,'little')}.items():
         need(buttons.get(key)==value,'Embedded /buttons/'+key+' differs from the myron hardware')
-kernel=read('Payloads/kernel.macho');definitions=kernel_definitions(kernel)
+from kernel_transport import unpack
+kernel_file=read('Payloads/kernel.macho');kernel=unpack(kernel_file);definitions=kernel_definitions(kernel)
+metal=None
+if has_metal:
+    from metal_payload import final_contract
+    from prepare_metal_sidecars import modules,ORIGINAL_MODULES
+    contract=json.loads((device/'metal-addon-contract.json').read_text())
+    addon=read('Payloads/kernel.macho.gpuaddon');trust=read('Payloads/kernel.macho.trustcache')
+    need(dict(bytes=len(addon),sha256=sha(addon))==contract['outputs']['gpuaddon.bin'],'GPU addon identity differs')
+    need(dict(bytes=len(trust),sha256=sha(trust))==contract['outputs']['kernel.macho.trustcache'],'GPU owner trust differs')
+    need(tuple(map(sha,modules(trust)[1:]))==ORIGINAL_MODULES,'Original Apple trust modules differ')
+    need(embedded_adt['/device-tree/chosen/memory-map'].get('GpuAddon')==bytes(16),'GPU addon handoff slot missing')
+    logical=a.work/'logical-kernel.macho';logical.write_bytes(kernel)
+    binding=final_contract(logical,contract)
+    metal=dict(addon_bytes=len(addon),addon_sha256=sha(addon),trust_sha256=sha(trust),component=contract['component'],
+        final_kernel=binding,contract_sha256=sha((device/'metal-addon-contract.json').read_bytes()),
+        original_modules_unchanged=True,data_seed_modified=False,runtime_installed=False,hardware_tested=False)
+
 required={'_boot_progress_init','_boot_progress_stage','_boot_progress_bind','_boot_progress_putc','_myron_boot_progress_state'} | BUFFER_TRACE_SYMBOLS
 if (device/'touch/iphone12-1-hid-24A446.json').is_file():
     required |= {'_myron_touch_start', '_myron_publish_digitizer', '_myron_touch_read_contacts',
@@ -115,6 +133,7 @@ need(len(entries)==1 and menu['boot']['timeout']==(0 if 'boot-progress=3' in ent
 e=entries[0]
 need(e['type']=='xnu' and e['path']=='Payloads/kernel.macho' and e['initrd']=='Payloads/scratch-data.img','Unexpected boot entry')
 args=e['args'].split()
+need(('myron-gpu-metal=1' in args)==has_metal,'Metal activation must match the verified addon')
 if not a.source_repo or 'boot-progress=3' in args:
     need(args.count('boot-progress=3')==1 and '-v' not in args and 'boot-progress=2' not in args,
          'Normal boot must select the graphical recorder without verbose console')
@@ -128,11 +147,11 @@ need({'myron27-dyld-startup=1','cpus=1','launchd_log_serial=1','log=1'}<=set(e['
 need(DISPLAY_ARGUMENTS<=set(e['args'].split()),'Continuous CPU-display arguments missing')
 h=lambda n:hashes['EFI/UniXNU/Payloads/'+n]
 header=(f'#define MYRON_KERNEL_FAT_BYTES 0x{len(fat):x}ULL\n#define MYRON_KERNEL_FAT_CRC32 0x{zlib.crc32(fat):08x}U\n'
-        f'#define MYRON_KERNEL_FAT_SHA256 "{sha(fat)}"\n#define MYRON_R46_KERNEL_SHA256 "{h("kernel.macho")}"\n')
+        f'#define MYRON_KERNEL_FAT_SHA256 "{sha(fat)}"\n#define MYRON_R46_KERNEL_SHA256 "{sha(kernel)}"\n')
 (payload/'KernelPayloadExpected.h').write_text(header)
 proof=dict(result='passed',bytes=len(fat),sha256=sha(fat),crc32=f'{zlib.crc32(fat):08x}',transport_header_sha256=sha(header.encode()),
-    kernel_sha256=h('kernel.macho'),adt_sha256=h('kernel.macho.adt'),kernel_args=e['args'],root_volume_enabled=True,
-    boot_assets=dict(initrd=e['initrd'],data_sha256=h('scratch-data.img'),trust_bundle_sha256=h('kernel.macho.trustcache'),dyld_startup_probe_enabled=True),
+    kernel_sha256=sha(kernel),kernel_transport_sha256=sha(kernel_file),kernel_transport_bytes=len(kernel_file),adt_sha256=h('kernel.macho.adt'),kernel_args=e['args'],root_volume_enabled=True,
+    boot_assets=dict(initrd=e['initrd'],data_sha256=h('scratch-data.img'),trust_bundle_sha256=h('kernel.macho.trustcache'),dyld_startup_probe_enabled=True,metal_addon=metal),
     producer=producer,amfi_stack_binding=amfi_stack_binding,phone_tested=False)
 if setup_capacity is not None:
     proof['boot_assets']['data_logical_bytes'] = setup_capacity
@@ -148,7 +167,7 @@ run('tests/verify_firmware.py','--build',a.work/'firmware','--mu',a.work/'mu','-
 fv=bp.read_json(a.work/'firmware/firmware-verification.json');fw=bp.read_json(a.work/'firmware/firmware-build.json');host=bp.read_json(a.work/'root-handoff/report.json')
 need(fv['result']==fw['result']==host['result']=='passed','Incomplete qualification')
 need(fv['full_fd_unpacked'] and fv['actual_compile_commands_checked']>=400 and fv['efi_capsule_matches_qemu_executed_bytes'],'Incomplete FD verification')
-need(fw['payload']==proof and host['kernel_sha256']==h('kernel.macho') and host['fat_sha256']==sha(fat),'Build/qualification payload mismatch')
+need(fw['payload']==proof and host['kernel_sha256']==sha(kernel) and host['fat_sha256']==sha(fat),'Build/qualification payload mismatch')
 need(host['root_sidecars_checked'] and host['root_sidecar_failure_cases']==12 and host['byte_equality_at_handoff'],'Incomplete root handoff test')
 need(fw['source_stage']['driver_staged_sha256']==host['driver_sha256'] and fw['source_stage']['stream_source_sha256']==host['stream_source_sha256'],'Loader source mismatch')
 for name,digest in bp.PUBLISHERS.items():need(fw['board_source_hashes'][name]==digest,'Memory publisher changed')
@@ -168,12 +187,12 @@ a.output.mkdir();(a.output/'root-startup.img').write_bytes(image)
 report=dict(result='passed',kind='continuous-xnu-source-boot',producer=producer,assembly_commit=os.environ['GITHUB_SHA'],assembly_run=os.environ['GITHUB_RUN_ID'],intentional_stop=False,
     chosen_display_mode=gop_mode,home_button_type=int.from_bytes(buttons['home-button-type'],'little') if 'home-button-type' in buttons else None,
     display_definitions=display_definitions,display_arguments=sorted(DISPLAY_ARGUMENTS),display_runtime_qualified=False,
-    required_symbols=sorted(required),buffer_trace_definitions=buffer_definitions,exit_trace_definitions=exit_trace_definitions,lockdown_state_definitions=lockdown_state_definitions,kernel_sha256=h('kernel.macho'),firmware_verification=fv,root_handoff=host,
+    required_symbols=sorted(required),buffer_trace_definitions=buffer_definitions,exit_trace_definitions=exit_trace_definitions,lockdown_state_definitions=lockdown_state_definitions,kernel_sha256=sha(kernel),firmware_verification=fv,root_handoff=host,
     boot_sha256=sha(image),elapsed_seconds=round(time.monotonic()-start,1),root_install_reusable=True,phone_tested=False,desktop_reached=False)
 save(a.output/'continuous-report.json',report)
 m=copy.deepcopy(m);m['files']['root-startup.img']=dict(bytes=len(image),sha256=sha(image))
 r=m['image_reports']['root-startup.img'];r.update(sha256=sha(image),fd_sha256=sha(fd),firmware_report_sha256=sha((a.output/'continuous-report.json').read_bytes()),firmware_report_scope='continuous-xnu-linux-firmware')
-m['continuous_boot']=dict(intentional_stop=False,kernel_sha256=h('kernel.macho'),source_commit=commit)
+m['continuous_boot']=dict(intentional_stop=False,kernel_sha256=sha(kernel),source_commit=commit)
 save(a.output/'deployment.json',m)
 from myron_read_log import window as log_window
 first=log_window(m)

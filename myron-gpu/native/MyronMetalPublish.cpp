@@ -17,6 +17,7 @@ IOService *myron_accelerator_candidate_allocate(void);
 const OSMetaClass *myron_accelerator_parent(void);
 }
 static unsigned claimed;
+static uint32_t addonReady;
 static IOService *published;
 extern "C" void myron_gpu_publish_metal(void)
 {
@@ -24,6 +25,7 @@ extern "C" void myron_gpu_publish_metal(void)
     // Packaging must opt in only with its matching trusted/installed addon.
     // A completed MMIO sequence alone cannot publish a usable Metal device.
     if(!__atomic_load_n(&myron_gpu_ready,__ATOMIC_ACQUIRE) ||
+       !__atomic_load_n(&addonReady,__ATOMIC_ACQUIRE) ||
        !PE_parse_boot_argn("myron-gpu-metal",&enabled,sizeof enabled) || enabled!=1)return;
     if(__atomic_exchange_n(&claimed,1,__ATOMIC_ACQ_REL))return;
     myron_metal_stage=1;
@@ -73,4 +75,11 @@ extern "C" void myron_gpu_publish_metal(void)
     myron_metal_status=kIOReturnSuccess;
     myron_metal_stage=5;
     __atomic_store_n(&myron_metal_registered,1,__ATOMIC_RELEASE);
+}
+
+// Either side may finish first. The once guard above arbitrates concurrent calls.
+extern "C" void myron_gpu_addon_available(void)
+{
+    __atomic_store_n(&addonReady,1,__ATOMIC_RELEASE);
+    myron_gpu_publish_metal();
 }

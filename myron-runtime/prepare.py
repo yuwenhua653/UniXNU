@@ -161,4 +161,11 @@ prelink=u/'kits/XnuPrelink'""")
                     ('artwork-device-subtype = 1792','artwork-device-subtype = 2556'),
                     ('compatible-device-fallback = "iPhone11,8"','compatible-device-fallback = "iPhone15,2"')]:replace(p,old,new)
 
+    from kernel_transport_integration import apply as apply_kernel_transport
+    apply_kernel_transport(d,replace)
+    from gpu_addon_integration import apply as apply_gpu_addon
+    apply_gpu_addon(d,replace)
+    from metal_payload_integration import apply as apply_metal_payload
+    apply_metal_payload(d,replace)
+
 if __name__=='__main__':apply(Path(sys.argv[1]))

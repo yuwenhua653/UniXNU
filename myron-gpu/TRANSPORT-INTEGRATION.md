@@ -1,0 +1,23 @@
+# Myron iPhone27 Metal payload integration checkpoint
+
+This source checkpoint closes the identified payload capacity, optional-addon removal and premature Metal publication gaps. No Actions run is started by this checkpoint. It is **not** a new flashable image or evidence of GPU operation on a phone.
+
+The retained kernel used for loader tests is from run 45117385166, SHA-256 `1af397687b3f7eca2a7f546885eca72389e5bedbe52e3eeaeba6335813e6ac7d`. Its 82,984,960 bytes are transported as 32,417,554 bytes of independent 64 KiB LZ4 blocks. The reconstructed Mach-O bytes, fileset validation and independent segment mapping are unchanged. Each kernel-reader allocation remains at most 64 KiB; the index and two block buffers avoid a whole-kernel temporary allocation. The format records logical SHA-256, table CRC and block CRCs. Host packaging checks the SHA-256; firmware checks the anchored FAT and block CRCs. CRC is not authentication.
+
+With the audited run 45134750180 component, unchanged Data seed, owner trust and maximum ADT allowance, the FAT content bound is 49,390,842 bytes against 92,274,688 bytes, with another 1 MiB reserved for filesystem overhead. An actual 88 MiB FAT was written and fully read back. This is a host fixture using an old kernel, deliberately not a deliverable boot image. The existing 96 MiB boot partition and UFS/Data geometry are unchanged.
+
+The original iPhone XNU patch series' complete optional-addon block is still SHA-pinned. Its GPU installer alone is restored; its cryptex/cache-reset/daemon/wallpaper helpers are excluded. The complete series already contains the parent-directory creation fix. The new path additionally checks directory types, binds the whole addon to a compiled SHA-256, writes a new temporary inode, fsyncs and reads it back before rename, and refuses mounting after any failed file. Only the plugin directory gets a read-only union view. A real sealed directory entry is selected before mounting and must remain visible afterward; an iPad GPU bundle name is not assumed. The installer uses its own scratch page, preserving the SystemOS environment. Original AMFI code validation and both Apple trust modules remain intact.
+
+Metal registration requires both actual GPU readiness and successful addon installation/mount. Either completion order is supported; an atomic once guard handles repeated notifications. Native provider calls use strong imports in GPU builds to avoid unresolved arm64e weak-import thunks; GPU-disabled source has an inert helper. Packaging verifies the compiled addon digest and native symbols in the final fileset, requires accelerator/firmware link audits, and records physical transport and logical kernel identities separately. The pinned component is downloaded and signature-audited before any future native compile, so its absence or expiration fails early.
+
+Checks completed locally:
+
+- Production EFI reader/parser/streamer under ASan/UBSan: real kernel roundtrip and independent mapping, 560 reference LZ4 blocks, corrupt metadata, truncated data, short reads, allocation/I/O faults, bounded pools. LeakSanitizer is unavailable under this executor; EFI pool balance is asserted.
+- Uncompressed loader regression: original parser and entire 256 MiB destination comparison, 34 allocation failures, 67 read failures and 268 fileset mutations.
+- Entire production Boot() under mocked UEFI/UBSan, including actual Data, owner trust and addon bytes at the handoff: 47 allocation faults, five addon failure scenarios, existing root failures and EFI exit retry/cleanup.
+- Actual installer on the exact SHA-pinned iPhone source block: six decompressed files checked against their independent hashes, 96 corruptions, absent/truncated input, unchanged-file reuse and stop-on-write-error.
+- Actual atomic writer: ten injected failure points preserve previous final bytes; stale temporary and unchanged-file paths checked.
+- Actual mount/readiness functions: 15 disabled/error paths, directory discovery, read-only union flags and scratch/VFS cleanup.
+- Metal registration/client tests including both readiness orders, native GPU register/ring/CP tests, sidecar signature/trust tests, authenticated Data-mount failure tests in GPU-on/off modes, preserved seed tests, preflight import tests and YAML/source reconstruction.
+
+Remaining qualification: compile/link these new sources with the actual iPhone toolchain, check their final linked and prelinked contracts, build and inspect the actual firmware/package, then confirm GPU submission/rendering on the phone. Host peers do not establish hardware readiness; the previous phone trace still had CP=0 and ready=0. No old firmware is re-labelled as this change.

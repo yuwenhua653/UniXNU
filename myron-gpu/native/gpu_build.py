@@ -179,6 +179,6 @@ extern "C" void myron_gpu_run(void *, wait_result_t);
     (out/'gpu-build.json').write_text(json.dumps(report, indent=2)+'\n')
     keep = ('_myron_gpu_start', '_myron_gpu_run', '_myron_gpu_ready', '_myron_gpu_stage', '_myron_gpu_snapshot', '_myron_gpu_complete',
             '_native_adreno_publish', '_native_adreno_new_user_client',
-            '_myron_gpu_publish_metal', '_myron_metal_registered', '__ZTV14AGXAccelerator', accelerator_init) + tuple(late_symbols) + tuple(
+            '_myron_gpu_publish_metal', '_myron_gpu_addon_available', '_myron_metal_registered', '__ZTV14AGXAccelerator', accelerator_init) + tuple(late_symbols) + tuple(
             n+'.original' if r['kind']=='function' else n for n,r in contract['bindings'].items())
     return objects, keep, report

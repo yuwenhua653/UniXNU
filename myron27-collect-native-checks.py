@@ -12,7 +12,7 @@ EXCLUDED = {'private-userland', 'root-media', 'device-package', '.cache', '.git'
 NAMES = {'system-apps-plan.json', 'setup-seed-check.json', 'desktop-integration.json', 'native-link.log', 'build-report.json',
          'root-preflight.json', 'display-abi.json', 'display-build.json',
          'storage-abi.json', 'ram-storage-abi.json', 'gpu-build.json', 'accelerator-abi.json',
-         'gpu-native-host.json', 'gpu-portable.json'}
+         'gpu-native-host.json', 'gpu-portable.json', 'metal-sidecars.json', 'ufs-root-final-audit.json'}
 
 def replay_input(relative):
     """Only source-built native kernels/LTO references, never donor images."""

@@ -55,7 +55,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
-          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4 lz4==4.4.5
       - name: Verify permission-error regression
         run: |
           python3 tests/test_collect_native_checks.py

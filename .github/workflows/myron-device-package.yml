@@ -14,6 +14,7 @@ on:
         type: string
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ${{ github.event.head_commit.message == 'Check myron graphical boot' && 'myron-graphical-boot' || 'myron-device-package' }}
   cancel-in-progress: ${{ github.event.head_commit.message == 'Check myron process capture before full build' }}
@@ -333,6 +334,16 @@ jobs:
         run: |
           python3 -m pip install capstone==5.0.6
           brew install cmake ninja llvm lld unifdef dtc mtools openssl@3 blacktop/tap/ipsw
+      - name: Fetch and verify the pinned iPhone Metal component before native compilation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/yuwenhua653/UniXNU/actions/artifacts/14801780008/zip > "$RUNNER_TEMP/myron-metal-component.zip"
+          python3 myron-gpu/audit_userspace_artifact.py "$RUNNER_TEMP/myron-metal-component.zip" \
+            --sha256 982b039c9796fc0bd6fb9701780d127f21c39db507dd850b86422de9ff384740 \
+            --output "$RUNNER_TEMP/myron-metal-component-audit.json"
+          python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-gpu/native/test_metal_publish.py
       - name: Check retained Data byte identity before native compilation
         run: |
           python3 myron27-build.py --source-only
@@ -344,6 +355,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           MYRON_DATA_SEED: ${{ runner.temp }}/retained-data.dbr
           MYRON_GPU_NATIVE: '1'
+          MYRON_PACKED_KERNEL: '1'
+          MYRON_METAL_ARTIFACT: ${{ runner.temp }}/myron-metal-component.zip
           MYRON_GPU_FIRMWARE: ${{ runner.temp }}/gpu-firmware
           MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}
         run: python3 myron27-device-build.py --input-archive "$RUNNER_TEMP/device-inputs.zip"
@@ -423,7 +436,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
-          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4 lz4==4.4.5
       - name: Automatically assemble continuous kernel with Linux firmware
         run: |
           python3 myron27-continuous-firmware.py --base native-input \

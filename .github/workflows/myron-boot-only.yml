@@ -41,7 +41,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
-          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4
+          python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4 lz4==4.4.5
       - name: Reject incompatible source reuse and verify exact baseline
         run: python3 tests/test_boot_only.py --baseline-source baseline-source --base base-boot -v
       - name: Rebuild firmware without XNU or root-media compilation

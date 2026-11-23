@@ -1,5 +1,43 @@
 # Myron iPhone 27 GPU integration checkpoint
 
+## iPhone27 userspace integration
+
+`prepare_userspace.py` now resolves the official arm64e AdrenoMetal/metal2vulkan
+build recipes at recorded revisions, with the same 128-IB A840 ABI as the kernel
+and the board's recorded Mesa patches. The selected Mesa revision contains the
+three-slice A840 device table (six CCUs, 96x32 tile alignment). All nine patches
+have been applied and reversed against that exact source revision locally.
+
+The board overlay excludes the iPad 24A446 QuartzCore fixed-address writes and
+delayed reader, and the older iPad diagnostic stack-offset reader. It does not
+substitute guessed iPhone offsets. The A740 command replay is disabled. The
+official arm64e Rust callback wrappers and indirect-branch rewrite precede signing.
+
+The Metal mailbox and native poller now use a distinct `MAI2` layout, carrying
+the full 3104-byte submit instead of the old 1792-byte maximum. Old peers are
+refused, requests are serialized, a timeout prevents reuse of its live request,
+and a close/reopen cannot inherit a stale acknowledgement. The ordinary Turnip
+direct/tunnel path now rejects short successful replies. Tests compile the
+actual staged poller/client methods and the actual Turnip transport block.
+They cover 128 buffers, overlarge messages, backend errors, timeout/late replies,
+sequence wrap, old-peer rejection and replacing the connection during dispatch.
+These are host tests, not hardware completion evidence.
+
+The `Myron iOS27 A840 userspace` workflow builds actual Turnip, the Rust bridge
+and the 4 KiB-signed plugin, then checks arm64e Mach-O types and signature hashes.
+Its candidate addon has no publish marker and does not replace the Data seed.
+It is a component artifact, **not a flashable package**. The accelerator's
+retained iPhone bindings, target trust-module merge, boot capacity and real
+display handoff still have to be connected before a phone test package.
+
+```sh
+python3 myron-gpu/prepare_userspace.py --fetch --references /tmp/metal-refs \
+  --native-references /tmp/native-refs --out /tmp/myron-gpu-userspace
+# macOS with Xcode, Bison >=3.7, glslang, shaderc, SPIRV-Tools, LLVM,
+# Ninja and Rust 1.98.0 + rust-src:
+python3 myron-gpu/build_userspace.py --tree /tmp/myron-gpu-userspace
+```
+
 The first native A840 board driver is now connected to source reconstruction,
 optional XNU compilation and the late boot boundary; see [native/README.md](native/README.md).
 Production still uses the working CPU display. The native A840 backend and its

@@ -1,0 +1,52 @@
+name: Myron iOS27 A840 userspace
+on:
+  push:
+    branches: [codex/myron-iphone27]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: myron-gpu-userspace
+  cancel-in-progress: false
+jobs:
+  metal:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build myron iOS27 GPU userspace'
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install real GPU compiler dependencies
+        run: |
+          brew install bison glslang shaderc spirv-tools llvm ninja
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Resolve iPhone27 Metal and matching A840 ABI
+        run: |
+          python3 myron-gpu/prepare_userspace.py --fetch \
+            --references "$RUNNER_TEMP/metal-references" \
+            --native-references "$RUNNER_TEMP/native-references" \
+            --out "$RUNNER_TEMP/myron-gpu-userspace"
+      - name: Build Turnip, arm64e bridge and signed Metal plugin
+        run: |
+          python3 myron-gpu/native/test_userspace.py --references "$RUNNER_TEMP/native-references" --cxx clang++
+          python3 myron-gpu/native/prepare_sources.py --references "$RUNNER_TEMP/native-references" --fetch
+          python3 myron-gpu/test_userspace_transport.py --tree "$RUNNER_TEMP/myron-gpu-userspace" \
+            --references "$RUNNER_TEMP/native-references" --cxx clang++
+          python3 myron-gpu/build_userspace.py --tree "$RUNNER_TEMP/myron-gpu-userspace"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: myron-ios27-gpu-userspace-candidate
+          path: |
+            ${{ runner.temp }}/myron-gpu-userspace/userspace-source.json
+            ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-plugin27/
+            ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-bridge/*.log
+            ${{ runner.temp }}/myron-gpu-userspace/.cache/*.log
+          if-no-files-found: warn
+          retention-days: 7

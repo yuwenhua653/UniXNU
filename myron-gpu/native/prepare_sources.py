@@ -90,6 +90,44 @@ def stage(references, destination):
     text = prefix + body
     text = replace(text, 'uint32_t size) __attribute__((weak_import));', 'uint32_t size);')
     text = replace(text, 'valid && boot_log_export_put?boot_log_export_put', 'valid?boot_log_export_put')
+    text = replace(text, '#include "NativeAdrenoUserClient.h"',
+                   '#include "NativeAdrenoUserClient.h"\n#include "MyronGpuMailbox.h"')
+    text = replace(text, 'NativeAdrenoMailboxMagic=0x4d41494c',
+                   'NativeAdrenoMailboxMagic=MyronMailboxMagic')
+    text = replace(text, 'input at +0x40 (max 0x700), output at +0x800 (max 0x700).',
+                   'input at +0x40 (3104 bytes), output at +0xc80 (896 bytes), MAI2 layout.')
+    text = replace(text, '    uint32_t last=0;\n', '')
+    start = text.index('        if(!gMailboxOwner || !gMailboxWords)continue;')
+    end = text.index('        native_adreno_metal_diag.mb_calls=', start)
+    text = text[:start] + '''        /* Snapshot one live owner's request under the lifecycle lock. A
+         * close/reopen must not accept an old reply or inherit its sequence. */
+        IOLockLock(g.lock);
+        AGXDeviceUserClient *owner=gMailboxOwner;
+        volatile uint32_t *page=gMailboxWords;
+        const uint32_t request=page?__atomic_load_n(page+1,__ATOMIC_ACQUIRE):0;
+        if(!owner || !page || !request || request==page[2]) {
+            IOLockUnlock(g.lock);continue;
+        }
+        owner->retain();
+        const uint32_t method=page[3],in_size=page[5],out_size=page[6];
+        uint8_t input[MyronMailboxInputBytes],output[MyronMailboxOutputBytes]{};
+        const bool valid=in_size<=sizeof input && out_size<=sizeof output;
+        if(valid)memcpy(input,reinterpret_cast<const uint8_t *>(const_cast<uint32_t *>(page))+
+                        MyronMailboxInputOffset,in_size);
+        IOLockUnlock(g.lock);
+        IOReturn status=valid?runCore(owner,method,input,in_size,output,out_size):kIOReturnBadArgument;
+        IOLockLock(g.lock);
+        if(gMailboxOwner!=owner || gMailboxWords!=page || page[1]!=request) {
+            IOLockUnlock(g.lock);owner->release();continue;
+        }
+        if(!status)memcpy(reinterpret_cast<uint8_t *>(const_cast<uint32_t *>(page))+
+                          MyronMailboxOutputOffset,output,out_size);
+''' + text[end:]
+    text = replace(text, '''        gMailboxWords[2]=request;
+        __asm__ volatile("dmb sy" ::: "memory");''',
+                   '''        __atomic_store_n(gMailboxWords+2,request,__ATOMIC_RELEASE);
+        IOLockUnlock(g.lock);
+        owner->release();''')
     path.write_text(text)
     report['staged_sha256'] = {str(p.relative_to(destination)): hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in destination.rglob('*') if p.is_file()}

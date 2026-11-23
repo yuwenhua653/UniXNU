@@ -271,7 +271,7 @@ new file mode 100644
 index 0000000..b03c6ee
 --- /dev/null
 +++ b/src/freedreno/vulkan/tu_knl_darwin.cc
-@@ -0,0 +1,1113 @@
+@@ -0,0 +1,1116 @@
 +/*
 + * Native Darwin kernel backend for Turnip: talks to the NativeAdreno IOKit user client (NativeAdrenoABI.h, version 1).
 + * Modelled on tu_knl_kgsl.cc (no libdrm) and tu_knl_drm_msm.cc (the client chooses GPU addresses).
@@ -348,9 +348,11 @@ index 0000000..b03c6ee
 +        size_t out_size)
 +{
 +   size_t out_bytes = out_size;
-+   if (!dw.tunnel)
-+      return IOConnectCallStructMethod(dw.conn, method, in, in_size, out_size ? out : NULL,
-+                                       out_size ? &out_bytes : NULL);
++   if (!dw.tunnel) {
++      kern_return_t status = IOConnectCallStructMethod(dw.conn, method, in, in_size, out_size ? out : NULL,
++                                                      out_size ? &out_bytes : NULL);
++      return status == KERN_SUCCESS && out_bytes != out_size ? kIOReturnUnderrun : status;
++   }
 +   uint8_t buffer[8 + sizeof(NativeAdrenoAbiSubmit)];
 +   if (in_size > sizeof(NativeAdrenoAbiSubmit))
 +      return kIOReturnBadArgument;
@@ -358,8 +360,9 @@ index 0000000..b03c6ee
 +   memcpy(buffer, header, sizeof(header));
 +   if (in_size)
 +      memcpy(buffer + sizeof(header), in, in_size);
-+   return IOConnectCallStructMethod(dw.conn, dw.selector, buffer, sizeof(header) + in_size, out_size ? out : NULL,
-+                                    out_size ? &out_bytes : NULL);
++   kern_return_t status = IOConnectCallStructMethod(dw.conn, dw.selector, buffer, sizeof(header) + in_size,
++                                                   out_size ? out : NULL, out_size ? &out_bytes : NULL);
++   return status == KERN_SUCCESS && out_bytes != out_size ? kIOReturnUnderrun : status;
 +}
 +
 +/* Finds an admitted selector: the driver answers a tunnel probe (method 0xffffffff) with success for every selector the sandbox lets through. */

@@ -15,6 +15,9 @@ def check(root, references, cxx='c++'):
     start=patch.index('+   device->dev_id.chip_id = info->chip_id;')
     end=patch.index('+   device->gmem_size =',start)
     block='\n'.join(line[1:] for line in patch[start:end].splitlines())
+    start=patch.index('+static kern_return_t\n+dw_call(')
+    end=patch.index('+/* Finds an admitted selector:',start)
+    transport='\n'.join(line[1:] for line in patch[start:end].splitlines())
     with tempfile.TemporaryDirectory() as tmp:
         temp=Path(tmp)
         # The production patch stays syntactically valid after changing a hunk.
@@ -22,6 +25,8 @@ def check(root, references, cxx='c++'):
                        check=True,stdout=subprocess.DEVNULL)
         (temp/'main.cpp').write_text('''#include <cassert>
 #include <cstddef>
+#include <cstring>
+#include <initializer_list>
 #include "NativeAdrenoABI.h"
 static_assert(NativeAdrenoAbiMaxBuffers==128,"same kernel and Turnip submission capacity");
 static_assert(sizeof(NativeAdrenoAbiSubmit)==3104,"whole 128-IB command record");
@@ -32,6 +37,24 @@ static Device identify(uint32_t chip) {Device result{};Device *device=&result;
 NativeAdrenoAbiDeviceInfo data{};data.chip_id=chip;auto *info=&data;
 '''+block+'''
 return result;}
+using kern_return_t=int;
+constexpr int KERN_SUCCESS=0,kIOReturnUnderrun=-20,kIOReturnBadArgument=-21;
+constexpr uint32_t DW_TUNNEL_MAGIC=0x4e544e4c;
+struct {bool tunnel;unsigned conn,selector;} dw;
+unsigned transportCalls=0;int transportStatus=0;bool shortReply=false;
+NativeAdrenoAbiSubmit submission{};
+int IOConnectCallStructMethod(unsigned,uint32_t selector,const void *in,size_t is,void *,size_t *os){
+ ++transportCalls;
+ if(dw.tunnel){
+  assert(selector==9 && is==sizeof submission+8);
+  const auto *p=static_cast<const uint32_t *>(in);
+  assert(p[0]==DW_TUNNEL_MAGIC && p[1]==NativeAdrenoMethodSubmit);
+  assert(memcmp(p+2,&submission,sizeof submission)==0);
+ }else{assert(selector==NativeAdrenoMethodSubmit && is==sizeof submission);}
+ if(shortReply && os)--*os;
+ return transportStatus;
+}
+'''+transport+'''
 int main(){
  assert(identify(0x43050a01).dev_id.gpu_id==740);
  for(unsigned slices=1;slices<=7;++slices){
@@ -41,6 +64,20 @@ int main(){
  assert(identify(0x06030001).dev_id.gpu_id==630);
  assert(identify(0x44060a31).dev_id.gpu_id!=840);
  assert(identify(0xffffffff).dev_id.gpu_id!=840);
+ submission.buffer_count=128;
+ NativeAdrenoAbiSubmitReply reply{};
+ for(bool tunnel:{false,true}){
+  dw.tunnel=tunnel;dw.selector=9;
+  shortReply=false;transportStatus=0;
+  assert(dw_call(NativeAdrenoMethodSubmit,&submission,sizeof submission,&reply,sizeof reply)==0);
+  shortReply=true;
+  assert(dw_call(NativeAdrenoMethodSubmit,&submission,sizeof submission,&reply,sizeof reply)==kIOReturnUnderrun);
+  transportStatus=-33;
+  assert(dw_call(NativeAdrenoMethodSubmit,&submission,sizeof submission,&reply,sizeof reply)==-33);
+ }
+ unsigned before=transportCalls;
+ assert(dw_call(NativeAdrenoMethodSubmit,&submission,sizeof submission+1,&reply,sizeof reply)==kIOReturnBadArgument);
+ assert(transportCalls==before);
 }
 ''')
         subprocess.run([cxx,'-std=c++17','-Wall','-Wextra','-Werror','-I',str(driver),

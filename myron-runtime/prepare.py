@@ -120,6 +120,23 @@ def apply(root):
         'packed_data_ramdisk=True,persistent_data=True)')
     replace(d/'payload_adt.py',"        assert chosen['ephemeral-storage'] == struct.pack('<I',1)",
         "        assert 'ephemeral-storage' not in chosen")
+    # Keep the boot-sidecar fixture consistent with the generated persistent ADT,
+    # and prove that either value of the obsolete property is still rejected.
+    p=d/'tests/test_boot_assets.py'
+    replace(p,'def adt(root_mode=False):','def adt(root_mode=False, ephemeral=None):')
+    replace(p,",('ephemeral-storage',struct.pack('<I',1))",'')
+    replace(p,"        maps=[('PackedRAMDisk',bytes(16)),('TrustCache',bytes(16))]",
+        "        if ephemeral is not None:\n"
+        "            chosen.append(('ephemeral-storage',struct.pack('<I',ephemeral)))\n"
+        "        maps=[('PackedRAMDisk',bytes(16)),('TrustCache',bytes(16))]")
+    replace(p,'    def test_staging_names_args_and_existing_output(self):',
+        '    def test_root_adt_ephemeral_property_refused(self):\n'
+        '        reference=adt()\n'
+        '        validate(adt(True),reference,OS)\n'
+        '        for value in (0,1):\n'
+        '            with self.subTest(ephemeral=value),self.assertRaises(AssertionError):\n'
+        '                validate(adt(True,ephemeral=value),reference,OS)\n\n'
+        '    def test_staging_names_args_and_existing_output(self):')
     # @3x phone presentation on the actual 1200x2608 GOP; no cropped canvas or
     # coordinate rescaling, and no change to the N104 kernel/security donor.
     p=d/'board.toml'

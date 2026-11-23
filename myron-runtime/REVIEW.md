@@ -45,3 +45,13 @@ selector/registration tests, durable overlay reopen/mismatch and button-combinat
 tests, portable GPU power/GMU/HFI/command-DB and backend ring/CP/IRQ/timer/pool tests.
 Native arm64e compilation and final payload checks run in CI. These checks do not
 prove handset shutdown, application migration, latency or GPU hardware success.
+
+Build 45103031177 stopped before native compilation: the boot-assets ADT fixture
+still declared `ephemeral-storage=1`, while the durable Data validator correctly
+required the property to be absent. Update that fixture in the reconstruction
+step; retain wrong-root, stale memory range and dense RAMDisk rejection, and add
+negative checks for both `ephemeral-storage=0` and `=1`. No production validator
+or display, HID, keystore, app migration or GPU path is relaxed by this correction.
+From a freshly reconstructed tree, all 11 boot-assets, 8 Data-volume, 6 RamBlock
+and 6 Data-seed tests passed locally. Native compilation and macOS APFS integration
+still require the replacement CI run.

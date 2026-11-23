@@ -14,6 +14,8 @@ def apply(root):
     here=Path(__file__).resolve().parent
     from display_fence import apply as apply_display_fence
     apply_display_fence(d,replace)
+    from accelerator import apply as apply_accelerator
+    apply_accelerator(d,replace)
     shutil.copyfile(here/'platform-power.patch',d/'platform-power.patch')
     replace(d/'install_upstream.py', "prelink=u/'kits/XnuPrelink'", """platform=u/'drivers/ArmDTPlatform'
 revision=subprocess.check_output(['git','-C',str(platform),'rev-parse','HEAD'],text=True).strip()

@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Stage audited iPhone27 Metal addon/owner trust without changing Data or boot.
+
+Inputs are local verified artifacts. Output is NOT a flashable image. The
+loader/install/capacity integration must separately qualify before enabling
+myron-gpu-metal=1. Original Apple modules and signed plugin bytes stay exact.
+"""
+import argparse, hashlib, json, struct, uuid, zipfile, zlib
+from pathlib import Path
+from audit_userspace_artifact import audit, require, sha
+
+ORIGINAL_SHA = '095605d6abf4e82545579930d54a3476dfac35f754c504f87b456daa058cb9d4'
+ORIGINAL_MODULES = (
+ '3d81f304c3bc3c05ed32e729b64788ba245f69302ff6ede8c1272a38a7136ec5',
+ '4a9332cd17629a94587fe3899157a397b4b9e0a48adad88f8bdf4b293a953ae9',
+)
+# Already compiled arm64e iOS27 component; no new component build is triggered.
+COMPONENT = dict(run=45134750180,commit='78dc7d57d9c3b61a29acb02e5011fead1c128cf2',
+ artifact_sha256='982b039c9796fc0bd6fb9701780d127f21c39db507dd850b86422de9ff384740')
+
+
+def modules(data):
+ require(len(data)>=8,'Short trust bundle')
+ count=struct.unpack_from('<I',data)[0]
+ require(0<count<=128 and 4+count*4<=len(data),'Trust bundle count')
+ offsets=struct.unpack_from('<'+str(count)+'I',data,4)
+ require(offsets[0]==4+4*count and all(a<b for a,b in zip(offsets,offsets[1:])),'Trust offsets')
+ out=[]
+ for start,end in zip(offsets,(*offsets[1:],len(data))):
+  require(start%4==0 and end<=len(data) and end-start>=24,'Trust module bounds')
+  block=data[start:end];version,ident,n=struct.unpack_from('<I16sI',block)
+  require(version==2 and any(ident) and len(block)==24+24*n,'Trust module shape')
+  hashes=[]
+  for at in range(24,len(block),24):
+   h=block[at:at+20]
+   require(1<=block[at+20]<=4 and (not hashes or hashes[-1]<h),'Trust entry order/type')
+   hashes.append(h)
+  out.append(block)
+ require(len({x[4:20] for x in out})==len(out),'Trust UUID collision')
+ return out
+
+
+def owner_trust(original,cdhashes):
+ require(sha(original)==ORIGINAL_SHA,'Wrong iPhone12,1/24A446 original trust bundle')
+ old=modules(original)
+ require(tuple(map(sha,old))==ORIGINAL_MODULES,'Changed original Apple trust modules')
+ hashes=sorted(bytes.fromhex(x) for x in cdhashes)
+ require(len(hashes)==2 and len(set(hashes))==2 and all(len(x)==20 for x in hashes),
+         'Exactly plugin and Turnip CDHashes are required')
+ ident=uuid.uuid5(uuid.NAMESPACE_URL,'org.unixnu.myron.24A446.metal:'+''.join(x.hex() for x in hashes))
+ own=struct.pack('<I16sI',2,ident.bytes,2)+b''.join(x+bytes([2,0,0,0]) for x in hashes)
+ blocks=[own,*old];cursor=4+4*len(blocks);offsets=[]
+ for block in blocks: offsets.append(cursor);cursor+=len(block)
+ out=struct.pack('<I',len(blocks))+struct.pack('<3I',*offsets)+b''.join(blocks)
+ require(modules(out)[1:]==old,'Original trust preservation failed')
+ return out
+
+
+def addon(files):
+ pad=lambda x:x+bytes(-len(x)%8)
+ body=b''
+ require(bool(files) and len(files)<=4096,'Addon count')
+ for name,(mode,data) in sorted(files.items()):
+  path=name.encode()+b'\0'
+  require(1<len(path)<=160 and '\0' not in name and name.startswith('addons/') and
+          all(p not in ('','.','..') for p in name.split('/')) and mode in (0o644,0o755),'Addon path/mode')
+  packed=zlib.compress(data,9)
+  body+=struct.pack('<IIQQ',len(path),mode,len(data),len(packed))+pad(path)+pad(packed)
+ return b'NGPUADD2'+struct.pack('<IIQ',len(files),0,24+len(body))+body
+
+
+def prepare(archive,original_path,out):
+ report=audit(archive,COMPONENT['artifact_sha256'])
+ original=original_path.read_bytes()
+ trust=owner_trust(original,[x['cdhash'] for x in report['images'].values()])
+ files={}
+ with zipfile.ZipFile(archive) as z:
+  base='build/adreno-metal-plugin27/'
+  for path,digest in report['addon_files'].items():
+   raw=z.read(base+path.removeprefix('addons/'))
+   require(sha(raw)==digest,'Component changed after audit')
+   files[path]=(0o755 if path.split('/')[-1] in report['images'] else 0o644,raw)
+ require(len(files)==5,'Unexpected component bundle')
+ # Publication marker is outside the sealed bundle; code signatures unchanged.
+ files['addons/NativeAdrenoMetal.publish']=(0o644,b'1\n')
+ blob=addon(files)
+ result=dict(format=1,target='iPhone12,1/24A446',component=COMPONENT,
+  images=report['images'],original_trust_sha256=ORIGINAL_SHA,
+  original_modules=list(ORIGINAL_MODULES),original_modules_unchanged=True,
+  owner_cdhashes=sorted(x['cdhash'] for x in report['images'].values()),
+  outputs={'gpuaddon.bin':dict(bytes=len(blob),sha256=sha(blob)),
+           'kernel.macho.trustcache':dict(bytes=len(trust),sha256=sha(trust))},
+  addon_files={p:dict(mode=mode,bytes=len(raw),sha256=sha(raw)) for p,(mode,raw) in files.items()},
+  required_plugin_name='NativeAdrenoMetal',required_plugin_class='NativeAdrenoMetalDevice',
+  probe_daemon_installed=False,data_seed_modified=False,
+  installed=False,boot_capacity_qualified=False,hardware_tested=False,flashable=False)
+ out.mkdir(parents=True,exist_ok=False)
+ (out/'gpuaddon.bin').write_bytes(blob);(out/'kernel.macho.trustcache').write_bytes(trust)
+ (out/'metal-sidecars.json').write_text(json.dumps(result,indent=2)+'\n')
+ return result
+
+
+if __name__=='__main__':
+ p=argparse.ArgumentParser(description=__doc__)
+ p.add_argument('--artifact',type=Path,required=True);p.add_argument('--original-trust',type=Path,required=True)
+ p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+ r=prepare(a.artifact,a.original_trust,a.out)
+ print('PASS: unchanged signed plugin/Turnip, publication marker and owner trust; not installed or flashable')
+ print(json.dumps(r['outputs'],indent=2))

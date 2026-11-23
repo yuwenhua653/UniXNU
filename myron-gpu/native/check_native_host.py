@@ -26,6 +26,8 @@ def main():
     results = {}
     results['hwinit'] = subprocess.check_output([sys.executable,HERE/'test_hwinit.py',
                                                  '--cxx',a.cxx],text=True).strip()
+    results['metal_publication'] = subprocess.check_output([sys.executable,HERE/'test_metal_publish.py',
+                                                            '--cxx',a.cxx],text=True).strip()
     env = dict(os.environ, ASAN_OPTIONS='detect_leaks=0')
     with tempfile.TemporaryDirectory(prefix='myron-native-host-') as tmp:
         root = Path(tmp)

@@ -59,11 +59,12 @@ The combined device build selects native compilation, and the qualified package
 above enables the boot argument. User admission still requires both real client
 readback rounds to pass on the phone.
 
-The current build does not link `NativeAdrenoAccelerator.cpp`, install a Metal
-plugin, relax sandbox/AMFI policy, enable GPU scanout, or advertise hardware rendering. UI scale is handled separately by myron-runtime.
-The iPhone-specific accelerator audit in the parent directory is retained for
-the next integration stage. Passing these tests does not establish Metal ABI
-compatibility or hardware startup.
+The source now links the iPhone-specific `MyronAcceleratorCandidate.cpp` through
+retained-family adapters and verifies them in the final collection (see the
+integration section below). It does not install a Metal plugin or enable the
+`myron-gpu-metal=1` activation argument yet. GPU scanout remains disabled; UI
+scale is handled separately by myron-runtime. Host tests do not establish
+hardware startup or a rendered desktop.
 
 ## Verification
 
@@ -153,3 +154,64 @@ Metal discovery, retained accelerator binding/publication, owner trust merge
 and addon installation remain incomplete. The component artifact's successful
 build cannot substitute for those steps or for real CP/fence/rendered-image
 results. Keep the existing original Data seed and display/HID checks.
+
+## Retained Metal frontend and sidecars (source checkpoint, 2026-11-23)
+
+`MyronMetalPublish.cpp` now supplies the missing discovery service. The exact
+136-byte iPhone `IOAcceleratorES` parent must load and match the retained
+metaclass address before the AGX subclass initializer runs. A pre-existing AGX
+class refuses publication. Init/property/attach/start failures release the
+instance; registration is one-time. Publication additionally requires the real
+CP/readback/fence-ready result and explicit `myron-gpu-metal=1`.
+
+`accelerator_abi.py` checks the donor hash, retained family code, every inherited
+method's native identity and all 168 authenticated slots. The build supplies
+BTI branch adapters for the actual C2/D2 and an original metaclass GOT binding,
+then uses the display driver's existing final-link and final-prelink verifier.
+The original family is retained; no substitute base class is implemented.
+`myron-runtime/accelerator.py` connects those checks to the normal build and
+includes both new adapters in the storage audit's exact adapter set. The
+collector keeps `accelerator-abi.json` for final-package review.
+
+The service publishes `MetalPluginName=NativeAdrenoMetal` and
+`MetalPluginClassName=NativeAdrenoMetalDevice`. Its service-scoped
+`NativeSandboxGrantProcess` uses the facility already present in the actual
+native kernel for backboardd, iconservicesagent, WidgetRenderer_Default and
+PosterBoard. There is no new global sandbox or AMFI patch. The actual data
+client remains type 0x4147; progress markers are recorded without a connection,
+and Apple's type-1 protocol is refused.
+
+`../prepare_metal_sidecars.py` reuses verified component run 45134750180, checking
+all signed code pages and special slots before packaging. It adds the publish
+marker outside the sealed bundle and trusts only the plugin/Turnip CDHashes.
+The two original iPhone 24A446 modules are kept byte-for-byte; no probe daemon is
+installed and the original Data seed is not regenerated. Generated sidecars
+are explicitly marked **not installed, not boot-capacity-qualified, not
+flashable**. `../test_metal_sidecars.py` independently reads them back and rejects
+changed original trust, missing/duplicate hashes, malformed offsets/order and
+invalid addon paths/modes.
+
+### Remaining integration blockers — no full build yet
+
+* The current 88 MiB FAT cannot hold these sidecars. With the last verified
+  82,984,960-byte kernel, original 1,319,024-byte seed, 15,295,680-byte addon,
+  92,344-byte owner trust, max ADT and loader allowance, the conservative file
+  budget is exceeded by **8,732,136 bytes**. Do not silently resize the 96 MiB
+  boot partition, overwrite UFS data or drop the working Data seed. Transport
+  space and loader handoff need a reviewed solution and byte-exact host tests.
+* This board's root runtime still removes the upstream GPU addon installer and
+  mount block. The trusted addon needs a complete transport → memory-map →
+  persistent installation → original Metal path chain before activation.
+* The original target's Metal discovery path, scoped access and presentation
+  need final binary/runtime qualification. Native compiler checks are pending
+  for this new frontend; software peers do not substitute for that check.
+* The phone's actual CP and known-image/readback result is still pending. The
+  previous capture reported CP=0 and ready=0. A published service is not proof
+  of a rendered frame.
+
+Local checks: actual publication function over failing IOKit peers (15 failure
+paths, disabled/not-ready gates, cleanup, repeated invocation, client types),
+retained family binary/PAC inspection with corrupt-code/table negatives,
+portable backend/ring/CP/memory tests, display fence tests, source reconstruction
+and root preflight provider ordering. These changes are saved with `[skip ci]`;
+no Actions build has been requested.

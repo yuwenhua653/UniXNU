@@ -49,6 +49,9 @@ extern "C" { extern volatile uint32_t native_adreno_io_coherent; extern volatile
 extern "C" IOReturn native_adreno_publish(NativeAdrenoVm *, NativeAdrenoSubmit *, NativeAdrenoRing *, const NativeAdrenoRingClock *,
     const NativeAdrenoTimer *, const NativeAdrenoAbiDeviceInfo *, uint32_t, uint32_t);
 extern "C" IOService *native_adreno_published_service();
+extern "C" void myron_gpu_publish_metal(void);
+extern "C" volatile uint32_t myron_metal_registered, myron_metal_stage;
+extern "C" volatile int32_t myron_metal_status;
 extern "C" uint32_t native_adreno_publish_stats(uint32_t *closed);
 namespace {
 struct Window {uint64_t phys, length; IOMemoryMap *map; uintptr_t va;};
@@ -961,13 +964,15 @@ extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
     if(!out || !cap)return 0;
     // Publish the result array only after the worker stops changing it.
     const uint32_t complete=__atomic_load_n(&myron_gpu_complete,__ATOMIC_ACQUIRE);
-    int n=snprintf(out,cap,"[myron gpu] complete=%u mmio=%08x ready=%u cc=%u cx=%u gmu=%u hfi=%u cp=%u zap=%u submit=%u rounds=%u/%u error=%08x pool=%u metal=0\n",
+    int n=snprintf(out,cap,"[myron gpu] complete=%u mmio=%08x ready=%u cc=%u cx=%u gmu=%u hfi=%u cp=%u zap=%u submit=%u rounds=%u/%u error=%08x pool=%u metal=%u metal_stage=%u metal_status=%08x\n",
         complete,__atomic_load_n(&myron_gpu_stage,__ATOMIC_RELAXED),
         __atomic_load_n(&myron_gpu_ready,__ATOMIC_ACQUIRE),
         complete?gpuResult[0]:0,complete?gpuResult[1]:0,complete?gpuResult[2]:0,
         complete?gpuResult[3]:0,complete?gpuResult[4]:0,complete?gpuResult[5]:0,
         complete?gpuResult[6]:0,complete?gpuResult[7]:0,complete?gpuResult[8]:0,
-        complete?gpuResult[9]:0,complete?gpuResult[10]:0);
+        complete?gpuResult[9]:0,complete?gpuResult[10]:0,
+        __atomic_load_n(&myron_metal_registered,__ATOMIC_ACQUIRE),
+        complete?myron_metal_stage:0,complete?(uint32_t)myron_metal_status:0);
     size_t used=n<0?0:((size_t)n<cap?(size_t)n:cap-1);
     if(complete && used<cap-1) {
         n=snprintf(out+used,cap-used,
@@ -1001,8 +1006,9 @@ extern "C" void myron_gpu_run(void *, wait_result_t)
     gpuResult[9]=gM10.round_err;gpuResult[10]=native_adreno_pool_status;
     if(passed && myron_display_register_gpu_fences(myron_gpu_query_fences))
         __atomic_store_n(&myron_gpu_ready,1,__ATOMIC_RELEASE);
+    myron_gpu_publish_metal();
     __atomic_store_n(&myron_gpu_complete,1,__ATOMIC_RELEASE);
-    IOLog("myron-gpu: native A840 stage=%u readback=%d/%d qualified=%u; Metal not published\n",
-          gM10.step, gM10.rounds[0], gM10.rounds[1], unsigned(passed));
+    IOLog("myron-gpu: native A840 stage=%u readback=%d/%d qualified=%u; Metal registered=%u\n",
+          gM10.step, gM10.rounds[0], gM10.rounds[1], unsigned(passed), unsigned(myron_metal_registered));
     thread_terminate(current_thread());
 }

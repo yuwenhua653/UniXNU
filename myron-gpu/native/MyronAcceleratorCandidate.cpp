@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 // iPhone12,1 / 24A446 declaration: 136 bytes, 168 IOService slots,
-// no additional operational base overrides. Compiled and audited separately;
-// do not link or publish until the target bindings and Metal addon qualify.
+// no additional operational base overrides. Its initializer is removed from
+// the automatic list and called only after the retained IOGPUFamily loads.
 #include <IOKit/IOService.h>
 #include <IOKit/IOUserClient.h>
 class IOAcceleratorES : public IOService {
@@ -27,7 +27,10 @@ IOReturn AGXAccelerator::newUserClient(task_t task,void *security,UInt32 type,
     if(!__atomic_load_n(&myron_gpu_ready,__ATOMIC_ACQUIRE))return kIOReturnNotReady;
     // The original AGX type-1 protocol is not this driver's wire ABI.
     // The separate display handoff remains disabled.
-    if(type!=0x4147)return kIOReturnUnsupported;
+    // The matching plugin also emits non-connecting progress markers. Its
+    // dispatcher records them and returns Unsupported without making a client.
+    if(type!=0x4147 && !((type>>16)==0x4147 && (type&0xffff)))return kIOReturnUnsupported;
     return native_adreno_new_user_client(this,task,security,type,properties,handler,40);
 }
 extern "C" IOService *myron_accelerator_candidate_allocate(void) {return new AGXAccelerator;}
+extern "C" const OSMetaClass *myron_accelerator_parent(void) {return &IOAcceleratorES::gMetaClass;}

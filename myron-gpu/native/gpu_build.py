@@ -2,7 +2,8 @@
 """Compile the native A840 stage with the prepared kernel's real C/C++ recipes.
 
 No SDK stand-ins, foreign iPad bindings or synthetic firmware are accepted.
-This stage does not yet build/advertise a Metal accelerator or runtime addon.
+The retained accelerator is linked through target-audited adapters. Publication
+is separately opt-in; the matching addon/owner trust must be installed first.
 """
 import hashlib
 import json
@@ -34,7 +35,7 @@ def firmware_inputs(source, firmware):
     return pins
 
 
-def compile_gpu(tree, here, out, builder, target, env, record):
+def compile_gpu(tree, here, out, builder, target, env, record, donor=None, native=None, mapping=None, tool=None):
     from build_ufs_dormant import macho, initializers
     from display_build import iphone_target_flags, check_object_imports
     source = here/'gpu'
@@ -53,7 +54,7 @@ def compile_gpu(tree, here, out, builder, target, env, record):
                            *(out/'source'/k for k in ('NativeAdreno', 'ArmSmmu4K', 'AdrenoFirmware', 'AdrenoPM4')))
                 for x in ('-I', str(p))]
     sources = [out/'source/NativeAdreno'/(n+'.cpp') for n in CPP]
-    sources += [source/'MyronGpuService.cpp', source/'MyronGpuBoundary.cpp']
+    sources += [source/'MyronGpuService.cpp', source/'MyronGpuBoundary.cpp', source/'MyronMetalPublish.cpp']
     sources += [source/(n+'.c') for n in ('MyronGmu', 'MyronCmdDb', 'MyronHfi')]
     sources += [out/'source/AdrenoFirmware/AdrenoHfi.c', out/'source/AdrenoPM4/AdrenoPM4.c']
     sources += sorted((out/'source/ArmSmmu4K').glob('ArmSmmu4K*.c'))
@@ -96,28 +97,32 @@ def compile_gpu(tree, here, out, builder, target, env, record):
         (out/'gpu-build.json').write_text(json.dumps(report, indent=2)+'\n')
         raise ValueError('GPU native compilation failed:\n'+'\n'.join(
             row['source']+': '+row['error'] for row in failures))
-    # Compile the next frontend against the actual iPhone kernel recipe. Keep
-    # its initializer and original-base imports out of the boot object set:
-    # the matching iOS27 Metal addon is not integrated yet.
-    from display_abi import object_slots
+    # The accelerator's initializer is deliberately NOT included in the backend
+    # startup list. MyronMetalPublish loads/checks IOGPUFamily before running it.
+    from accelerator_abi import audit_object
+    from audit_ufs_storage_abi import assembly, addresses_assembly
     candidate = source/'MyronAcceleratorCandidate.cpp'
-    candidate_obj = out/'MyronAcceleratorCandidate.o'
-    cmd = builder.compile_command(record,candidate,candidate_obj,includes,['-Wno-overloaded-virtual'])
-    with (out/'MyronAcceleratorCandidate-compile.log').open('w') as log:
-        status = subprocess.run(cmd,cwd=record['directory'],env=env,stdout=log,stderr=subprocess.STDOUT)
-    require(not status.returncode,(out/'MyronAcceleratorCandidate-compile.log').read_text()[-8000:])
-    target.check_object(candidate_obj.read_bytes(),candidate.name)
-    candidate_info, slots = object_slots(candidate_obj.read_bytes(),'__ZTV14AGXAccelerator',168)
-    check_object_imports(candidate_info)
-    expected = {'__ZN15IOAcceleratorESC2EPK11OSMetaClass','__ZN15IOAcceleratorESD2Ev',
-                '__ZN15IOAcceleratorES10gMetaClassE'}
-    require({n for n in candidate_info['undefined'] if '15IOAcceleratorES' in n} == expected,
-            'Unexpected iPhone accelerator base imports')
-    require(all(r['auth']==1 and r['key']==0 and r['address_diversity']==1 for r in slots),
-            'Accelerator candidate must retain arm64e authenticated slots')
-    report['accelerator_candidate'] = dict(source_sha256=sha(candidate),object_sha256=sha(candidate_obj),
-        virtual_entries=168,base_bytes=136,imports=sorted(expected),compiled=True,
-        linked=False,published=False,original_bindings_qualified=False)
+    before = len(late_symbols)
+    compile_one(candidate)
+    require(late_symbols[before:] == ['__GLOBAL__sub_I_MyronAcceleratorCandidate.cpp'],
+            'Accelerator needs exactly its explicit late class initializer')
+    accelerator_init = late_symbols.pop()
+    contract = audit_object(out/'MyronAcceleratorCandidate.o', donor, native, mapping, tool)
+    (out/'accelerator-abi.json').write_text(json.dumps(contract,indent=2)+'\n')
+    for part,text in [('bindings',assembly(contract['bindings'])),
+                      ('addresses',addresses_assembly(contract['bindings']))]:
+        asm=out/('accelerator-'+part+'.S');asm.write_text(text);obj=asm.with_suffix('.o')
+        subprocess.run(['xcrun','--sdk','iphoneos','clang',*iphone_target_flags(env),
+                        '-c',asm,'-o',obj],check=True,env=env)
+        target.check_object(obj.read_bytes(),'accelerator '+part)
+        objects.append(obj)
+        evidence.append(dict(source=asm.name,source_sha256=sha(asm),object_sha256=sha(obj)))
+    report['accelerator_candidate'] = dict(source_sha256=sha(candidate),
+        object_sha256=sha(out/'MyronAcceleratorCandidate.late.o'),
+        virtual_entries=168,base_bytes=136,compiled=True,link_inputs_included=True,
+        original_bindings_qualified=contract['donor_checked'],published=False,
+        runtime_opt_in='myron-gpu-metal=1',automatic_initializer=False)
+    report['accelerator_contract'] = contract
     # All registration is late, after the working storage/display/touch boot
     # boundary. The worker is started once and terminates on completion/failure.
     init_source = out/'MyronGpuStart.cpp'
@@ -173,5 +178,7 @@ extern "C" void myron_gpu_run(void *, wait_result_t);
     report.update(objects=evidence, late_initializers=late_symbols, native_objects_compiled=True)
     (out/'gpu-build.json').write_text(json.dumps(report, indent=2)+'\n')
     keep = ('_myron_gpu_start', '_myron_gpu_run', '_myron_gpu_ready', '_myron_gpu_stage', '_myron_gpu_snapshot', '_myron_gpu_complete',
-            '_native_adreno_publish', '_native_adreno_new_user_client') + tuple(late_symbols)
+            '_native_adreno_publish', '_native_adreno_new_user_client',
+            '_myron_gpu_publish_metal', '_myron_metal_registered', '__ZTV14AGXAccelerator', accelerator_init) + tuple(late_symbols) + tuple(
+            n+'.original' if r['kind']=='function' else n for n,r in contract['bindings'].items())
     return objects, keep, report

@@ -1,0 +1,61 @@
+{
+  "target": "myron/SM8850/Adreno840/UBWC6.0",
+  "kgsl": {
+    "repository": "LineageOS/android_kernel_qcom_sm8850-modules",
+    "commit": "f2ecb6a09ea56bd8ec9a0bfd2e97f45e200ab322",
+    "files": {
+      "adreno_gen8.c": "481f944acc75ee598064f565d653683123244677fe94978d0a18ab68769e7b83",
+      "gen8_reg.h": "6aba7d7da8f22e610390e554b09c7bbb188b81a141959710f71190dfd440a440"
+    },
+    "path_prefix": "qcom/opensource/graphics-kernel/"
+  },
+  "same_soc_record": {
+    "repository": "u0er/unixnu-xiaomi17u",
+    "commit": "7c2ca6ba83dda2b9f30111bdc335281279c143a0",
+    "path": "xnu/patches/0182-pandora-gpu-chipid-files-chunks.patch",
+    "sha256": "0e3a3e7806abfb839e54f797c38ff210cc7fd2313937881e5b2a67d616640eec",
+    "observation": "Successful level-15 tests with RB_CMP_NC_MODE_CNTL bits 1-2 differing on readback."
+  },
+  "rb_cmp": {
+    "register_dword": "0x8f00",
+    "pipe": 1,
+    "old": "0x28046",
+    "ubwc6": "0x28040",
+    "readback_mask": "0xffffffff",
+    "mode2": 5,
+    "yuvnotcomptofc": 1,
+    "amsbc": 0,
+    "rgb565_predicator": 0,
+    "rgba8888_lossless": 0,
+    "fp16compoptdis": 0,
+    "mal_64": 0
+  },
+  "bicubic": {
+    "base_dword": "0xb606",
+    "words": 20,
+    "values": [
+      "0x00000000",
+      "0x3fe05ff4",
+      "0x3fa0ebee",
+      "0x3f5193ed",
+      "0x3f0243f0",
+      "0x00000000",
+      "0x3fd093e8",
+      "0x3f4133dc",
+      "0x3ea1dfdb",
+      "0x3e0283e0",
+      "0x0000ac2b",
+      "0x0000f01d",
+      "0x00114412",
+      "0x0021980a",
+      "0x0051ec05",
+      "0x0000380e",
+      "0x3ff09001",
+      "0x3fc10bfa",
+      "0x3f9193f7",
+      "0x3f7227f7"
+    ]
+  },
+  "user_device_causality_confirmed": false,
+  "hardware_tested": false
+}

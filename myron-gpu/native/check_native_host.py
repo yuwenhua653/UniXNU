@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 from prepare_sources import stage
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +24,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     a = parser.parse_args()
     results = {}
+    results['hwinit'] = subprocess.check_output([sys.executable,HERE/'test_hwinit.py',
+                                                 '--cxx',a.cxx],text=True).strip()
     env = dict(os.environ, ASAN_OPTIONS='detect_leaks=0')
     with tempfile.TemporaryDirectory(prefix='myron-native-host-') as tmp:
         root = Path(tmp)

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Run the actual board worker with stub hardware; never substitutes its guards."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 p=argparse.ArgumentParser();p.add_argument('--device',type=Path,required=True);p.add_argument('--cc',default='c++');a=p.parse_args()
 ufs=a.device.resolve().parent/'sm8850/drivers/NativeUfs'
+sys.path.insert(0,str(a.device.resolve()))
+import staged_apps
 with tempfile.TemporaryDirectory() as tmp:
  t=Path(tmp);(t/'sys').mkdir();(t/'sys/msgbuf.h').write_text('''#define MSG_MAGIC 0x063061
 #define MAX_MSG_BSIZE (1024*1024)
@@ -16,6 +20,12 @@ extern "C" struct msgbuf *msgbufp;
  text=(ufs/'MyronBootLog.h').read_text()
  old='__asm__ volatile("mrs %0, cntfrq_el0":"=r"(hz));';assert text.count(old)==1
  text=text.replace(old,'hz=1000;');(t/'worker.h').write_text(text)
+ # Link the actual generated app formatter used by the kernel, so a new
+ # worker dependency cannot be accidentally omitted from this test again.
+ plan=t/'apps.json';plan.write_text(json.dumps(dict(build='24A446',selected=['Calculator.app'],allocation_bytes=6<<20)))
+ apps=staged_apps.source((Path(__file__).parent/'fixtures/myron-staged-apps-upstream.c').read_text(),plan)
+ start=apps.index('size_t myron_staged_apps_snapshot(')
+ snapshot=apps[start:apps.index('\n}',start)+2]
  source=r'''
 #include <cassert>
 #include <cstdint>
@@ -30,7 +40,14 @@ using wait_result_t=int;using thread_t=void *;
 #define KERN_SUCCESS 0
 #define kIOReturnSuccess 0
 #define MYRON_ROOT_POLICY 1
-static int displaySnapshots,keystoreSnapshots;
+static int displaySnapshots,keystoreSnapshots,gpuSnapshots;
+static bool sawApps;
+static volatile int native_staged_apps_stage=3,native_staged_apps_files=5,native_staged_apps_mib=6;
+static volatile int native_staged_apps_failed=0,native_staged_apps_error=0,myron_apps_migration_result=2;
+static char native_staged_apps_path[]="/private/var/staged_system_apps/Calculator.app";
+extern "C" {
+/* ACTUAL_APPS_SNAPSHOT */
+}
 extern "C" void boot_process_start(){}
 extern "C" size_t myron_process_snapshot(char *p,size_t n){assert(n==24576);strcpy(p,"process snapshot\n");return strlen(p);}
 static int scenario,writes,syncs,locked,sleeps,gptCalls;static unsigned logArg;
@@ -51,6 +68,7 @@ static unsigned native_ufs_store_gpt_check(){++gptCalls;return scenario==6;}
 static bool hostLogOpen(uint64_t first,uint64_t blocks){assert(!gLogOpen && transportLock);allowedFirst=first;allowedBlocks=blocks;gLogOpen=true;return true;}
 static int hostWrite4k(unsigned lun,uint64_t first,uint32_t n,const void *p) {
  assert(!locked && lun==0 && p && first>=allowedFirst && first+n<=allowedFirst+allowedBlocks);
+ if(std::string(static_cast<const char *>(p),n*4096).find("[myron apps] stage=3 files=5 MiB=6 failed=0 error=0 migration=2")!=std::string::npos)sawApps=true;
  ++writes;return scenario==7 ? -1 : 0;
 }
 static int hostSyncCache(){assert(!locked);++syncs;return 0;}
@@ -65,6 +83,7 @@ static void IOSleep(unsigned ms){assert(ms==2000);++sleeps;gHost.ready=false;}
 static bool PE_parse_boot_argn(const char *key,void *v,unsigned n){assert(std::string(key)=="log"&&n==4);*(unsigned*)v=logArg;return true;}
 extern "C" size_t myron_display_snapshot(char *p,size_t n){++displaySnapshots;assert(n==1024);memset(p,'x',n-1);p[n-1]=0;return n-1;}
 extern "C" size_t myron_touch_snapshot(char *p,size_t n){assert(n==768);strcpy(p,"touch snapshot\n");return strlen(p);}
+extern "C" size_t myron_gpu_snapshot(char *p,size_t n){++gpuSnapshots;assert(n==768);strcpy(p,"gpu snapshot\n");return strlen(p);}
 extern "C" size_t myron_keystore_snapshot(char *p,size_t n){++keystoreSnapshots;assert(n==1024&&displaySnapshots==keystoreSnapshots);strcpy(p,"keystore snapshot\n");return strlen(p);}
 extern "C" size_t myron_boot_log_snapshot(char *p,size_t n){assert(!locked&&n>12);strcpy(p,"test snapshot");return strlen(p);}
 extern "C" void bsd_log_lock_safe(){assert(!locked);locked=1;}
@@ -72,6 +91,12 @@ extern "C" void bsd_log_unlock(){assert(locked);locked=0;}
 #include "worker.h"
 extern "C" {struct msgbuf *msgbufp;}
 int main() {
+ for(size_t cap=0;cap<=256;++cap) {
+  char out[258];memset(out,0x55,sizeof out);
+  size_t used=myron_staged_apps_snapshot(out,cap);
+  assert(used<cap || (!cap && !used));assert(out[cap]==0x55);
+  if(cap)assert(out[used]==0);
+ }
  char ring[]="message ring";struct msgbuf m={MSG_MAGIC,(int)sizeof ring,0,0,ring};msgbufp=&m;
  for(scenario=0;scenario<=8;++scenario) {
   gHost={true,false,nullptr};gStoreGeometry={true,67108864ULL,256,65791};
@@ -82,7 +107,7 @@ int main() {
   if(scenario==3)gStoreGeometry.first++;
   if(scenario==8)logArg=0;
   myronBootLogStart();
-  if(scenario==0)assert(myron_log_rounds==1&&writes==34&&syncs==2&&sleeps==1&&gLogOpen&&displaySnapshots==1&&keystoreSnapshots==1);
+  if(scenario==0)assert(myron_log_rounds==1&&writes==34&&syncs==2&&sleeps==1&&gLogOpen&&displaySnapshots==1&&keystoreSnapshots==1&&sawApps&&gpuSnapshots==MYRON_GPU_NATIVE);
   else if(scenario==7)assert(myron_log_errors==1&&writes==1&&syncs==0&&myron_log_rounds==0);
   else assert(writes==0&&syncs==0&&!gLogOpen);
   if(scenario!=8)assert(myron_log_state==3);
@@ -93,7 +118,8 @@ int main() {
  m.msg_size=MAX_MSG_BSIZE+1;assert(myronLogMessages(out)==0&&!locked);
 }
 '''
- (t/'test.cpp').write_text(source)
- subprocess.run([a.cc,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(t),'-I',str(ufs),str(t/'test.cpp'),'-o',str(t/'test')],check=True)
- subprocess.run([str(t/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
+ (t/'test.cpp').write_text(source.replace('/* ACTUAL_APPS_SNAPSHOT */',snapshot))
+ for gpu in (0,1):
+  subprocess.run([a.cc,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',f'-DMYRON_GPU_NATIVE={gpu}','-I',str(t),'-I',str(ufs),str(t/'test.cpp'),'-o',str(t/'test')],check=True)
+  subprocess.run([str(t/'test')],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
  print('PASS actual worker: root/geometry/mode/GPT/transport guards, bounded writes, stop-on-error, locked msgbuf copy')

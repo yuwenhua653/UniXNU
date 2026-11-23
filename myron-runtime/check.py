@@ -6,6 +6,8 @@ p=argparse.ArgumentParser();p.add_argument('--device',type=Path,required=True);p
 here=Path(__file__).resolve().parent;device=a.device.resolve();ufs=device.parent/'sm8850/drivers/NativeUfs'
 subprocess.run([__import__('sys').executable,str(here/'test_buttons.py'),'--cxx',a.cxx],check=True)
 subprocess.run([__import__('sys').executable,str(here/'test_power.py'),'--cxx',a.cxx],check=True)
+subprocess.run([__import__('sys').executable,str(here.parent/'tests/test_myron_log_worker.py'),
+                '--device',str(device),'--cc',a.cxx],check=True)
 with tempfile.TemporaryDirectory() as tmp:
  for name in ('test_runtime','test_store'):
   exe=Path(tmp)/name

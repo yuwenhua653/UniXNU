@@ -15,6 +15,7 @@
 #include <mach/kmod.h>
 #include "MyronGpuPolicy.h"
 #include "MyronGpuFence.h"
+#include "MyronA840RenderConfig.h"
 extern "C" {
 #include "MyronGpuBoard.h"
 #include "MyronGmu.h"
@@ -385,8 +386,8 @@ void pipeWr(unsigned pipe, uint32_t reg, uint32_t value) {aperture(pipe); gpuWr(
 uint32_t pipeRd(unsigned pipe, uint32_t reg) {aperture(pipe); return gpuRd(reg);}
 
 // Mode 7. a8xx_gpu.c hw_init from after a6xx_gmu_set_oob(GPU_SET) to just before adreno_hw_init, line for line. Left out:
-// the GMU power and busy counter selects, the TPL1 bicubic weights (texture filtering) and, later, hwcg (no A840 table in
-// Linux); none is on the command processor's path.
+// the GMU power and busy counter selects and, later, hwcg (no A840 table in
+// Linux). Rendering state uses the SM8850 KGSL UBWC6 and bicubic configuration.
 constexpr uint64_t kGmemRangeMin = 0x4000000;            // SZ_64M
 constexpr uint64_t kUcheTrapBase = 0x1fffffffff000ull;   // a6xx_gpu_init's uche_trap_base for A7XX and later
 void mode7() {
@@ -415,10 +416,11 @@ void mode7() {
     pipeWr(A840_PIPE_BV, A840_GRAS_NC_MODE_CNTL, A840_UBWC_GRAS_NC_MODE_CNTL);
     pipeWr(A840_PIPE_BR, A840_GRAS_NC_MODE_CNTL, A840_UBWC_GRAS_NC_MODE_CNTL);
     pipeWr(A840_PIPE_BR, A840_RB_CCU_NC_MODE_CNTL, A840_UBWC_RB_CCU_NC_MODE_CNTL);
-    pipeWr(A840_PIPE_BR, A840_RB_CMP_NC_MODE_CNTL, A840_UBWC_RB_CMP_NC_MODE_CNTL);
+    pipeWr(A840_PIPE_BR, A840_RB_CMP_NC_MODE_CNTL, MYRON_A840_RB_CMP_UBWC6);
     aperture(A840_PIPE_NONE);
     gpuWr(A840_SP_NC_MODE_CNTL, A840_UBWC_SP_NC_MODE_CNTL);
     gpuWr(A840_TPL1_NC_MODE_CNTL, A840_UBWC_TPL1_NC_MODE_CNTL);
+    for(unsigned i=0;i<20;++i)gpuWr(MYRON_A840_BICUBIC_BASE+i,MyronA840Bicubic[i]);
     gpuWr(A840_UCHE_CLIENT_PF, (1u << 7) | 0x1);
     // a8xx_nonctxt_config: every pipe from NONE to DDE_BV but LPAC, each entry on the pipes its mask names.
     for (unsigned pipe = A840_PIPE_NONE; pipe <= A840_PIPE_DDE_BV; ++pipe) {
@@ -477,7 +479,7 @@ void mode7() {
     check(A840_PIPE_BV, A840_CP_APRIV_CNTL_PIPE, MYRON_A8XX_APRIV_MASK);
     check(A840_PIPE_BR, A840_GRAS_NC_MODE_CNTL, A840_UBWC_GRAS_NC_MODE_CNTL);
     check(A840_PIPE_BR, A840_RB_CCU_NC_MODE_CNTL, A840_UBWC_RB_CCU_NC_MODE_CNTL);
-    check(A840_PIPE_BR, A840_RB_CMP_NC_MODE_CNTL, A840_UBWC_RB_CMP_NC_MODE_CNTL);
+    check(A840_PIPE_BR, A840_RB_CMP_NC_MODE_CNTL, MYRON_A840_RB_CMP_UBWC6);
     for (unsigned i = 0; i < MYRON_A840_NONCTXT_COUNT; ++i) {
         // hw_init rewrites the hang-detect word below the list, and GMEM protection holds only after the secure exit.
         const uint32_t pipes = MyronA840Nonctxt[i][2], reg = MyronA840Nonctxt[i][0];

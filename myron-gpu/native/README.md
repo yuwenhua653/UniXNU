@@ -119,3 +119,37 @@ Native compilation and phone qualification remain separate requirements.
 Remaining work includes the phone's pre-CP startup failure, retained accelerator
 binding/publication, target trust merge, signed addon capacity, and a known
 rendered image on the phone. Follow the [official GPU porting sequence](https://github.com/UniXNU/UniXNU/blob/8542980d02b4d2cc5c32ee3542de1760b2562aac/docs/porting/gpu.md).
+
+## UBWC6 startup correction (2026-11-23)
+
+Do not start another full image build for an isolated diagnostic or host-test
+change. The user requires the GPU integration gaps to be reviewed together
+before the next full compile. The 45147290072 run stopped in a log-worker host
+fixture, before its kernel job; that fixture now links the actual staged-app
+formatter and exercises both GPU-enabled and GPU-disabled worker configurations.
+
+The mode7 write to BR `RB_CMP_NC_MODE_CNTL` used `0x28046`. SM8850 KGSL
+`gen8_start` initializes `amsbc` and `rgb565_predicator` to zero and leaves them
+zero for UBWC6; it selects `mode2=5`, `yuvnotcomptofc=1`, MAL=32, yielding
+`0x28040`. The old value incorrectly enables the two UBWC5 compression flags.
+The same-SoC [successful test record](https://github.com/u0er/unixnu-xiaomi17u/blob/7c2ca6ba83dda2b9f30111bdc335281279c143a0/xnu/patches/0182-pandora-gpu-chipid-files-chunks.patch)
+reports those two bits not reading back as written. Our pre-CP gate required
+all 118 readbacks to match, so that documented behavior rejects the old write.
+
+`MyronA840RenderConfig.h` supplies the corrected UBWC6 write and KGSL's twenty
+bicubic weights; the earlier generated register/CP-protection table is kept
+unchanged. Full-word readback equality remains mandatory, including both bits
+1 and 2. No register masks, CP-ready flags, slice identities or fences are
+faked. Exact source hashes and fields are in `hwinit-ubwc6-source.json`.
+`test_hwinit.py` executes the production mode7 body over a register peer:
+the old value passes only 117/118 checks and fails the CP gate; the new value
+passes 118/118. All 128
+single-bit corruptions across four critical registers and the IO, power and
+SMMU negative cases still fail. This demonstrates the software/configuration
+defect, not a successful boot on the user's phone; its old snapshot omitted
+the actual mismatching register value.
+
+Metal discovery, retained accelerator binding/publication, owner trust merge
+and addon installation remain incomplete. The component artifact's successful
+build cannot substitute for those steps or for real CP/fence/rendered-image
+results. Keep the existing original Data seed and display/HID checks.

@@ -60,6 +60,11 @@ def source(addon, plan_path):
     # the actual myron payload; otherwise the helper exits before copying.
     replace('PE_parse_boot_argn("sheng-staged-apps",',
             'PE_parse_boot_argn("staged-apps",')
+    # Preflight may generate the helper before mounting the real app source.
+    # Such an empty plan must never stamp a successful migration on a phone.
+    replace('\tuint32_t enabled = 0;',
+            '\tuint32_t enabled = 0;\n\tuint32_t selected_count = '+str(len(names))+';')
+    replace(' || enabled != 1) {', ' || enabled != 1 || !selected_count) {')
     replace('"/private/var/db/.sheng-staged-apps"',json.dumps('/private/var/db/.myron-staged-24A446-'+digest))
     # Traverse only complete app trees selected against actual source sizes.
     allow=' || '.join('!strcmp(name,'+json.dumps(n)+')' for n in names) or '0'

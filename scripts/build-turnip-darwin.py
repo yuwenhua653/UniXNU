@@ -2,7 +2,7 @@
 """Build Turnip (Mesa freedreno Vulkan) with the native Darwin kernel backend (patches/mesa/turnip-darwin-kmd.patch).
 
 --target host builds for the Mac only to prove the backend compiles and links against the real Turnip; --target ios
-cross-builds the ARM64/iOS 17 library. Neither runs a GPU: the backend talks to the NativeAdreno IOKit service, which
+cross-builds the ARM64/iOS 17 library, and ios27 the arm64e/iOS 27 library with the exact A840 ABI. None runs a GPU: the backend talks to the NativeAdreno IOKit service, which
 exists only on the tablet. Output stays under build/ and is never committed."""
 import argparse
 import hashlib
@@ -16,18 +16,29 @@ from mesa_patch_identity import validate_recorded_patches
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--target', choices=('host', 'ios'), default='host')
+parser.add_argument('--target', choices=('host', 'ios', 'ios27'), default='host')
 parser.add_argument('--configure-only', action='store_true')
 parser.add_argument('--builtin-pack', type=Path, help='Embed an exact-source/profile/GPU-bound own builtin pack; no runtime compiler fallback')
+parser.add_argument('--native-adreno', type=Path, help='Exact staged A840 kernel ABI directory (required for ios27)')
 args = parser.parse_args()
 SOURCE = ROOT / '.cache/mesa-work'
-OUT = ROOT / ('build/mesa-tu' if args.target == 'host' else 'build/mesa-tu-ios')
+OUT = ROOT / {'host':'build/mesa-tu','ios':'build/mesa-tu-ios','ios27':'build/mesa-tu-ios27'}[args.target]
 LOGS = ROOT / '.cache'
 
 
 def read(cmd):
     return subprocess.check_output([str(c) for c in cmd], text=True).strip()
 
+
+abi_dir = (args.native_adreno or ROOT/'drivers/NativeAdreno').resolve()
+if args.target == 'ios27':
+    if not args.native_adreno:
+        sys.exit('ios27 requires --native-adreno pointing to the exact staged A840 kernel headers')
+    sys.path.insert(0, str(ROOT/'myron-gpu/native'))
+    from userspace_contract import verify_abi
+    abi_contract = verify_abi(abi_dir)
+else:
+    abi_contract = None
 
 pins = json.loads((ROOT / 'scripts/data/adreno-compiler-inputs.json').read_text())
 if read(['git', '-C', SOURCE, 'rev-parse', 'HEAD']) != pins['mesa']['commit']:
@@ -39,16 +50,16 @@ if not shutil.which('glslangValidator'):
 env = {k: v for k, v in os.environ.items() if not k.startswith(('IR3_', 'FD_MESA_', 'NIR_', 'MESA_SHADER_', 'TU_'))}
 env['PATH'] = str(ROOT / '.cache/mesa-tools/bin') + ':' + str(ROOT / '.cache/mesa-venv/bin') + ':' + env['PATH']
 options = ['-Dgallium-drivers=', '-Dvulkan-drivers=freedreno', '-Dfreedreno-kmds=darwin',
-           '-Dtu-darwin-abi-dir=' + str(ROOT / 'drivers/NativeAdreno'), '-Dplatforms=macos', '-Dglx=disabled',
+           '-Dtu-darwin-abi-dir=' + str(abi_dir), '-Dplatforms=macos', '-Dglx=disabled',
            '-Degl=disabled', '-Dgbm=disabled', '-Dopengl=false', '-Dgles1=disabled', '-Dgles2=disabled',
            '-Dllvm=disabled', '-Dshared-glapi=disabled', '-Dxmlconfig=disabled', '-Dshader-cache=disabled',
            '-Dtools=', '-Dbuild-tests=false', '-Dvideo-codecs=', '-Dvulkan-layers=']
 setup = [ROOT / '.cache/mesa-venv/bin/meson', 'setup', OUT, SOURCE, '--wrap-mode=nodownload']
-if args.target == 'ios':
+if args.target in ('ios', 'ios27'):
     sdk = read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'])
     find = lambda tool: read(['xcrun', '--sdk', 'iphoneos', '--find', tool])
-    flags = ['-target', 'arm64-apple-ios17.0', '-isysroot', sdk, '-fstack-protector-strong']
-    cross = ROOT / 'build/mesa-tu-ios.cross'
+    flags = ['-target', 'arm64e-apple-ios27.0' if args.target == 'ios27' else 'arm64-apple-ios17.0', '-isysroot', sdk, '-fstack-protector-strong']
+    cross = ROOT / ('build/mesa-tu-'+args.target+'.cross')
     cross.parent.mkdir(exist_ok=True)
     cross.write_text(
         '[binaries]\nc = %r\ncpp = %r\nobjc = %r\nar = %r\nstrip = %r\npkg-config = \'/usr/bin/false\'\n'
@@ -74,7 +85,7 @@ source_diff = subprocess.check_output(['git', '-C', SOURCE, 'diff', 'HEAD', '--b
 untracked = subprocess.check_output(['git', '-C', SOURCE, 'ls-files', '--others', '--exclude-standard', '-z']).split(b'\0')
 source_extras = {name.decode(): hashlib.sha256((SOURCE / name.decode()).read_bytes()).hexdigest()
                  for name in untracked if name and (SOURCE / name.decode()).is_file()}
-profile = dict(mesa_revision=pins['mesa']['commit'], target=args.target,
+profile = dict(native_abi=abi_contract, mesa_revision=pins['mesa']['commit'], target=args.target,
                source_diff_sha256=hashlib.sha256(source_diff).hexdigest(), extra_sources=source_extras,
                patch_guard_sha256=hashlib.sha256((ROOT / 'scripts/mesa_patch_identity.py').read_bytes()).hexdigest(),
                compiler=read([env['CXX'], '--version']), options=options,

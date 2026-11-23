@@ -1,5 +1,23 @@
 # myron runtime update after build 45074791666
 
+## Combined follow-up to 45115625273
+
+That run failed in macos-geometry, before native compilation, because the new
+boot-argument test redefined Darwin's `user_addr_t`. Namespace all fixture types;
+do not change kernel typedefs or weaken compiler warnings. The generated guard is
+executed with the actual payload argument, disabled/old arguments and an absent
+plan. Empty preflight plans now refuse provisioning instead of stamping success.
+The generated migration helper is also executed against vnode peers: exact owned
+plist, changed/short/long records, missing record, wrong vnode type and I/O/unlink
+errors. User-modified preferences are preserved; errors propagate to the caller.
+
+The prior commit's unprefixed app boot-argument fix and volume-down/PON retry work
+have not yet reached a successful phone package. User observations of missing
+apps and both volume keys refer to the previous delivered package 45105158334.
+Shutdown without a password was confirmed by the user; app migration, volume
+buttons, GPU hardware and the newly staged frontend still require device evidence.
+No persistent seed or working display/HID gate is replaced by this update.
+
 The phone boots to SpringBoard, with delayed side-key response, an unexpected
 passcode prompt during shutdown and only Settings visible. GPU acceleration has
 not been observed. This update preserves the exact initial Data seed and the

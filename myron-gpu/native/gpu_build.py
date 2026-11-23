@@ -96,6 +96,28 @@ def compile_gpu(tree, here, out, builder, target, env, record):
         (out/'gpu-build.json').write_text(json.dumps(report, indent=2)+'\n')
         raise ValueError('GPU native compilation failed:\n'+'\n'.join(
             row['source']+': '+row['error'] for row in failures))
+    # Compile the next frontend against the actual iPhone kernel recipe. Keep
+    # its initializer and original-base imports out of the boot object set:
+    # the matching iOS27 Metal addon is not integrated yet.
+    from display_abi import object_slots
+    candidate = source/'MyronAcceleratorCandidate.cpp'
+    candidate_obj = out/'MyronAcceleratorCandidate.o'
+    cmd = builder.compile_command(record,candidate,candidate_obj,includes,['-Wno-overloaded-virtual'])
+    with (out/'MyronAcceleratorCandidate-compile.log').open('w') as log:
+        status = subprocess.run(cmd,cwd=record['directory'],env=env,stdout=log,stderr=subprocess.STDOUT)
+    require(not status.returncode,(out/'MyronAcceleratorCandidate-compile.log').read_text()[-8000:])
+    target.check_object(candidate_obj.read_bytes(),candidate.name)
+    candidate_info, slots = object_slots(candidate_obj.read_bytes(),'__ZTV14AGXAccelerator',168)
+    check_object_imports(candidate_info)
+    expected = {'__ZN15IOAcceleratorESC2EPK11OSMetaClass','__ZN15IOAcceleratorESD2Ev',
+                '__ZN15IOAcceleratorES10gMetaClassE'}
+    require({n for n in candidate_info['undefined'] if '15IOAcceleratorES' in n} == expected,
+            'Unexpected iPhone accelerator base imports')
+    require(all(r['auth']==1 and r['key']==0 and r['address_diversity']==1 for r in slots),
+            'Accelerator candidate must retain arm64e authenticated slots')
+    report['accelerator_candidate'] = dict(source_sha256=sha(candidate),object_sha256=sha(candidate_obj),
+        virtual_entries=168,base_bytes=136,imports=sorted(expected),compiled=True,
+        linked=False,published=False,original_bindings_qualified=False)
     # All registration is late, after the working storage/display/touch boot
     # boundary. The worker is started once and terminates on completion/failure.
     init_source = out/'MyronGpuStart.cpp'

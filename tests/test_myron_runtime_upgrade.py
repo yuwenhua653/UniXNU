@@ -4,6 +4,8 @@ import argparse
 import ast
 import hashlib
 import json
+import re
+import plistlib
 from pathlib import Path
 import sys
 import subprocess
@@ -17,6 +19,23 @@ import reuse_data_seed as seed
 import prepare_data_volume as volume
 
 class Upgrade(unittest.TestCase):
+    def test_actual_migration_preserves_user_preferences_and_propagates_errors(self):
+        fixture=Path(__file__).parent/'fixtures'
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);plan=root/'plan.json'
+            plan.write_text(json.dumps(dict(build='24A446',selected=['Calculator.app'],allocation_bytes=6<<20)))
+            code=apps.source((fixture/'myron-staged-apps-upstream.c').read_text(),plan)
+            start=code.index('static int\nmyron_apps_request_migration(')
+            end=code.index('static void\nnative_staged_apps_prepare(',start)
+            function=re.sub(r'\b(proc_t|user_addr_t|vfs_context_t|vnode_t|unlink_args|unlink)\b',
+                            r'test_\1',code[start:end]).replace('(caddr_t)','(char *)')
+            expected=plistlib.dumps(volume.desktop_preferences()['com.apple.migration'],fmt=plistlib.FMT_BINARY)
+            source=(fixture/'myron-app-migration-host.c').read_text().replace('/* GENERATED_FUNCTION */',function)
+            source=source.replace('EXPECTED_BYTES',','.join(map(str,expected)))
+            (root/'test.c').write_text(source)
+            subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(root/'test.c'),'-o',str(root/'test')],check=True)
+            subprocess.run([str(root/'test')],check=True)
+
     def test_payload_argument_reaches_actual_app_copy_guard(self):
         # Use the generated payload argument and the generated production guard,
         # rather than separately reimplementing an enable flag in this test.
@@ -31,11 +50,14 @@ class Upgrade(unittest.TestCase):
             start=code.index('static void\nnative_staged_apps_prepare(')
             end=code.index('\tvfs_context_t ctx =',start)
             guard=code[start:end]+'    (void)p;(void)scratch;(void)data_mount;++entered;\n}\n'
+            # Darwin already defines user_addr_t (with a different C spelling).
+            # Namespace only fixture types; exercise the production guard unchanged.
+            guard=re.sub(r'\b(proc_t|user_addr_t|mount_t)\b',r'test_\1',guard)
             shim='''#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-typedef void *proc_t; typedef uintptr_t user_addr_t; typedef void *mount_t;
+typedef void *test_proc_t; typedef uintptr_t test_user_addr_t; typedef void *test_mount_t;
 static unsigned entered;static const char *bootarg;
 static int PE_parse_boot_argn(const char *name,void *out,int size){
  size_t n=strlen(name);if(size!=4 || strncmp(bootarg,name,n) || bootarg[n]!='=')return 0;
@@ -50,6 +72,14 @@ static int PE_parse_boot_argn(const char *name,void *out,int size){
             subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(src),'-o',str(exe)],check=True)
             for value,expected in [(arg,'1'),('','0'),('staged-apps=0','0'),('staged-apps=2','0'),('sheng-staged-apps=1','0')]:
                 subprocess.run([str(exe),value,expected],check=True)
+            empty=apps.source(upstream,root/'absent-plan.json')
+            start=empty.index('static void\nnative_staged_apps_prepare(')
+            end=empty.index('\tvfs_context_t ctx =',start)
+            empty_guard=empty[start:end]+'    (void)p;(void)scratch;(void)data_mount;++entered;\n}\n'
+            empty_guard=re.sub(r'\b(proc_t|user_addr_t|mount_t)\b',r'test_\1',empty_guard)
+            src.write_text(shim.replace(guard,empty_guard))
+            subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(src),'-o',str(exe)],check=True)
+            subprocess.run([str(exe),arg,'0'],check=True)
 
     def test_budget_skips_oversized_tree_and_symlinks(self):
         with tempfile.TemporaryDirectory() as tmp:

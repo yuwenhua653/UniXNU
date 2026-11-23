@@ -7,6 +7,8 @@ on:
       - myron-runtime/**
       - myron-touch/**
       - myron27-build.py
+      - scripts/build-turnip-darwin.py
+      - patches/mesa/turnip-darwin-kmd.patch
       - .github/workflows/myron-gpu-host.yml
   workflow_dispatch:
 permissions:
@@ -44,6 +46,8 @@ jobs:
           python3 myron-gpu/native/check_native_host.py \
             --references "$RUNNER_TEMP/gpu-references" --cc gcc --cxx g++ \
             --output "$RUNNER_TEMP/gpu-checks/native-host.json"
+          python3 myron-gpu/native/test_userspace.py --references "$RUNNER_TEMP/gpu-references" \
+            --cxx g++ > "$RUNNER_TEMP/gpu-checks/userspace-abi.json"
           python3 tests/test_native_diagnostics.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

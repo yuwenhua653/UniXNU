@@ -2,9 +2,34 @@
 
 The first native A840 board driver is now connected to source reconstruction,
 optional XNU compilation and the late boot boundary; see [native/README.md](native/README.md).
-Production defaults still use the working CPU display. Native kernel compilation,
-Metal userspace/addon integration and phone GPU execution remain unverified.
-The desktop baseline remains run 45008031354 / commit 682c5c4.
+Production still uses the working CPU display. The native A840 backend and its
+four firmware blobs compiled and linked in run 45105158334 / commit b5f2ec2;
+that package enables the bounded hardware worker. Phone GPU execution and Metal
+userspace/addon integration remain unverified.
+
+## Combined update after failed run 45115625273
+
+The runtime app guard's test used a Darwin-owned typedef and failed before native
+compilation. Its fixture types are now private. This update also extends GPU work:
+
+* Turnip's Darwin device-identification block now recognizes A840 while retaining
+  its active-slice chip ID. The old arithmetic produced 6860 for `0x44050a31`.
+  The actual patched block is compiled and exercised, including A740, A630,
+  all seven nonzero slice masks and unrelated-ID negative cases.
+* `scripts/build-turnip-darwin.py --target ios27 --native-adreno DIR` selects
+  arm64e/iOS 27 and rejects a header different from this native A840 kernel's
+  pinned ABI. The build identity includes that header. Compile-time checks cover
+  the 128-IB / 3104-byte submit record and 64-byte device identity.
+* `MyronAcceleratorCandidate.cpp` implements the plugin-type client entry and
+  preserves real hardware readiness. The native build compiles it with its actual
+  XNU recipe, checking extent, 168 authenticated slots and original-base imports.
+  It deliberately remains outside the linked object/initializer set: iPhone
+  retained-base binding, complete Metal plugin/addon and trust integration are
+  still required before it can be published. No extra desktop service or fake
+  hardware completion is introduced.
+
+These changes do not claim a working Metal device. Full Turnip/Metal compilation,
+addon packaging, target binding and device rendering remain follow-up work.
 
 ## Same-SoC references checked on 2026-11-22
 

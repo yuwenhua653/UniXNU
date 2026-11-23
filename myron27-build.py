@@ -34,6 +34,8 @@ def root_qualification_identity(fixture):
      for p in (here/'myron-gpu').rglob('*') if p.is_file() and p.suffix in ('.py','.cpp','.c','.h','.json','.patch')},
   'source_overlay':here/'myron27-storage-delta.json','reboot_overlay':here/'myron27-reboot-delta.json',
   'build_entry':Path(__file__).resolve(),'display_overlay':here/'myron27-display-delta.json',
+  'turnip_build':here/'scripts/build-turnip-darwin.py',
+  'turnip_kmd':here/'patches/mesa/turnip-darwin-kmd.patch',
   **{'touch/'+name:here/'myron-touch'/name for name in TOUCH_SOURCES},
   **{'runtime/'+p.name:p for p in (here/'myron-runtime').iterdir() if p.is_file()},
   'ufs_medium_source':here/'myron-ufs-medium.patch',
@@ -58,6 +60,8 @@ def qualify_root_inputs():
    '--firmware',os.environ['MYRON_GPU_FIRMWARE'],'--output',str(qualification/'gpu-portable.json')],check=True)
   subprocess.run([sys.executable,str(d/'gpu/check_native_host.py'),'--references',str(root/'references/myron-gpu'),
    '--cc','clang','--cxx','clang++','--output',str(qualification/'gpu-native-host.json')],check=True)
+  subprocess.run([sys.executable,str(here/'myron-gpu/native/test_userspace.py'),'--references',str(root/'references/myron-gpu'),
+   '--root',str(here),'--cxx','clang++'],check=True)
  (qualification/'host-checks.json').unlink(missing_ok=True)
  subprocess.run(['brew','install','openssl@3','mtools'],check=True)
  openssl=Path(subprocess.check_output(['brew','--prefix','openssl@3'],text=True).strip())

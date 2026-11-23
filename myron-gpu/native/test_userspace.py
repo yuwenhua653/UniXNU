@@ -80,7 +80,7 @@ int main(){
  assert(transportCalls==before);
 }
 ''')
-        subprocess.run([cxx,'-std=c++17','-Wall','-Wextra','-Werror','-I',str(driver),
+        subprocess.run([cxx,'-std=c++17','-Wall','-Wextra','-Werror','-Wunused-const-variable','-I',str(driver),
                         str(temp/'main.cpp'),'-o',str(temp/'check')],check=True)
         subprocess.run([str(temp/'check')],check=True)
         (temp/'NativeAdrenoABI.h').write_bytes((driver/'NativeAdrenoABI.h').read_bytes()+b'\n')

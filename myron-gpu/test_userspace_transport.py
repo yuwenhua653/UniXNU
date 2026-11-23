@@ -30,7 +30,7 @@ def check(tree, references, cxx):
 #include <pthread.h>
 #include "MyronGpuMailbox.h"
 using IOReturn=int;using wait_result_t=int;
-constexpr int kIOReturnBadArgument=-10,kIOReturnNotReady=-11;
+constexpr int kIOReturnBadArgument=-10;
 struct AGXDeviceUserClient {int refs=1;void retain(){++refs;}void release(){--refs;}};
 struct {void *lock;} g;
 void IOLockLock(void *){} void IOLockUnlock(void *){}
@@ -100,7 +100,7 @@ int main(){
 }
 '''
         (out/'test.cpp').write_text(fixture)
-        subprocess.run([cxx,'-std=c++17','-Wall','-Wextra','-Werror','-pthread',
+        subprocess.run([cxx,'-std=c++17','-Wall','-Wextra','-Werror','-Wunused-const-variable','-pthread',
                         '-I',str(tree/'drivers/NativeAdreno'),str(out/'test.cpp'),'-o',str(out/'test')],check=True)
         subprocess.run([str(out/'test')],check=True)
     print('PASS: actual kernel/Metal transport, 128 IBs, bounds, error replies, timeout quarantine and reopen')

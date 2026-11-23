@@ -49,4 +49,5 @@ jobs:
             ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-bridge/*.log
             ${{ runner.temp }}/myron-gpu-userspace/.cache/*.log
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 7

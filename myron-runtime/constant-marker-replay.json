@@ -1,0 +1,66 @@
+{
+  "inputs": {
+    "kernelcache_sha256": "813be26ab6bd1d8de211904eca413a1a2ebf79989f90c33a48ff0f2fcff99036",
+    "native_sha256": "ca379a846f17ab8d33fefab66becfd78449edec8401bf7ed4e6a225148cc3235",
+    "entry": "com.apple.kernel"
+  },
+  "reference_sha256": "7af0fa4bef27bbc38c285203aabff313afc1937c260b22ab4a0a687ee685eb53",
+  "candidate_bytes": 82984960,
+  "candidate_sha256": "b025f1561b21231f817a85ca5439775320fbf9f7de32abf13f2207491efbfc0b",
+  "mapping_complete": true,
+  "runtime_qualified": false,
+  "allow_missing": false,
+  "source_commit": "faae2bf64079bdab3a783d7be65a334018c35c34",
+  "run": 45350101216,
+  "roots": 30,
+  "closure_members": 39,
+  "missing": {},
+  "stubbed": {},
+  "statistics": {
+    "native_constant_padding_trimmed": [
+      {
+        "segment": "__DATA_CONST",
+        "old_size": 1196032,
+        "new_size": 1183744,
+        "zero_bytes_removed": 12288
+      },
+      {
+        "segment": "__LASTDATA_CONST",
+        "old_size": 16384,
+        "new_size": 4096,
+        "zero_bytes_removed": 12288
+      },
+      {
+        "segment": "__DATA_CONST",
+        "old_size": 1183744,
+        "new_size": 1183736,
+        "zero_bytes_removed": 8
+      },
+      {
+        "segment": "__LASTDATA_CONST",
+        "old_size": 4096,
+        "new_size": 8,
+        "zero_bytes_removed": 4088
+      }
+    ],
+    "native_constant_marker_shared_page": true,
+    "native_split_relocations": {
+      "kind_4": 53,
+      "kind_3": 17156,
+      "pointers": 105617,
+      "kind_5": 151521,
+      "kind_6": 161778,
+      "kind_7": 2325
+    },
+    "native_chain_sites": 105617,
+    "native_original_branches_rebound": 276
+  },
+  "checks": {
+    "prelink_tests": 82,
+    "native_source_recompiled": false,
+    "strict_prelink": true,
+    "storage_boot_display_gpu_audits": true,
+    "darwinboot_actual_kernel_parser": true,
+    "full_package_build": "pending"
+  }
+}

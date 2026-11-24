@@ -51,13 +51,20 @@ jobs:
           assert len(xnu) == 1
           loader = [s for s in snapshot['sources'] if s['path'] == 'upstream/drivers/DarwinBoot']
           assert len(loader) == 1
-          for item in [snapshot['upstream'], xnu[0], loader[0]]:
+          prelink = [s for s in snapshot['sources'] if s['path'] == 'upstream/kits/XnuPrelink']
+          assert len(prelink) == 1
+          for item in [snapshot['upstream'], xnu[0], loader[0], prelink[0]]:
               path = Path(os.environ['RUNNER_TEMP'])/'myron-iphone27'/item['path']
               path.mkdir(parents=True, exist_ok=True)
               subprocess.run(['git', 'init', '-q', str(path)], check=True)
               subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
               subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
               assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check patched prelink constant layout before the full build
+        run: |
+          python3 tests/check_myron_prelink_layout.py \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
+            --xnuprelink "$RUNNER_TEMP/myron-iphone27/upstream/kits/XnuPrelink"
       - name: Check boot asset fixtures with the production GPU environment
         run: |
           python3 tests/test_myron_boot_assets_environment.py \

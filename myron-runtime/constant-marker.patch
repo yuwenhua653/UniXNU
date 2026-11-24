@@ -1,0 +1,229 @@
+--- a/fileset_layout.py
++++ b/fileset_layout.py
+@@ -79,6 +79,7 @@
+         self.cache, self.native = cache, native
+         self.output_segments = {s['name']: dict(s) for s in native.segments}
+         self.constant_padding_trimmed = []
++        self.shared_constant_page = False
+         self.roots = {s['name']: dict(s) for s in cache.segments}
+         self.occupied = []
+         self.retained_code = []
+@@ -108,9 +109,12 @@
+                         continue
+                     break
+             else:
+-                raise
++                if not self.pack_constant_marker():
++                    raise
++                self.make_constant_prefix_room()
+         self.reserve('__DATA_CONST', const['va'])
+-        self.reserve('__LASTDATA_CONST', align(self.end('__DATA_CONST'), NATIVE_PAGE))
++        self.reserve('__LASTDATA_CONST', self.end('__DATA_CONST') if self.shared_constant_page
++                     else align(self.end('__DATA_CONST'), NATIVE_PAGE))
+         # All native code follows selected kext code; XNU derives the kext-code
+         # range from the start of native __TEXT_EXEC.
+         code = self.roots['__TEXT_EXEC']
+@@ -165,8 +169,11 @@
+             return self.output_segments[name]
+         return next(s for s in self.native.segments if s['name'] == name)
+ 
+-    def compact_constant_tail(self, name='__DATA_CONST'):
+-        """Drop only verified unused whole 4 KiB pages after the last section.
++    def compact_constant_tail(self, name='__DATA_CONST', exact_size=None):
++        """Drop verified zero padding, normally whole 4 KiB pages.
++
++        The pointer-only marker fallback can request an exact byte boundary;
++        all section, symbol, pointer and split-reference checks still apply.
+ 
+         Preserve the input image and every live section, symbol and relocation.
+         The normal layout is tried first, so fitting inputs remain byte-stable.
+@@ -178,7 +185,9 @@
+         if not sections or segment['filesize'] != segment['size']:
+             return False
+         used = max(s['va'] + s['size'] for s in sections) - segment['va']
+-        size = align(used, NATIVE_PAGE)
++        size = align(used, NATIVE_PAGE) if exact_size is None else exact_size
++        if size < used:
++            return False
+         if not 0 < size < segment['size']:
+             return False
+         begin, end = segment['va'] + size, segment['va'] + segment['size']
+@@ -201,6 +210,46 @@
+         self.output_segments[name] = dict(segment, size=size, filesize=size)
+         return True
+ 
++    def pack_constant_marker(self):
++        """Share the final constant page with a pointer-only LASTDATA_CONST.
++
++        The marker ends on a 4 KiB boundary, so XNU's derived PLK_DATA_CONST
++        begins on a full page. Native DATA_CONST maps the shared page RW/NX
++        during initialization and RO/NX at lockdown. No retained bytes share
++        this page. Only an 8-byte initializer is supported; instruction page
++        offsets must never be changed by this fallback.
++        """
++        data = self.segment('__DATA_CONST')
++        last = self.segment('__LASTDATA_CONST')
++        sections = [(i + 1, s) for i, s in enumerate(self.native.sections)
++                    if s['segment'] == '__LASTDATA_CONST']
++        if (len(sections) != 1 or sections[0][1]['name'] != '__mod_init_func'
++                or sections[0][1]['va'] != last['va'] or sections[0][1]['size'] != 8
++                or data['size'] % NATIVE_PAGE or last['va'] % NATIVE_PAGE):
++            return False
++        # Both Mach-O mappings must declare the same RO/NX permissions. Packing
++        # applies only to the no-monitor fileset layout with pointer relocations.
++        for segment in (data, last):
++            if struct.unpack_from('<II', self.native.data, segment['command_offset'] + 56) != (1, 1):
++                return False
++        section_at = last['command_offset'] + 72
++        if (struct.unpack_from('<I', self.native.data, section_at + 52)[0] > 3
++                or struct.unpack_from('<I', self.native.data, section_at + 64)[0] & 0xff != 9):
++            return False
++        ordinal = sections[0][0]
++        if any(kind not in (2, 13) for kind, si, so, ti, to in split_references(self.native)
++               if si == ordinal or ti == ordinal):
++            return False
++        old_segments = dict(self.output_segments)
++        old_trim_count = len(self.constant_padding_trimmed)
++        if not (self.compact_constant_tail('__DATA_CONST', data['size'] - 8)
++                and self.compact_constant_tail('__LASTDATA_CONST', 8)):
++            self.output_segments = old_segments
++            del self.constant_padding_trimmed[old_trim_count:]
++            return False
++        self.shared_constant_page = True
++        return True
++
+     def make_constant_prefix_room(self):
+         """Borrow only unused preceding text pages, retaining every kext VA.
+ 
+@@ -212,7 +261,9 @@
+         const = self.roots['__DATA_CONST']
+         first = min([const['va'] + const['size']] + [b for b, e in self.occupied
+                     if const['va'] <= b < const['va'] + const['size']])
+-        needed = align(self.segment('__DATA_CONST')['size'], NATIVE_PAGE)
++        needed = self.segment('__DATA_CONST')['size']
++        if not getattr(self, 'shared_constant_page', False):
++            needed = align(needed, NATIVE_PAGE)
+         needed += self.segment('__LASTDATA_CONST')['size']
+         if const['va'] + needed <= first:
+             return
+@@ -326,7 +377,10 @@
+                 continue
+             begin, end = self.placements[segment['name']], self.end(segment['name'])
+             if begin % NATIVE_PAGE:
+-                raise ValueError('Unaligned native segment')
++                if not (self.shared_constant_page and segment['name'] == '__LASTDATA_CONST'
++                        and begin == self.end('__DATA_CONST') and end % NATIVE_PAGE == 0
++                        and end - begin == 8):
++                    raise ValueError('Unaligned native segment')
+             if any(begin < e and b < end for b, e in self.occupied + placed):
+                 raise ValueError(f'Native {segment["name"]} overlaps a retained segment')
+             if not any(s['va'] <= begin and end <= s['va'] + s['size'] for s in self.roots.values()):
+--- a/fileset_segmented.py
++++ b/fileset_segmented.py
+@@ -35,6 +35,7 @@
+         self.layout = Layout(self.cache, self.native, self.closure)
+         self.report['segment_layout'] = self.layout.describe()
+         self.report['native_constant_padding_trimmed'] = self.layout.constant_padding_trimmed
++        self.report['native_constant_marker_shared_page'] = self.layout.shared_constant_page
+         self.fileoff = self.layout.placements['__TEXT'] - self.cache.base
+         self.data.extend(bytes(self.layout.size - len(self.data)))
+         for segment in self.native.segments:
+--- a/test_fileset_layout.py
++++ b/test_fileset_layout.py
+@@ -143,6 +143,76 @@
+         layout.native.data = image_fixture(blob).data
+         with self.assertRaisesRegex(ValueError, 'exceeds section'):
+             layout.compact_constant_tail()
++
++    def marker_layout(self):
++        layout = self.padding_layout()
++        data = dict(layout.native.segments[0], command_offset=64)
++        last = dict(data, name='__LASTDATA_CONST', va=0x300000,
++                    fileoff=0x8000, command_offset=144)
++        layout.native.segments = [data, last]
++        layout.output_segments = {s['name']: dict(s) for s in (data, last)}
++        layout.native.sections.append(dict(segment=last['name'], name='__mod_init_func',
++                                           va=last['va'], size=8))
++        raw = bytearray(layout.native.data) + bytes(512)
++        for segment in (data, last):
++            struct.pack_into('<II', raw, segment['command_offset'] + 56, 1, 1)
++        struct.pack_into('<I', raw, last['command_offset'] + 124, 3)
++        struct.pack_into('<I', raw, last['command_offset'] + 136, 9)
++        layout.native.data = raw
++        layout.shared_constant_page = False
++        self.assertTrue(layout.compact_constant_tail())
++        self.assertTrue(layout.compact_constant_tail('__LASTDATA_CONST'))
++        return layout
++
++    def test_marker_shares_only_zero_padding_and_ends_on_page_boundary(self):
++        layout = self.marker_layout()
++        original = [dict(s) for s in layout.native.segments]
++        self.assertTrue(layout.pack_constant_marker())
++        self.assertTrue(layout.shared_constant_page)
++        self.assertEqual(layout.segment('__DATA_CONST')['size'], 0x1ff8)
++        self.assertEqual(layout.segment('__LASTDATA_CONST')['size'], 8)
++        self.assertEqual(layout.native.segments, original)
++        layout.placements['__LASTDATA_CONST'] = layout.end('__DATA_CONST')
++        self.assertEqual(layout.end('__LASTDATA_CONST') % 4096, 0)
++        self.assertEqual(layout.translate(0x300000), layout.end('__DATA_CONST'))
++        # The page-granular DATA_CONST protection covers the marker's page;
++        # XNU's PLK_DATA_CONST starts on the following full page.
++        self.assertEqual((layout.end('__DATA_CONST') + 4095) & ~4095,
++                         layout.end('__LASTDATA_CONST'))
++
++    def test_marker_rejects_sections_permissions_alignment_and_instruction_refs(self):
++        for mode in ('section', 'size', 'permissions', 'alignment', 'flags', 'instruction'):
++            with self.subTest(mode=mode):
++                layout = self.marker_layout()
++                if mode == 'section': layout.native.sections[-1]['name'] = '__pinst'
++                if mode == 'size': layout.native.sections[-1]['size'] = 16
++                if mode == 'permissions': struct.pack_into('<I', layout.native.data, 144+56, 3)
++                if mode == 'alignment': struct.pack_into('<I', layout.native.data, 144+124, 4)
++                if mode == 'flags': struct.pack_into('<I', layout.native.data, 144+136, 0)
++                if mode == 'instruction':
++                    blob = records([(1, 2, [(0, [(6, [0])])])])
++                    layout.native.data[16:16+len(blob)] = blob
++                    struct.pack_into('<I', layout.native.data, 12, len(blob))
++                before = {n: dict(s) for n, s in layout.output_segments.items()}
++                self.assertFalse(layout.pack_constant_marker())
++                self.assertEqual(layout.output_segments, before)
++                self.assertFalse(layout.shared_constant_page)
++
++    def test_marker_rejects_live_padding_and_rolls_back_partial_trim(self):
++        for site in (0x201ff8, 0x300008):
++            for kind in ('symbol', 'pointer_source', 'pointer_target', 'bytes'):
++                with self.subTest(site=site, kind=kind):
++                    layout = self.marker_layout()
++                    if kind == 'symbol': layout.native.symbols = lambda: {site: ['_live']}
++                    if kind == 'pointer_source': layout.native.fixups = lambda: {site: (0x200000, 0, 0, 0, 0)}
++                    if kind == 'pointer_target': layout.native.fixups = lambda: {0x200000: (site, 0, 0, 0, 0)}
++                    if kind == 'bytes':
++                        layout.native.read = lambda a, n: bytes(int(a+i == site) for i in range(n))
++                    before = {n: dict(s) for n, s in layout.output_segments.items()}
++                    trims = list(layout.constant_padding_trimmed)
++                    self.assertFalse(layout.pack_constant_marker())
++                    self.assertEqual(layout.output_segments, before)
++                    self.assertEqual(layout.constant_padding_trimmed, trims)
+ 
+     def data_layout(self):
+         layout = Layout.__new__(Layout)
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,17 @@
+ fixups and function starts, and recomputes corecrypto's HMAC over relocated
+ code. Segment collisions and unsupported relocation kinds stop emission.
+ The native input executable is unchanged.
++
++The myron no-monitor overlay also handles an exhausted constant prefix. After
++checking whole-page zero padding, it may place a single 8-byte initializer
++(`__LASTDATA_CONST,__mod_init_func`) in the final zero-filled bytes of the
++native `__DATA_CONST` page. The two segment extents remain disjoint and their
++combined end stays 4 KiB aligned. XNU maps that shared page through native
++`__DATA_CONST`; retained kext constants start on the next page. The fallback
++requires RO/NX Mach-O permissions, pointer-only relocations and preserved
++section alignment, and rejects live bytes, symbols or references in discarded
++padding. Existing fitting layouts remain unchanged. The emission report records
++`native_constant_marker_shared_page`; this is not a hardware qualification.
+ 
+ Maps carry a matcher version as well as input hashes. The integrated CLI
+ regenerates outdated caches. Reviewed symbol anchors in `fixtures/` include

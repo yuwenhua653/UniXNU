@@ -12,6 +12,7 @@ def replace(path, old, new):
 def apply(root):
     d=root/'device/myron27'; u=root/'device/sm8850/drivers/NativeUfs'
     here=Path(__file__).resolve().parent
+    shutil.copyfile(here/'constant-marker.patch',d/'patches/xnuprelink/zzzzz-constant-marker.patch')
     from display_fence import apply as apply_display_fence
     apply_display_fence(d,replace)
     from accelerator import apply as apply_accelerator

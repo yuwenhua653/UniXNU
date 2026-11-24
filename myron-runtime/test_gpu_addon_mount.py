@@ -41,7 +41,9 @@ typedef uint64_t user_addr_t;
 typedef void *proc_t;typedef void *vfs_context_t;typedef void *vm_map_t;typedef uintptr_t mach_vm_address_t;
 struct node{int type,mount;};typedef struct node *vnode_t;
 static struct node root={VDIR,1},child={VDIR,1};
-struct direntry{uint64_t d_ino;uint16_t d_reclen;char d_name[40];};
+/* ADDON_HEADERS */
+_Static_assert(offsetof(struct direntry,d_reclen)==16,"XNU extended record length offset");
+_Static_assert(offsetof(struct direntry,d_name)==21,"XNU extended record name offset");
 struct io{void *data;uint64_t remain;off_t offset;};typedef struct io *uio_t;
 struct mount_args{user_addr_t type,path;unsigned flags;user_addr_t data;};
 static int scenario,refs,handles,pools,uios,mounts,published,livevm;
@@ -94,6 +96,21 @@ int main(void){
  puts("PASS: real addon mount/readiness, 15 failure/disabled paths, sealed-entry discovery, read-only union and scratch cleanup");return 0;}
 '''
 with tempfile.TemporaryDirectory() as tmp:
- path=Path(tmp)/'host.c';exe=Path(tmp)/'host';path.write_text(source)
- subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=undefined',str(path),'-o',str(exe)],check=True)
+ path=Path(tmp)/'host.c';exe=Path(tmp)/'host'
+ header=Path(tmp)/'sys/dirent.h';header.parent.mkdir()
+ # The peer preserves the extended record layout from pinned XNU
+ # ac9718fb1af618d5ce8678d0dc6e8a58f252216f/bsd/sys/dirent.h.
+ header.write_text('#pragma once\nstruct direntry {uint64_t d_ino,d_seekoff;'
+                   'uint16_t d_reclen,d_namlen;uint8_t d_type;char d_name[1024];};\n')
+ # Move the production include ahead of VFS peers which also use the record.
+ # Do not supply it independently: removing it from production must fail.
+ include='#include <sys/dirent.h>'
+ assert source.count(include)==1
+ source=source.replace(include,'',1).replace('/* ADDON_HEADERS */',include)
+ command=['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=undefined','-I',tmp,str(path),'-o',str(exe)]
+ path.write_text(source.replace(include,''))
+ missing=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+ assert missing.returncode and 'direntry' in missing.stderr, 'Missing directory header was not rejected'
+ path.write_text(source)
+ subprocess.run(command,check=True)
  subprocess.run([str(exe)],check=True,env=dict(os.environ,UBSAN_OPTIONS='halt_on_error=1'))

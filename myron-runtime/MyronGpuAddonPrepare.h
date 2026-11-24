@@ -1,5 +1,7 @@
 /* Discover an existing sealed directory entry, instead of assuming an iPad GPU
  * bundle name on the iPhone donor. Its lookup must survive the union mount. */
+#include <sys/dirent.h>
+
 static int
 myron_gpu_sealed_entry(char *path,size_t cap)
 {

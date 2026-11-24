@@ -26,6 +26,32 @@ def apply(d,replace):
         "    if metal:\n        report['adt_properties']+=['GpuAddon']\n"
         "    if startup_probe:\n"
         "        if metal:report['required_boot_arguments']+=['myron-gpu-metal=1']\n")
+    # These tests construct a tiny synthetic kernel without GPU objects. The
+    # real build's component selection must not turn that fixture into a Metal
+    # integration candidate. Scope the override to each test and restore it.
+    p=d/'tests/test_boot_assets.py'
+    replace(p,'import hashlib','import hashlib\nimport os')
+    replace(p,'    def setUp(self):\n',
+        '    def setUp(self):\n'
+        '        environment=patch.dict(os.environ)\n'
+        '        environment.start();self.addCleanup(environment.stop)\n'
+        "        os.environ.pop('MYRON_METAL_ARTIFACT',None)\n")
+    replace(p,'    def test_staging_names_args_and_existing_output(self):',
+        '''    def test_metal_selection_keeps_real_audit_guards(self):
+        self.bind()
+        pins=dict(zip(assets.TRUST_PINS,[data_seed.sha(self.static),data_seed.sha(self.system)]))
+        for packed,message in [('0','qualified packed transport'),
+                               ('1','audited iPhone accelerator objects')]:
+            with self.subTest(packed=packed),patch.object(assets,'TRUST_PINS',pins),patch.dict(os.environ,
+                    MYRON_METAL_ARTIFACT=str(self.work/'unread-component.zip'),MYRON_PACKED_KERNEL=packed):
+                out=self.work/('metal-refused-'+packed)
+                with self.assertRaisesRegex(ValueError,message):
+                    assets.prepare(self.kernel,self.bundle,self.native_path,self.final_path,
+                                   self.static,self.system,out)
+                self.assertFalse((out/'kernel.macho.gpuaddon').exists())
+                self.assertFalse((out/'boot-assets.json').exists())
+
+    def test_staging_names_args_and_existing_output(self):''')
     p=d/'build_payload.py'
     replace(p,'data=bool(assets),trust=bool(assets))',
         "data=bool(assets),trust=bool(assets),addon=bool(assets and assets.get('metal_addon')))")

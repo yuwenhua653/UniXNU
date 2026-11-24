@@ -29,6 +29,10 @@ jobs:
           python-version: '3.12'
       - name: Reconstruct the actual board source
         run: python3 myron27-build.py --source-only
+      - name: Check addon mount and Metal publication on Linux
+        run: |
+          python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-gpu/native/test_metal_publish.py --cxx g++
       - name: Check bounded Data persistence and physical power input
         run: |
           git init "$RUNNER_TEMP/ramblock-runtime"
@@ -67,6 +71,8 @@ jobs:
           persist-credentials: false
       - name: Reconstruct and check actual arm64e display and power boundaries
         run: |
+          python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-gpu/native/test_metal_publish.py --cxx clang++
           python3 myron27-build.py --source-only
           python3 myron-gpu/native/test_display_fences.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx clang++
           python3 myron-runtime/test_power.py --cxx clang++

@@ -15,6 +15,15 @@ source=r'''
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
+// Darwin's SDK already declares user_addr_t (which is not uintptr_t on
+// arm64). Only supply the missing type on non-Darwin hosts.
+#if !defined(__APPLE__)
+typedef uint64_t user_addr_t;
+#endif
+#ifndef CAST_USER_ADDR_T
+#define CAST_USER_ADDR_T(p) ((user_addr_t)(uintptr_t)(p))
+#endif
 #define NULLVP NULL
 #define FREAD 1
 #define O_NOFOLLOW 2
@@ -29,8 +38,7 @@ source=r'''
 #define VNODE_LOOKUP_NOFOLLOW 1
 #define KERN_SUCCESS 0
 #define VM_MAP_KERNEL_FLAGS_ANYWHERE() 0
-#define CAST_USER_ADDR_T(p) ((uintptr_t)(p))
-typedef void *proc_t;typedef uintptr_t user_addr_t;typedef void *vfs_context_t;typedef void *vm_map_t;typedef uintptr_t mach_vm_address_t;
+typedef void *proc_t;typedef void *vfs_context_t;typedef void *vm_map_t;typedef uintptr_t mach_vm_address_t;
 struct node{int type,mount;};typedef struct node *vnode_t;
 static struct node root={VDIR,1},child={VDIR,1};
 struct direntry{uint64_t d_ino;uint16_t d_reclen;char d_name[40];};

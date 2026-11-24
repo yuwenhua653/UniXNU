@@ -36,6 +36,10 @@ jobs:
         run: |
           python3 tests/test_continuous_contract.py
           python3 tests/test_native_diagnostics.py
+      - name: Check GPU addon mount and Metal publication with the macOS SDK
+        run: |
+          python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-gpu/native/test_metal_publish.py --cxx clang++
       - name: Reconstruct source and fetch only pinned geometry references
         shell: python
         run: |
@@ -342,8 +346,6 @@ jobs:
           python3 myron-gpu/audit_userspace_artifact.py "$RUNNER_TEMP/myron-metal-component.zip" \
             --sha256 982b039c9796fc0bd6fb9701780d127f21c39db507dd850b86422de9ff384740 \
             --output "$RUNNER_TEMP/myron-metal-component-audit.json"
-          python3 myron-runtime/test_gpu_addon_mount.py
-          python3 myron-gpu/native/test_metal_publish.py
       - name: Check retained Data byte identity before native compilation
         run: |
           python3 myron27-build.py --source-only

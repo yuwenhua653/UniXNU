@@ -997,6 +997,26 @@ extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
             live.available,live.opens,live.calls,live.selector,live.status,live.mailbox,
             live.inflight,live.submitted,live.retired,live.poisoned);
         if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        if(live.available && used<cap-1) {
+            n=snprintf(out+used,cap-used,
+                "gpu_pool MiB=%u used=%u peak=%u allocs=%u misses=%u scattered=%u spans=%u imports=%u\n"
+                "gpu_wait calls=%llu us=%llu sleeps=%llu max_us=%llu\n",
+                live.pool[0],live.pool[3],live.pool[4],live.pool[1],live.pool[2],live.pool[5],live.pool[6],live.pool[7],
+                (unsigned long long)live.waits[0],(unsigned long long)live.waits[1],
+                (unsigned long long)live.waits[2],(unsigned long long)live.waits[3]);
+            if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        }
+        for(unsigned i=0;live.available && i<5 && used<cap-1;++i) {
+            const uint32_t *c=live.clients[i];
+            n=snprintf(out+used,cap-used,"gpu_client slot=%u live=%u peak=%u refused=%u status=%08x bytes=%u windowMiB=%u\n",
+                i,c[0],c[1],c[2],c[3],c[4],c[5]);
+            if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        }
+        for(unsigned i=0;live.available && i<20 && used<cap-1;++i) {
+            const uint32_t *m=live.methods[i];if(!m[0])continue;
+            n=snprintf(out+used,cap-used,"gpu_method id=%u calls=%u errors=%u status=%08x us32=%u\n",i,m[0],m[1],m[2],m[3]);
+            if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        }
     }
     return used;
 }

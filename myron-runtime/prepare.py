@@ -15,6 +15,8 @@ def apply(root):
     shutil.copyfile(here/'constant-marker.patch',d/'patches/xnuprelink/zzzzz-constant-marker.patch')
     from display_fence import apply as apply_display_fence
     apply_display_fence(d,replace)
+    from display_performance import apply as apply_display_performance
+    apply_display_performance(d,replace)
     from accelerator import apply as apply_accelerator
     apply_accelerator(d,replace)
     shutil.copyfile(here/'platform-power.patch',d/'platform-power.patch')
@@ -57,11 +59,12 @@ prelink=u/'kits/XnuPrelink'""")
         'extern "C" size_t myron_touch_snapshot(char *,size_t);\n'
         'extern "C" size_t myron_staged_apps_snapshot(char *,size_t);\n'
         '#if MYRON_GPU_NATIVE\nextern "C" size_t myron_gpu_snapshot(char *,size_t);\n#endif')
+    replace(u/'MyronBootLog.h','displayRemaining<1024?displayRemaining:1024','displayRemaining<1536?displayRemaining:1536')
     replace(u/'MyronBootLog.h','touchRemaining<256?touchRemaining:256','touchRemaining<768?touchRemaining:768')
     replace(u/'MyronBootLog.h','  const size_t processRemaining=',
         '#if MYRON_GPU_NATIVE\n'
         '  const size_t gpuRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
-        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<1024?gpuRemaining:1024);\n'
+        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<4096?gpuRemaining:4096);\n'
         '#endif\n'
         '  const size_t appsRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
         '  prefix+=(int)myron_staged_apps_snapshot((char *)slot+prefix,appsRemaining<384?appsRemaining:384);\n'

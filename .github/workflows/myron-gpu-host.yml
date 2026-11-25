@@ -10,6 +10,7 @@ on:
       - tests/test_myron_log_worker.py
       - tests/test_myron_runtime_upgrade.py
       - tests/test_myron_data_export.py
+      - tests/test_myron_display_performance.py
       - scripts/build-turnip-darwin.py
       - patches/mesa/turnip-darwin-kmd.patch
       - .github/workflows/myron-gpu-host.yml
@@ -48,7 +49,9 @@ jobs:
           python3 myron-gpu/native/prepare_sources.py \
             --references "$RUNNER_TEMP/gpu-references" --fetch
       - name: Exercise actual display producer fence gate
-        run: python3 myron-gpu/native/test_display_fences.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx g++
+        run: |
+          python3 myron-gpu/native/test_display_fences.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx g++
+          python3 tests/test_myron_display_performance.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx g++
       - name: Exercise portable board and real native backend algorithms
         run: |
           mkdir -p "$RUNNER_TEMP/gpu-checks"

@@ -58,7 +58,7 @@ setup = [ROOT / '.cache/mesa-venv/bin/meson', 'setup', OUT, SOURCE, '--wrap-mode
 if args.target in ('ios', 'ios27'):
     sdk = read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'])
     find = lambda tool: read(['xcrun', '--sdk', 'iphoneos', '--find', tool])
-    flags = ['-target', 'arm64e-apple-ios27.0' if args.target == 'ios27' else 'arm64-apple-ios17.0', '-isysroot', sdk, '-fstack-protector-strong']
+    flags = ['-target', 'arm64e-apple-ios27.0' if args.target == 'ios27' else 'arm64-apple-ios17.0', '-isysroot', sdk, '-fstack-protector-strong', '-gline-tables-only']
     cross = ROOT / ('build/mesa-tu-'+args.target+'.cross')
     cross.parent.mkdir(exist_ok=True)
     cross.write_text(
@@ -125,5 +125,18 @@ library = OUT / 'src/freedreno/vulkan/libvulkan_freedreno.dylib'
 symbols = subprocess.run(['nm', '-gU', str(library)], capture_output=True, text=True).stdout
 if ' T _vk_icdGetInstanceProcAddr' not in symbols:
     sys.exit('The library does not export vk_icdGetInstanceProcAddr')
+if args.target == 'ios27':
+    # Private Turnip functions are stripped from the installed image. Preserve
+    # line tables from this exact build so crash offsets cannot be mistaken for
+    # the nearest public export or symbols from another revision.
+    dsym = OUT / 'libvulkan_freedreno.dylib.dSYM'
+    subprocess.run(['xcrun', 'dsymutil', str(library), '-o', str(dsym)], check=True)
+    dwarf = dsym / 'Contents/Resources/DWARF/libvulkan_freedreno.dylib'
+    if not dwarf.is_file() or not dwarf.stat().st_size:
+        sys.exit('Missing Turnip crash symbols')
+    image_uuid = read(['xcrun', 'dwarfdump', '--uuid', library]).split()[1]
+    debug_uuid = read(['xcrun', 'dwarfdump', '--uuid', dwarf]).split()[1]
+    if image_uuid != debug_uuid:
+        sys.exit('Turnip dSYM UUID differs from runtime library')
 print('PASS: Turnip with the darwin kernel backend builds for %s (%d bytes); no GPU or IOKit service was exercised'
       % (args.target, library.stat().st_size))

@@ -1,0 +1,154 @@
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index 60ad3a8..fe56a2e 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -7761,7 +7761,11 @@ tu_emit_consts(struct tu_cmd_buffer *cmd, bool compute)
+       return (struct tu_draw_state) {};
+ 
+    struct tu_cs cs;
+-   tu_cs_begin_sub_stream(&cmd->sub_cs, dwords, &cs);
++   VkResult result = tu_cs_begin_sub_stream(&cmd->sub_cs, dwords, &cs);
++   if (result != VK_SUCCESS) {
++      vk_command_buffer_set_error(&cmd->vk, result);
++      return (struct tu_draw_state) {};
++   }
+ 
+    if (shared_consts->type == IR3_PUSH_CONSTS_SHARED) {
+       tu6_emit_shared_consts(&cs, shared_consts, cmd->push_constants, compute);
+@@ -8325,6 +8329,8 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
+    if (!BITSET_IS_EMPTY(cmd->vk.dynamic_graphics_state.dirty) ||
+        (cmd->state.dirty & ~TU_CMD_DIRTY_COMPUTE_DESC_SETS)) {
+       dynamic_draw_state_dirty = tu_emit_draw_state<CHIP>(cmd);
++      if (cmd->vk.record_result != VK_SUCCESS)
++         return cmd->vk.record_result;
+    }
+ 
+    /* Primitive restart value works in non-indexed draws, we have to disable
+@@ -8481,8 +8487,11 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
+       }
+    }
+ 
+-   if (dirty & TU_CMD_DIRTY_SHADER_CONSTS)
++   if (dirty & TU_CMD_DIRTY_SHADER_CONSTS) {
+       cmd->state.shader_const = tu_emit_consts<CHIP>(cmd, false);
++      if (cmd->vk.record_result != VK_SUCCESS)
++         return cmd->vk.record_result;
++   }
+ 
+    if (dirty & TU_CMD_DIRTY_DESC_SETS)
+       tu6_emit_descriptor_sets<CHIP>(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS);
+@@ -9394,7 +9403,10 @@ tu_dispatch(struct tu_cmd_buffer *cmd,
+    tu_emit_cache_flush<CHIP>(cmd);
+ 
+    /* note: no reason to have this in a separate IB */
+-   tu_cs_emit_state_ib(cs, tu_emit_consts<CHIP>(cmd, true));
++   struct tu_draw_state consts = tu_emit_consts<CHIP>(cmd, true);
++   if (cmd->vk.record_result != VK_SUCCESS)
++      return;
++   tu_cs_emit_state_ib(cs, consts);
+ 
+    tu_emit_compute_driver_params<CHIP>(cmd, cs, info);
+ 
+diff --git a/src/freedreno/vulkan/tu_pipeline.cc b/src/freedreno/vulkan/tu_pipeline.cc
+index 8b010ed..4f7c7a7 100644
+--- a/src/freedreno/vulkan/tu_pipeline.cc
++++ b/src/freedreno/vulkan/tu_pipeline.cc
+@@ -2823,7 +2823,7 @@ fdm_apply_viewports(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
+    TU_CALLX(cs->device, tu6_emit_viewport)(cs, &vp, &state->rs);
+ }
+ 
+-static void
++static VkResult
+ tu6_emit_viewport_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
+                       const struct vk_viewport_state *vp,
+                       const struct vk_rasterization_state *rs)
+@@ -2842,11 +2842,14 @@ tu6_emit_viewport_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
+    else if (cmd->state.per_layer_viewport)
+       state.vp.viewport_count = cmd->state.max_fdm_layers;
+    unsigned size = TU_CALLX(cmd->device, tu6_viewport_size)(cmd->device, &state.vp, &state.rs);
+-   tu_cs_begin_sub_stream(&cmd->sub_cs, size, cs);
++   VkResult result = tu_cs_begin_sub_stream(&cmd->sub_cs, size, cs);
++   if (result != VK_SUCCESS)
++      return result;
+    tu_create_fdm_bin_patchpoint(cmd, cs, size, TU_FDM_NONE,
+                                 fdm_apply_viewports, state);
+    cmd->state.rp.shared_viewport |= !cmd->state.per_view_viewport &&
+       !cmd->state.program.per_layer_viewport;
++   return VK_SUCCESS;
+ }
+ 
+ static const enum mesa_vk_dynamic_graphics_state tu_scissor_state[] = {
+@@ -2971,7 +2974,7 @@ fdm_apply_scissors(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
+    TU_CALLX(cs->device, tu6_emit_scissor)(cs, &vp);
+ }
+ 
+-static void
++static VkResult
+ tu6_emit_scissor_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
+                      const struct vk_viewport_state *vp)
+ {
+@@ -2988,9 +2991,12 @@ tu6_emit_scissor_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
+    else if (cmd->state.per_layer_viewport)
+       state.vp.scissor_count = cmd->state.max_fdm_layers;
+    unsigned size = TU_CALLX(cmd->device, tu6_scissor_size)(cmd->device, &state.vp);
+-   tu_cs_begin_sub_stream(&cmd->sub_cs, size, cs);
++   VkResult result = tu_cs_begin_sub_stream(&cmd->sub_cs, size, cs);
++   if (result != VK_SUCCESS)
++      return result;
+    tu_create_fdm_bin_patchpoint(cmd, cs, size, TU_FDM_NONE, fdm_apply_scissors,
+                                 state);
++   return VK_SUCCESS;
+ }
+ 
+ static const enum mesa_vk_dynamic_graphics_state tu_sample_locations_state[] = {
+@@ -4173,7 +4179,11 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
+        !(cmd->state.pipeline_draw_states & (1u << id))) {                     \
+       unsigned size = tu6_##name##_size<CHIP>(cmd->device, __VA_ARGS__);      \
+       if (size > 0) {                                                         \
+-         tu_cs_begin_sub_stream(&cmd->sub_cs, size, &cs);                     \
++         VkResult result = tu_cs_begin_sub_stream(&cmd->sub_cs, size, &cs); \
++         if (result != VK_SUCCESS) { \
++            vk_command_buffer_set_error(&cmd->vk, result); \
++            return 0; \
++         } \
+          tu6_emit_##name<CHIP>(&cs, __VA_ARGS__);                             \
+          cmd->state.dynamic_state[id] =                                       \
+             tu_cs_end_draw_state(&cmd->sub_cs, &cs);                          \
+@@ -4189,26 +4199,29 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
+        !(cmd->state.pipeline_draw_states & (1u << id))) {                     \
+       if (cmd->state.has_fdm || cmd->state.per_layer_viewport) {              \
+          tu_cs_set_writeable(&cmd->sub_cs, true);                             \
+-         tu6_emit_##name##_fdm(&cs, cmd, __VA_ARGS__);                        \
++         VkResult result = tu6_emit_##name##_fdm(&cs, cmd, __VA_ARGS__); \
++         if (result != VK_SUCCESS) { \
++            tu_cs_set_writeable(&cmd->sub_cs, false); \
++            vk_command_buffer_set_error(&cmd->vk, result); \
++            return 0; \
++         } \
+          cmd->state.dynamic_state[id] =                                       \
+             tu_cs_end_draw_state(&cmd->sub_cs, &cs);                          \
+          tu_cs_set_writeable(&cmd->sub_cs, false);                            \
+       } else {                                                                \
+          unsigned size = tu6_##name##_size<CHIP>(cmd->device, __VA_ARGS__);   \
+          if (size > 0) {                                                      \
+-            tu_cs_begin_sub_stream(&cmd->sub_cs, size, &cs);                  \
++            VkResult result = tu_cs_begin_sub_stream(&cmd->sub_cs, size, &cs); \
++            if (result != VK_SUCCESS) { \
++               vk_command_buffer_set_error(&cmd->vk, result); \
++               return 0; \
++            } \
+             tu6_emit_##name<CHIP>(&cs, __VA_ARGS__);                          \
+             cmd->state.dynamic_state[id] =                                    \
+                tu_cs_end_draw_state(&cmd->sub_cs, &cs);                       \
+          } else {                                                             \
+             cmd->state.dynamic_state[id] = {};                                \
+          }                                                                    \
+-         tu_cs_begin_sub_stream(&cmd->sub_cs,                                 \
+-                                tu6_##name##_size<CHIP>(cmd->device, __VA_ARGS__),  \
+-                                &cs);                                         \
+-         tu6_emit_##name<CHIP>(&cs, __VA_ARGS__);                             \
+-         cmd->state.dynamic_state[id] =                                       \
+-            tu_cs_end_draw_state(&cmd->sub_cs, &cs);                          \
+       }                                                                       \
+       dirty_draw_states |= (1u << id);                                        \
+    }

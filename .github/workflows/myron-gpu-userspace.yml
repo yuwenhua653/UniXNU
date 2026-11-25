@@ -62,6 +62,8 @@ jobs:
           path: |
             ${{ runner.temp }}/myron-gpu-userspace/userspace-source.json
             ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-plugin27/
+            ${{ runner.temp }}/myron-gpu-userspace/build/mesa-tu-ios27/libvulkan_freedreno.dylib.dSYM/
+            ${{ runner.temp }}/myron-gpu-userspace/build/mesa-tu-ios27/builtin-build-profile.json
             ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-bridge/*.log
             ${{ runner.temp }}/myron-gpu-userspace/build/adreno-metal-bridge/ios27/*.a.json
             ${{ runner.temp }}/myron-gpu-userspace/.cache/*.log

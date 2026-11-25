@@ -102,6 +102,9 @@ def build(root):
         if hashlib.sha256((root/name).read_bytes()).hexdigest() != digest:
             raise ValueError('Resolved source changed: '+name)
     prepare_dependencies(root)
+    # Exercise the exact patched Mesa macros before starting the macOS build.
+    from test_turnip_dynamic_state import check as check_dynamic_state
+    check_dynamic_state(root/'.cache/mesa-work', 'clang++')
     run([sys.executable,root/'scripts/build-turnip-darwin.py','--target','ios27',
          '--native-adreno',root/'drivers/NativeAdreno'],cwd=root)
     run([sys.executable,root/'scripts/build-adreno-metal-plugin.py','--target','ios27','--no-replay'],cwd=root)

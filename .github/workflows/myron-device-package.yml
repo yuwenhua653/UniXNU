@@ -60,6 +60,10 @@ jobs:
               subprocess.run(['git', '-C', str(path), 'fetch', '-q', '--depth', '1', item['url'], item['commit']], check=True)
               subprocess.run(['git', '-C', str(path), 'checkout', '-q', '--detach', 'FETCH_HEAD'], check=True)
               assert subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip() == item['commit']
+      - name: Check GPU snapshot in source and staged build directories
+        run: |
+          python3 myron-gpu/native/test_snapshot.py --cxx clang++
+          python3 "$RUNNER_TEMP/myron-iphone27/device/myron27/gpu/test_snapshot.py" --cxx clang++
       - name: Check patched prelink constant layout before the full build
         run: |
           python3 tests/check_myron_prelink_layout.py \

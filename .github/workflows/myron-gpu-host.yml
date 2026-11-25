@@ -7,6 +7,8 @@ on:
       - myron-runtime/**
       - myron-touch/**
       - myron27-build.py
+      - tests/test_myron_log_worker.py
+      - tests/test_myron_runtime_upgrade.py
       - scripts/build-turnip-darwin.py
       - patches/mesa/turnip-darwin-kmd.patch
       - .github/workflows/myron-gpu-host.yml
@@ -52,6 +54,9 @@ jobs:
           python3 myron-gpu/native/check_native_host.py \
             --references "$RUNNER_TEMP/gpu-references" --cc gcc --cxx g++ \
             --output "$RUNNER_TEMP/gpu-checks/native-host.json"
+          python3 "$RUNNER_TEMP/myron-iphone27/device/myron27/gpu/check_native_host.py" \
+            --references "$RUNNER_TEMP/gpu-references" --cc gcc --cxx g++ \
+            --output "$RUNNER_TEMP/gpu-checks/staged-native-host.json"
           python3 myron-gpu/native/test_userspace.py --references "$RUNNER_TEMP/gpu-references" \
             --cxx g++ > "$RUNNER_TEMP/gpu-checks/userspace-abi.json"
           python3 tests/test_native_diagnostics.py

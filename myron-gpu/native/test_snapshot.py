@@ -7,6 +7,11 @@ import tempfile
 
 p=argparse.ArgumentParser();p.add_argument('--cxx',default='c++');a=p.parse_args()
 here=Path(__file__).resolve().parent
+# The source tree keeps board headers above native/; the build stages both
+# the board header and this test together in device/myron27/gpu/.
+board_headers=here if (here/'MyronGpuBoard.h').is_file() else here.parent
+if not (board_headers/'MyronGpuBoard.h').is_file():
+ raise FileNotFoundError('Missing real MyronGpuBoard.h in source or staged GPU directory')
 source=(here/'MyronGpuService.cpp').read_text()
 start=source.index('extern "C" size_t myron_gpu_snapshot(')
 body=source[start:source.index('extern "C" void myron_gpu_run',start)]
@@ -46,5 +51,5 @@ int main(){
 '''.replace('MODE7',mode7).replace('BODY',body)
 with tempfile.TemporaryDirectory() as tmp:
  src=Path(tmp)/'snapshot.cpp';exe=Path(tmp)/'snapshot';src.write_text(fixture)
- subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined','-I',here.parent,src,'-o',exe],check=True)
+ subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined','-I',board_headers,src,'-o',exe],check=True)
  subprocess.run([exe],check=True)

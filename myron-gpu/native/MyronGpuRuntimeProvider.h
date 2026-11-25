@@ -6,6 +6,7 @@ extern volatile uint32_t native_adreno_pool_stats[8];
 extern volatile uint32_t native_adreno_client_stats[5][6];
 extern volatile uint32_t native_adreno_method_stats[20][4];
 extern volatile uint64_t native_adreno_wait_outer[4];
+extern volatile uint32_t myron_gpu_overflow_stats[4];
 }
 extern "C" void myron_gpu_runtime(MyronGpuRuntime *out)
 {
@@ -26,6 +27,11 @@ extern "C" void myron_gpu_runtime(MyronGpuRuntime *out)
     for(unsigned i=0;i<20;++i)for(unsigned j=0;j<4;++j)
         out->methods[i][j]=__atomic_load_n(&native_adreno_method_stats[i][j],__ATOMIC_RELAXED);
     for(unsigned i=0;i<4;++i)out->waits[i]=__atomic_load_n(&native_adreno_wait_outer[i],__ATOMIC_RELAXED);
+    for(unsigned i=0;i<4;++i)out->overflow[i]=__atomic_load_n(&myron_gpu_overflow_stats[i],__ATOMIC_RELAXED);
+    static_assert(sizeof(out->owners)==sizeof(native_adreno_client_log),"client diagnostic layout");
+    static_assert(sizeof(out->failures)==sizeof(native_adreno_client_text),"failure diagnostic layout");
+    memcpy(out->owners,native_adreno_client_log,sizeof(out->owners));
+    memcpy(out->failures,native_adreno_client_text,sizeof(out->failures));
     if(g.ring){
         out->submitted=g.ring->lastSubmitted();out->retired=g.ring->completedFence();
         out->poisoned=g.ring->poisoned();

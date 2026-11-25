@@ -64,7 +64,7 @@ prelink=u/'kits/XnuPrelink'""")
     replace(u/'MyronBootLog.h','  const size_t processRemaining=',
         '#if MYRON_GPU_NATIVE\n'
         '  const size_t gpuRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
-        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<4096?gpuRemaining:4096);\n'
+        '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<6144?gpuRemaining:6144);\n'
         '#endif\n'
         '  const size_t appsRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
         '  prefix+=(int)myron_staged_apps_snapshot((char *)slot+prefix,appsRemaining<384?appsRemaining:384);\n'

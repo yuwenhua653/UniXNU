@@ -59,12 +59,12 @@ def stage(references, destination):
     text = replace(text, 'PoolExtent free[512];unsigned count=0;',
                    'PoolExtent free[5 * 4096 + 1];unsigned count=0;')
     text = replace(text, 'if(pool.count>=512)', 'if(pool.count>=5 * 4096 + 1)')
-    # BOs must stay inside the bounded reservation, including when fragmented.
-    # Internal ring/table allocations pass pooled=false and remain independent.
-    text = replace(text, '    IOOptionBits options=static_cast<IOOptionBits>(kIODirectionInOut)',
-                   '    if(pooled)return kIOReturnNoResources;\n'
-                   '    IOOptionBits options=static_cast<IOOptionBits>(kIODirectionInOut)')
+    from memory_pressure import patch as patch_memory_pressure
+    text = patch_memory_pressure(text, replace)
     path.write_text(text)
+    path = adreno/'NativeAdrenoMemory.h'
+    path.write_text(replace(path.read_text(), '    size_t pool_offset_=0;',
+        '    size_t pool_offset_=0,overflow_bytes_=0;'))
     path = adreno/'NativeAdrenoGpuContext.cpp'
     text = replace(path.read_text(),
                    '    if(!status)status=tables_.allocate(',

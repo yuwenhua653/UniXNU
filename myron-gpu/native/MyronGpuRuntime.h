@@ -6,5 +6,8 @@ struct MyronGpuRuntime {
     uint32_t submitted, retired, poisoned;
     uint32_t pool[8], clients[5][6], methods[20][4];
     uint64_t waits[4];
+    uint32_t overflow[4];
+    struct Client {char name[20]; uint32_t opens,refused,closes,slot,peak_mib,last_refusal;} owners[8];
+    struct Failure {char name[20],text[64];} failures[4];
 };
 extern "C" void myron_gpu_runtime(MyronGpuRuntime *);

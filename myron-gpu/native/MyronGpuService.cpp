@@ -1017,6 +1017,22 @@ extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
             n=snprintf(out+used,cap-used,"gpu_method id=%u calls=%u errors=%u status=%08x us32=%u\n",i,m[0],m[1],m[2],m[3]);
             if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
         }
+        if(live.available && used<cap-1) {
+            n=snprintf(out+used,cap-used,"gpu_overflow bytes=%u peak=%u grants=%u refused=%u limit=%u\n",
+                live.overflow[0],live.overflow[1],live.overflow[2],live.overflow[3],unsigned(MYRON_GPU_OVERFLOW_BYTES));
+            if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        }
+        for(unsigned i=0;live.available && i<8 && used<cap-1;++i) {
+            const auto &c=live.owners[i];if(!c.name[0])continue;
+            n=snprintf(out+used,cap-used,"gpu_owner name=%.20s opens=%u refused=%u closes=%u slot=%u peakMiB=%u status=%08x\n",
+                c.name,c.opens,c.refused,c.closes,c.slot,c.peak_mib,c.last_refusal);
+            if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        }
+        for(unsigned i=0;live.available && i<4 && used<cap-1;++i) {
+            const auto &c=live.failures[i];if(!c.name[0])continue;
+            n=snprintf(out+used,cap-used,"gpu_failure name=%.20s text=%.64s\n",c.name,c.text);
+            if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+        }
     }
     return used;
 }

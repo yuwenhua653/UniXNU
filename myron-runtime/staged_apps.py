@@ -75,7 +75,15 @@ def source(addon, plan_path):
         f'\t\tif (length < 0 || native_staged_apps_bytes + (uint64_t)length > UINT64_C({BUDGET})) {{ error=ENOSPC; break; }}')
     replace('\tconst uint32_t chunk = 1024 * 1024;',
         '\t/* Leave room for APFS transactions and user settings; no partial disk fill. */\n'
+        '\t/* Refresh the mounted filesystem before trusting its cached capacity. */\n'
+        '\tconst struct vfsstatfs *cached_space = vfs_statfs(data_mount);\n'
+        '\tmyron_apps_cached_mib = myron_apps_space_mib(cached_space);\n'
+        '\tmyron_apps_stat_error = vfs_update_vfsstat(data_mount, ctx, VFS_KERNEL_EVENT);\n'
+        '\tif (myron_apps_stat_error) {\n'
+        '\t\tnative_staged_apps_fail(myron_apps_stat_error); native_staged_apps_stage=-4; vnode_put(vp); return;\n\t}\n'
         '\tconst struct vfsstatfs *space = vfs_statfs(data_mount);\n'
+        '\tmyron_apps_available_mib = myron_apps_space_mib(space);\n'
+        f'\tmyron_apps_required_mib = (UINT64_C({policy["allocation_bytes"]+RESERVE}) + 1048575)/1048576;\n'
         f'\tif (!space || space->f_bsize <= 0 || space->f_bavail <= 0 || (uint64_t)space->f_bavail < (UINT64_C({policy["allocation_bytes"]+RESERVE}) + space->f_bsize-1)/space->f_bsize) {{\n'
         '\t\tnative_staged_apps_fail(ENOSPC); native_staged_apps_stage=-3; vnode_put(vp); return;\n\t}\n'
         '\tconst uint32_t chunk = 1024 * 1024;')
@@ -83,6 +91,15 @@ def source(addon, plan_path):
     # Preserve any userland-modified record, all SetupDone state and all keys.
     expected=plistlib.dumps(volume.desktop_preferences()['com.apple.migration'],fmt=plistlib.FMT_BINARY)
     helper='''static volatile int myron_apps_migration_result;
+static uint64_t myron_apps_cached_mib, myron_apps_available_mib, myron_apps_required_mib;
+static int myron_apps_stat_error;
+static uint64_t myron_apps_space_mib(const struct vfsstatfs *space)
+{
+    if (!space || space->f_bsize <= 0 || space->f_bavail <= 0) return 0;
+    uint64_t blocks=(uint64_t)space->f_bavail, block_bytes=(uint64_t)space->f_bsize;
+    if (blocks > UINT64_MAX/block_bytes) return UINT64_MAX/1048576;
+    return blocks*block_bytes/1048576;
+}
 /* 0 not reached, 1 absent, 2 exact synthetic record removed, 3 changed record
  * preserved; negative values are the actual failed operation's errno. */
 static int
@@ -142,9 +159,12 @@ myron_staged_apps_prepare(proc_t p, mount_t data_mount)
 size_t myron_staged_apps_snapshot(char *out,size_t cap)
 {
     if(!out || !cap)return 0;
-    int n=snprintf(out,cap,"[myron apps] stage=%d files=%d MiB=%d failed=%d error=%d migration=%d path=%.95s\\n",
+    int n=snprintf(out,cap,"[myron apps] stage=%d files=%d MiB=%d failed=%d error=%d migration=%d path=%.95s\\n"
+        "apps_space cachedMiB=%llu freeMiB=%llu needMiB=%llu stat_error=%d\\n",
         native_staged_apps_stage,native_staged_apps_files,native_staged_apps_mib,
-        native_staged_apps_failed,native_staged_apps_error,myron_apps_migration_result,native_staged_apps_path);
+        native_staged_apps_failed,native_staged_apps_error,myron_apps_migration_result,native_staged_apps_path,
+        (unsigned long long)myron_apps_cached_mib,(unsigned long long)myron_apps_available_mib,
+        (unsigned long long)myron_apps_required_mib,myron_apps_stat_error);
     return n<0?0:((size_t)n<cap?(size_t)n:cap-1);
 }
 '''

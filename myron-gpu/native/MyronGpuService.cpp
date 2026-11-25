@@ -165,7 +165,7 @@ struct Mode7 {
     int ran;
     unsigned writes, io_errors;          // GPU register writes made, accesses refused by the window check
     uint32_t gbif_halt, rbbm_gbif_halt;  // the read-backs hw_init makes after releasing the halts
-    unsigned checked, matched;           // written registers read back / equal to what was written
+    unsigned checked, matched;           // readbacks / equal to the register-specific expectation
     uint32_t bad_reg, bad_got, bad_want; // the first that differs: dword offset | pipe << 20
     uint32_t bad2_reg, bad2_got, bad2_want;   // and the second
     uint32_t status, int0, cp_int;       // RBBM_STATUS, RBBM_INT_0_STATUS, CP_INTERRUPT_STATUS_GLOBAL afterwards
@@ -469,7 +469,7 @@ void mode7() {
     for (unsigned i = 0; i < MYRON_A840_PROTECT_COUNT; ++i) check(A840_PIPE_NONE, A840_CP_PROTECT_GLOBAL(i), MyronA840Protect[i]);
     check(A840_PIPE_NONE, A840_RBBM_INT_0_MASK, 0);
     check(A840_PIPE_NONE, A840_CP_INTERRUPT_STATUS_MASK_GLOBAL, MYRON_A8XX_CP_GLOBAL_INT_MASK);
-    check(A840_PIPE_NONE, A840_RBBM_PERFCTR_GPU_BUSY_MASKED, 0xffffffffu);
+    check(A840_PIPE_NONE, A840_RBBM_PERFCTR_GPU_BUSY_MASKED, MYRON_A840_GPU_BUSY_READBACK);
     check(A840_PIPE_NONE, A840_UCHE_TRAP_BASE, uint32_t(kUcheTrapBase));
     check(A840_PIPE_NONE, A840_UCHE_TRAP_BASE + 1, uint32_t(kUcheTrapBase >> 32));
     check(A840_PIPE_NONE, A840_UCHE_CCHE_GC_GMEM_RANGE_MIN, uint32_t(kGmemRangeMin));
@@ -977,10 +977,16 @@ extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
     if(complete && used<cap-1) {
         n=snprintf(out+used,cap-used,
             "gpu_init ran=%u io_errors=%u checked=%u matched=%u slices=%08x chip=%08x smmu=%u\n"
-            "gpu_bad1 reg=%08x got=%08x want=%08x bad2 reg=%08x got=%08x want=%08x\n",
+            "gpu_bad1 reg=%08x got=%08x want=%08x bad2 reg=%08x got=%08x want=%08x\n"
+            "gpu_cp ctx=%08x buf=%08x sqe_alloc=%08x sqe_map=%08x ring=%08x init=%08x wait=%d fence=%u/%u\n"
+            "gpu_run write_wait=%d secure_wait=%d nop_wait=%d timer=%08x publish=%08x zap_auth=%lld\n",
             unsigned(gM7.ran),gM7.io_errors,gM7.checked,gM7.matched,gM7.slices,
             mg_a840_chip_id(gM7.slices,!gM7.ran || gM7.io_errors),unsigned(gSmmu.va!=0),
-            gM7.bad_reg,gM7.bad_got,gM7.bad_want,gM7.bad2_reg,gM7.bad2_got,gM7.bad2_want);
+            gM7.bad_reg,gM7.bad_got,gM7.bad_want,gM7.bad2_reg,gM7.bad2_got,gM7.bad2_want,
+            uint32_t(gM8.ctx_status),uint32_t(gM8.buf_status),uint32_t(gM8.sqe_alloc),uint32_t(gM8.sqe_map),
+            uint32_t(gM10.ring_attach),uint32_t(gM10.cp_init),gM10.init_wait,gM10.init_seen,gM10.init_fence,
+            gM10.write_wait,gM10.secure_wait,gM10.nop_wait,uint32_t(gM10.timer),uint32_t(gM10.publish),
+            (long long)gM9.auth);
         if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
     }
     return used;

@@ -19,6 +19,58 @@ import reuse_data_seed as seed
 import prepare_data_volume as volume
 
 class Upgrade(unittest.TestCase):
+    def test_app_capacity_refreshes_stale_mount_cache_before_copy(self):
+        upstream=(Path(__file__).parent/'fixtures/myron-staged-apps-upstream.c').read_text()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);plan=root/'plan.json'
+            plan.write_text(json.dumps(dict(build='24A446',selected=['MobileNotes.app'],allocation_bytes=20<<20)))
+            code=apps.source(upstream,plan)
+            start=code.index('static uint64_t myron_apps_cached_mib')
+            helpers=code[start:code.index('/* 0 not reached',start)]
+            start=code.index('\t/* Refresh the mounted filesystem')
+            guard=code[start:code.index('\tconst uint32_t chunk =',start)]
+            shim=r'''
+#include <stdint.h>
+#include <stddef.h>
+#include <errno.h>
+#include <assert.h>
+struct vfsstatfs { int32_t f_bsize; uint64_t f_bavail; };
+static struct vfsstatfs cache,fresh;
+static int updates,put_calls,entered,refresh_error,native_staged_apps_stage,last_error;
+#define VFS_KERNEL_EVENT 1
+static const struct vfsstatfs *vfs_statfs(void *m){assert(!m);return &cache;}
+static int vfs_update_vfsstat(void *m,void *ctx,int event){
+ assert(!m&&!ctx&&event==VFS_KERNEL_EVENT);updates++;
+ if(refresh_error)return refresh_error;
+ cache=fresh;return 0;
+}
+static void vnode_put(void *vp){assert(!vp);put_calls++;}
+static void native_staged_apps_fail(int e){last_error=e;}
+HELPERS
+static void prepare(void){void *data_mount=NULL,*ctx=NULL,*vp=NULL;
+GUARD
+ entered++;
+}
+static void reset(void){cache=(struct vfsstatfs){4096,0};fresh=(struct vfsstatfs){4096,262144};
+ updates=put_calls=entered=refresh_error=native_staged_apps_stage=last_error=0;
+ myron_apps_cached_mib=myron_apps_available_mib=myron_apps_required_mib=0;myron_apps_stat_error=0;}
+int main(void){
+ reset();prepare();assert(updates==1&&entered==1&&!put_calls&&!last_error);
+ assert(myron_apps_cached_mib==0&&myron_apps_available_mib==1024&&myron_apps_required_mib==404);
+ reset();cache.f_bavail=262144;fresh.f_bavail=1;prepare();
+ assert(updates==1&&!entered&&put_calls==1&&last_error==ENOSPC&&native_staged_apps_stage==-3);
+ reset();refresh_error=EIO;prepare();assert(!entered&&put_calls==1&&last_error==EIO&&native_staged_apps_stage==-4);
+ reset();fresh.f_bavail=(404u<<20)/4096;prepare();assert(entered&&!last_error);
+ reset();fresh.f_bavail=(404u<<20)/4096-1;prepare();assert(!entered&&last_error==ENOSPC);
+ reset();fresh.f_bsize=0;prepare();assert(!entered&&last_error==ENOSPC);
+ reset();fresh.f_bavail=0;prepare();assert(!entered&&last_error==ENOSPC);
+ return 0;
+}
+'''.replace('HELPERS',helpers).replace('GUARD',guard)
+            src=root/'space.c';src.write_text(shim);exe=root/'space'
+            subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(src),'-o',str(exe)],check=True)
+            subprocess.run([str(exe)],check=True)
+
     def test_actual_migration_preserves_user_preferences_and_propagates_errors(self):
         fixture=Path(__file__).parent/'fixtures'
         with tempfile.TemporaryDirectory() as tmp:

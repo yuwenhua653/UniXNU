@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run the actual mode7 sequence; model the documented gen8.2 register readback.
 
-No GPU execution. The old full-word check must fail under the SM8850 peer;
-correcting its write, without masking reads, must pass. All other errors fail.
+No GPU execution. Reproduce both the legacy UBWC6 write and the real myron
+busy-mask readback failure. Corrected register contracts still check full words.
 """
 import argparse, subprocess, tempfile
 from pathlib import Path
@@ -39,6 +39,8 @@ int grd(void*,unsigned win,uint32_t off,uint32_t*out){
  // Same-SoC successful GPU record: RB_CMP bits 1-2 do not read back as 1.
  // KGSL UBWC6 initializes both corresponding feature fields to zero.
  if(selected==A840_PIPE_BR && off==A840_RB_CMP_NC_MODE_CNTL*4)*out&=~6u;
+ // myron register peer: the all-ones write reads back only ten bits.
+ if(selected==A840_PIPE_NONE && off==A840_RBBM_PERFCTR_GPU_BUSY_MASKED*4)*out&=0x3ffu;
  if(off==badReg*4)*out^=flipBit;
  return 0;
 }
@@ -47,7 +49,13 @@ bool cpPrerequisite(){PREREQ return true;}
 void reset(){gM7={};gM6={9,0};gSmmu.va=1;regs.clear();selected=writeCount=badReg=flipBit=0;ioFail=0;}
 int main(){
  reset();mode7();
-#if LEGACY
+#if LEGACY == 2
+ assert(gM7.ran && !gM7.io_errors && !cpPrerequisite());
+ assert(gM7.checked==118 && gM7.matched==117);
+ assert(gM7.bad_reg==A840_RBBM_PERFCTR_GPU_BUSY_MASKED);
+ assert(gM7.bad_got==0x3ff && gM7.bad_want==0xffffffffu);
+ puts("PASS negative: real myron 0x19e readback reproduces pre-CP refusal");
+#elif LEGACY == 1
  assert(gM7.ran && !gM7.io_errors && !cpPrerequisite());
  assert(gM7.checked==118 && gM7.matched==117);
  assert(gM7.bad_reg==((A840_PIPE_BR<<20)|A840_RB_CMP_NC_MODE_CNTL));
@@ -56,9 +64,10 @@ int main(){
 #else
  assert(cpPrerequisite() && gM7.checked==118 && gM7.matched==118);
  assert(regs[(uint64_t(A840_PIPE_BR)<<32)|A840_RB_CMP_NC_MODE_CNTL*4]==0x28040);
+ assert(regs[A840_RBBM_PERFCTR_GPU_BUSY_MASKED*4]==0xffffffffu);
  for(unsigned i=0;i<20;++i)assert(regs[(MYRON_A840_BICUBIC_BASE+i)*4]==MyronA840Bicubic[i]);
  const uint32_t checkedRegs[]={A840_RB_CMP_NC_MODE_CNTL,A840_CP_PROTECT_GLOBAL(0),A840_RBBM_INT_0_MASK,
-                   A840_UCHE_TRAP_BASE};
+                   A840_UCHE_TRAP_BASE,A840_RBBM_PERFCTR_GPU_BUSY_MASKED};
  for(uint32_t reg:checkedRegs) {
   for(unsigned bit=0;bit<32;++bit){
    reset();badReg=reg;flipBit=1u<<bit;mode7();
@@ -70,13 +79,15 @@ int main(){
  reset();gM6.step=8;mode7();assert(!gM7.ran && !writeCount && !cpPrerequisite());
  reset();gM6.pwr_after=1;mode7();assert(!gM7.ran && !writeCount && !cpPrerequisite());
  reset();mode7();gSmmu.va=0;assert(!cpPrerequisite());
- puts("PASS: actual hw_init, UBWC6 and 20 bicubic writes; 128 bit corruptions and IO/power/SMMU faults still refuse CP");
+ puts("PASS: actual hw_init, UBWC6 and busy-mask readback; 160 bit corruptions and IO/power/SMMU faults still refuse CP");
 #endif
 }
 '''.replace('STATE',state).replace('PREREQ',prereq)
 with tempfile.TemporaryDirectory() as tmp:
- for legacy in (0,1):
-  body=code.replace('MYRON_A840_RB_CMP_UBWC6','A840_UBWC_RB_CMP_NC_MODE_CNTL') if legacy else code
+ for legacy in (0,1,2):
+  body=code
+  if legacy==1:body=body.replace('MYRON_A840_RB_CMP_UBWC6','A840_UBWC_RB_CMP_NC_MODE_CNTL')
+  if legacy==2:body=body.replace('MYRON_A840_GPU_BUSY_READBACK','0xffffffffu')
   src=Path(tmp)/'test.cpp';out=Path(tmp)/'test';src.write_text(fixture.replace('CODE',body))
   subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined',f'-DLEGACY={legacy}','-I',HERE,src,'-o',out],check=True)
   subprocess.run([out],check=True)

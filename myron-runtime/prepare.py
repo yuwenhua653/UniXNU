@@ -64,7 +64,7 @@ prelink=u/'kits/XnuPrelink'""")
         '  prefix+=(int)myron_gpu_snapshot((char *)slot+prefix,gpuRemaining<768?gpuRemaining:768);\n'
         '#endif\n'
         '  const size_t appsRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
-        '  prefix+=(int)myron_staged_apps_snapshot((char *)slot+prefix,appsRemaining<256?appsRemaining:256);\n'
+        '  prefix+=(int)myron_staged_apps_snapshot((char *)slot+prefix,appsRemaining<384?appsRemaining:384);\n'
         '  const size_t processRemaining=')
 
     # This board owns a state-only service and has no keybag/passcode support.

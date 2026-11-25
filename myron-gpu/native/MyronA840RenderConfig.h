@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 #pragma once
 #include <stdint.h>
+// myron 0x44050a31: KGSL writes all ones to the busy-counter mask, but
+// the device readback is 0x3ff. Keep that upstream
+// write and compare the entire returned word, including unexpected high bits.
+#define MYRON_A840_GPU_BUSY_READBACK 0x000003ffu
 // SM8850 KGSL gen8_start, UBWC 6.0: mode2=5, yuvnotcomptofc=1,
 // amsbc=rgb565_predicator=rgba8888_lossless=fp16compoptdis=0, MAL=32.
 // RB_CMP bits 1/2 are compression features, NOT RB_CCU's bank-bit fields.

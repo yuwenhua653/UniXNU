@@ -26,6 +26,8 @@ def main():
     results = {}
     results['hwinit'] = subprocess.check_output([sys.executable,HERE/'test_hwinit.py',
                                                  '--cxx',a.cxx],text=True).strip()
+    results['snapshot'] = subprocess.check_output([sys.executable,HERE/'test_snapshot.py',
+                                                   '--cxx',a.cxx],text=True).strip()
     results['metal_publication'] = subprocess.check_output([sys.executable,HERE/'test_metal_publish.py',
                                                             '--cxx',a.cxx],text=True).strip()
     for name in ('publish_lifecycle', 'publish_views', 'publish_open'):

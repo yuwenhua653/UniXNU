@@ -44,6 +44,8 @@ static int displaySnapshots,keystoreSnapshots,gpuSnapshots;
 static bool sawApps;
 static volatile int native_staged_apps_stage=3,native_staged_apps_files=5,native_staged_apps_mib=6;
 static volatile int native_staged_apps_failed=0,native_staged_apps_error=0,myron_apps_migration_result=2;
+static uint64_t myron_apps_cached_mib=0,myron_apps_available_mib=1024,myron_apps_required_mib=390;
+static int myron_apps_stat_error=0;
 static char native_staged_apps_path[]="/private/var/staged_system_apps/Calculator.app";
 extern "C" {
 /* ACTUAL_APPS_SNAPSHOT */
@@ -91,12 +93,14 @@ extern "C" void bsd_log_unlock(){assert(locked);locked=0;}
 #include "worker.h"
 extern "C" {struct msgbuf *msgbufp;}
 int main() {
- for(size_t cap=0;cap<=256;++cap) {
-  char out[258];memset(out,0x55,sizeof out);
+ for(size_t cap=0;cap<=384;++cap) {
+  char out[386];memset(out,0x55,sizeof out);
   size_t used=myron_staged_apps_snapshot(out,cap);
   assert(used<cap || (!cap && !used));assert(out[cap]==0x55);
   if(cap)assert(out[used]==0);
  }
+ char capacity[384];myron_staged_apps_snapshot(capacity,sizeof capacity);
+ assert(strstr(capacity,"apps_space cachedMiB=0 freeMiB=1024 needMiB=390 stat_error=0"));
  char ring[]="message ring";struct msgbuf m={MSG_MAGIC,(int)sizeof ring,0,0,ring};msgbufp=&m;
  for(scenario=0;scenario<=8;++scenario) {
   gHost={true,false,nullptr};gStoreGeometry={true,67108864ULL,256,65791};

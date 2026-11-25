@@ -23,6 +23,7 @@ static int hostSyncCache(){assert(!locked);++syncs;return 0;}
 #include "MyronDataStore.h"
 int main(){
  uint64_t first=0;const char *why=nullptr;
+ assert(!myronDataProbeCapacity(nullptr,0,nullptr,&first));
  legacyMode=2;assert(!myron_data_store_open(262153,&first,&why)&&!opened);legacyMode=0;
  gptError=1;assert(!myron_data_store_open(262153,&first,&why)&&!opened);gptError=0;
  assert(myronDataFailed);myronDataFailed=false; // simulate a new boot

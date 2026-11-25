@@ -1,9 +1,9 @@
 # Preserving myron Data while growing APFS
 
-Status: offline migration-image preparation and the pre-mount device-copy core
-are implemented and host-tested. Neither is wired to an installer or a boot
-trigger yet. The phone's filesystem has not been expanded. No user data is a
-public build input.
+Status: offline migration-image preparation, the pre-mount device-copy core,
+and committed-copy capacity selection are implemented and host-tested. Copying
+is not wired to an installer or a boot trigger yet. The phone's filesystem has
+not been expanded. No user data is a public build input.
 
 The retained seed is 1 GiB. Its SHA256 is also the identity of the persistent
 overlay. Replacing it with a larger empty seed, or restoring an earlier export,
@@ -50,10 +50,13 @@ The remaining device integration must be completed before offering installation:
    readiness last. Never overwrite the original extent or GPT. If the final
    marker write/sync fails, treat its commit state as uncertain and re-read it
    before any selection; do not assume a failed call permits old-data fallback.
-3. Teach the block provider to select that exact committed extent, present the
-   larger capacity and treat pages beyond the original seed as zero. Preserve
-   the seed identity and refuse corrupt committed metadata instead of silently
-   returning to a stale copy. The current provider is still limited to 2 GiB.
+3. Qualify the new block-provider path on arm64e and hardware. It now selects
+   the exact committed extent before publication, extends only the seed pointer
+   index to 4 GiB (8 MiB of pointer storage), and preserves the original seed
+   hash. The mount gate accepts this size only after the storage layer validates
+   and opens the selected overlay. It refuses damaged metadata rather than
+   returning to an old copy. Before deploying, confirm the destination marker
+   is blank or a recognized migration marker; unknown contents fail closed.
 4. Run a trusted, narrowly scoped helper on the phone. Resolve the physical
    store through the actual Data volume and confirm it belongs to NativeRamBlock
    before calling Apple's APFS resize function. No disk0/GPT resizing is needed.
@@ -70,3 +73,29 @@ on this iOS 27 port. Helper launch, signing/trust and runtime validation are
 still required.
 
 Reference: https://github.com/OrchardLinux/resize-apfs
+
+Capacity follow-up: `test_data_start.py` compiles and executes the actual
+transformed RamBlock start method with substituted IOKit/hash APIs. It verifies
+hashing precedes selection/publication and allocation/probe errors prevent
+publication. `test_data_capacity.cpp` exercises actual store callbacks and
+DirectDisk across the 1 GiB boundary and at the 4 GiB end, including allocation
+failure, corrupt/foreign metadata and poisoned transport. The existing actual
+generated Data-mount C fixture also accepts an authorized 4 GiB provider and
+rejects unauthorized capacity, wrong hash and an 8 GiB size.
+
+The read-only exporter now selects the active original or expanded overlay,
+validates its matching bitmap size and rechecks selection at completion. It
+cannot export the stale retained original after recognizing a ready expanded
+copy. Eleven export tests pass, together with the five offline-image tests.
+Previously distributed export tools remain limited to 1 GiB; replace them before
+activating growth. No test here establishes successful APFS container resize.
+
+Seed identity is now supplied from the local original `data-seed.json` contract,
+not a hard-coded device fingerprint in public source. Both utilities accept
+`--seed-contract`; the exporter defaults to a companion `data-seed.json`, while
+the offline image preparer requires that argument explicitly. The contract
+must describe the original 1 GiB seed. A missing/invalid contract stops before
+device I/O, and the actual overlay must still match its expected hash. Package
+assembly must carry the original private contract alongside the deployment;
+do not derive the expected hash from whatever overlay happens to be read.
+New capacity and export fixtures use synthetic geometry and seed identities.

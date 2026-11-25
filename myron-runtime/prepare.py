@@ -171,5 +171,7 @@ prelink=u/'kits/XnuPrelink'""")
     apply_gpu_addon(d,replace)
     from metal_payload_integration import apply as apply_metal_payload
     apply_metal_payload(d,replace)
+    from data_capacity import apply as apply_data_capacity
+    apply_data_capacity(root,replace)
 
 if __name__=='__main__':apply(Path(sys.argv[1]))

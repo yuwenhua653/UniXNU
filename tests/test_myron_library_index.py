@@ -1,4 +1,5 @@
 import importlib.util,json,tempfile,unittest
+from unittest import mock
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('index',Path(__file__).resolve().parents[1]/'myron27-library-index.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -37,4 +38,21 @@ class IndexTests(unittest.TestCase):
   calls=[];c.describe=lambda address,window:calls.append((address,window)) or {'address':address}
   with tempfile.TemporaryDirectory() as d:m.write_index(c,Path(d)/'x.json')
   self.assertEqual(calls,[(c.images[0]['address'],128)])
+ def test_posterboard_uuid_and_exact_function_boundaries(self):
+  base=0x180000000;c=Cache()
+  c.images=[dict(path='/System/Library/PrivateFrameworks/PosterBoard.framework/PosterBoard',
+   uuid='2ce463af35a63164ac6cb7a007e81d10',address=base,size=0x300000)]
+  starts=sorted(base+x for x in (0x6a400,0x6a500,0x6be00,0x6bf00,0x266800,0x266900))
+  c.macho=lambda image:dict(starts=starts)
+  c.symbols=lambda image,strict:[(base+0x6a400,'_exact','test'),(base+0x6b000,'_unrelated_nearest','test')]
+  with tempfile.TemporaryDirectory() as d,mock.patch.object(m,'setup_method_flow',return_value=[]) as flow:
+   path=Path(d)/'poster.json';m.write_posterboard_queries(c,path);report=json.loads(path.read_text())
+   self.assertEqual(flow.call_count,3)
+   self.assertEqual(report['sites'][1]['exact_start_names'],[])
+   self.assertEqual(report['sites'][2]['exact_start_names'],['_exact'])
+   self.assertTrue(all(row['window_bytes']<=224 for row in report['sites']))
+   self.assertFalse(report['raw_image_bytes_exported'])
+   c.images[0]['uuid']='wrong'
+   with self.assertRaisesRegex(ValueError,'UUID'):m.write_posterboard_queries(c,Path(d)/'bad.json')
+   self.assertFalse((Path(d)/'bad.json').exists())
 if __name__=='__main__':unittest.main()

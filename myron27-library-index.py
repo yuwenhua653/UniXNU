@@ -343,6 +343,32 @@ def write_async_options(cache, image, starts, names, path):
  path.with_name('hosted-context-options.json').write_text(json.dumps(dict(events=events,possible_writers={hex(k):v for k,v in uses.items()}),indent=2)+'\n')
  path.write_text(json.dumps(dict(uuid=image['uuid'],possible_keys=sorted(set(direct.values())),indirect_slots={hex(a):v for a,v in slots.items()},functions=result),indent=2)+'\n')
 
+def write_posterboard_queries(cache, path):
+ """Bounded static attribution for the repeated 24A446 wallpaper trap."""
+ from bisect import bisect_right
+ from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+ install='/System/Library/PrivateFrameworks/PosterBoard.framework/PosterBoard'
+ expected='2ce463af35a63164ac6cb7a007e81d10'
+ images=[row for row in cache.images if row['path']==install]
+ if len(images)!=1 or images[0]['uuid']!=expected:raise ValueError('PosterBoard source UUID differs')
+ image=images[0];base=image['address'];starts=cache.macho(image)['starts'];names={}
+ for address,name,_ in cache.symbols(image,strict=False):
+  if name and name!='<redacted>':names.setdefault(address,set()).add(name)
+ decoder=Cs(CS_ARCH_ARM64,CS_MODE_ARM);decoder.detail=True;rows=[]
+ for offset in (0x266858,0x6be84,0x6a4b0):
+  pc=base+offset;index=bisect_right(starts,pc)-1
+  if index<0 or index+1>=len(starts) or not starts[index]<=pc<starts[index+1]:
+   raise ValueError('PosterBoard target has no bounded function')
+  start,end=starts[index:index+2];low=max(start,pc-160);high=min(end,pc+64)
+  rows.append(dict(image_offset=hex(offset),function_offset=hex(start-base),
+   offset_in_function=hex(pc-start),exact_start_names=sorted(names.get(start,())),
+   window_offset=hex(low-base),window_bytes=high-low,
+   references=setup_method_flow(cache,image,decoder,names,low,high)))
+ Path(path).write_text(json.dumps(dict(target='iPhone12,1/27.0.1/24A446',
+  image=install,uuid=expected,sites=rows,runtime_observation=False,
+  raw_image_bytes_exported=False),indent=2)+'\n')
+
+
 def main():
  p=argparse.ArgumentParser(description=__doc__)
  for key in ('device','upstream','work','output','archive-tool'):p.add_argument('--'+key,type=Path,required=True)
@@ -403,6 +429,7 @@ def main():
    write_setup_queries(cache,out/'setup-telephony-sites.json')
    summary=write_index(cache,out/'library-index.json')
    write_compositor_sites(cache,out/'compositor-sites.json')
+   write_posterboard_queries(cache,out/'posterboard-sites.json')
  summary.update(result='passed',source_volume=raw,kernel_built=False,phone_accessed=False,
   original_files_modified=False,source_commit=os.environ.get('GITHUB_SHA','unknown'))
  (out/'index-report.json').write_text(json.dumps(summary,indent=2)+'\n')

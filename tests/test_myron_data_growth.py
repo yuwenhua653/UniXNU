@@ -14,6 +14,7 @@ import zlib
 p=argparse.ArgumentParser();p.add_argument('--reader-directory',type=Path,required=True);a,rest=p.parse_known_args()
 sys.path[:0]=[str(a.reader_directory),str(Path(__file__).resolve().parents[1]/'myron-runtime')]
 import data_growth as m
+SEED='11'*32 # synthetic test identity
 
 class Tests(unittest.TestCase):
     def setUp(self):
@@ -23,16 +24,17 @@ class Tests(unittest.TestCase):
                carrierOffset=(4000000-256)*4096,carrierCapacity=4096)
         layout={k:g[k] for k in ('first','last','diskLast','partitionGuid')};layout['partition_bytes']=4000000*4096
         self.d=dict(device='myron',partition='unixnu',device_bound=True,geometry=g,layout=layout,
-                    files={'root-container.raw':{'bytes':1024**3}})
+                    files={'root-container.raw':{'bytes':1024**3}},
+                    data_seed=dict(format=1,logical_bytes=m.old.PAGES*4096,logical_sha256=SEED))
         first=m.old.geometry(self.d)
         marker=bytearray(4096);marker[:8]=b'MYRDATA1'
         struct.pack_into('<IIQQ',marker,8,1,2,first,m.old.WINDOW_BLOCKS+1)
         struct.pack_into('<I',marker,32,zlib.crc32(marker[:32]))
         header=bytearray(4096);header[:8]=b'SHNGDATA';struct.pack_into('<IIQ',header,8,1,64,m.old.PAGES)
-        header[24:56]=bytes.fromhex(m.old.SEED);struct.pack_into('<I',header,60,zlib.crc32(header[:60]))
+        header[24:56]=bytes.fromhex(SEED);struct.pack_into('<I',header,60,zlib.crc32(header[:60]))
         bits=bytearray(32768);bits[0]=3;bits[-1]=128
         pages=b'A'*4096+b'B'*4096+b'C'*4096
-        report=dict(read_only=True,device_writes=0,complete=True,seed_sha256=m.old.SEED,pages=m.old.PAGES,
+        report=dict(read_only=True,device_writes=0,complete=True,seed_sha256=SEED,pages=m.old.PAGES,
                     marker_lba=first,present_pages=3,pages_sha256=hashlib.sha256(pages).hexdigest())
         self.entries={'marker.bin':marker,'overlay-header.bin':header,'bitmap.bin':bits,'pages.bin':pages,
                       'report.json':json.dumps(report).encode()}
@@ -48,7 +50,7 @@ class Tests(unittest.TestCase):
             head=f.read(8192)
             self.assertEqual(struct.unpack_from('<I',head,12)[0],1)
             self.assertEqual(struct.unpack_from('<Q',head,4096+16)[0],m.PAGES)
-            self.assertEqual(head[4096+24:4096+56].hex(),m.old.SEED)
+            self.assertEqual(head[4096+24:4096+56].hex(),SEED)
             for i,byte in ((0,b'A'),(1,b'B'),(m.old.PAGES-1,b'C')):
                 f.seek((2+m.BITMAP_BLOCKS+i)*4096);self.assertEqual(f.read(4096),byte*4096)
             f.seek((2+m.BITMAP_BLOCKS+m.old.PAGES)*4096);self.assertEqual(f.read(4096),bytes(4096))

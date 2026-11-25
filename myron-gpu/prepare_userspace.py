@@ -26,6 +26,26 @@ RECIPES = (
 )
 
 
+def pipeline_refusal_context(text):
+    # CoreAnimation persists this NSError in its termination report. The old
+    # message named attachment 1 but omitted its actual format and write mask;
+    # the optional pipeline journal is absent on this installation. Keep the
+    # context bounded and only construct it on a failed pipeline creation.
+    return replace(text,
+        'NSString *why=[NSString stringWithFormat:@"%@ | frag %@ linked %lu stitched %u/%u compiler %s",lastError(),d.fragmentFunction.name,',
+        'NSMutableString *colors=[NSMutableString stringWithFormat:@"samples=%lu raster=%d",(unsigned long)d.rasterSampleCount,(int)d.rasterizationEnabled];\n'
+        '  for(unsigned i=0;i<8;i++){\n'
+        '    MTLRenderPipelineColorAttachmentDescriptor *a=d.colorAttachments[i];\n'
+        '    if(a.pixelFormat==MTLPixelFormatInvalid)continue;\n'
+        '    [colors appendFormat:@" c%u=f%lu/m%lu/b%d rgb=%lu,%lu,%lu alpha=%lu,%lu,%lu",i,\n'
+        '      (unsigned long)a.pixelFormat,(unsigned long)a.writeMask,(int)a.blendingEnabled,\n'
+        '      (unsigned long)a.sourceRGBBlendFactor,(unsigned long)a.destinationRGBBlendFactor,(unsigned long)a.rgbBlendOperation,\n'
+        '      (unsigned long)a.sourceAlphaBlendFactor,(unsigned long)a.destinationAlphaBlendFactor,(unsigned long)a.alphaBlendOperation];\n'
+        '  }\n'
+        '  NSString *descriptor=colors.length>512?[colors substringToIndex:512]:colors;\n'
+        '  NSString *why=[NSString stringWithFormat:@"%@ | desc %@ | frag %@ linked %lu stitched %u/%u compiler %s",lastError(),descriptor,d.fragmentFunction.name,')
+
+
 def fetch(path, pin):
     if not (path/'.git').exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -115,6 +135,7 @@ BRIDGE_TARGET = args.target''')
     text = text[:start] + '#if defined(NATIVE_MYRON_IPHONE27)\n' + \
         'static std::string quartzCoreCallers() { return "qc target-offsets-unavailable"; }\n#else\n' + \
         text[start:end] + '#endif\n' + text[end:]
+    text = pipeline_refusal_context(text)
     frontend.write_text(text)
     transport = out/'drivers/AdrenoMetal/NativeAdrenoUserTest.h'
     text = replace(transport.read_text(), '#include "NativeAdrenoABI.h"',

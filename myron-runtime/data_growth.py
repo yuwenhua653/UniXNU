@@ -51,7 +51,7 @@ def runs(bitmap):
         i+=n
 
 def prepare(export,deployment,output):
-    plan=geometry(deployment);output=Path(output)
+    plan=geometry(deployment);expected_seed=old.seed_identity(deployment);output=Path(output)
     require(not output.exists(),'Output exists; never overwrite a migration image')
     partial=output.with_suffix(output.suffix+'.partial')
     require(not partial.exists(),'Partial output exists; preserve it and choose a new path')
@@ -63,11 +63,11 @@ def prepare(export,deployment,output):
         require(z.getinfo('report.json').file_size<16384,'Oversized report')
         report=json.loads(z.read('report.json'))
         require(report.get('read_only') is True and report.get('device_writes')==0 and
-                report.get('complete') is True and report.get('seed_sha256')==old.SEED and
+                report.get('complete') is True and report.get('seed_sha256')==expected_seed and
                 report.get('pages')==old.PAGES and report.get('marker_lba')==plan['source_marker_lba'],
                 'Export identity or completion differs')
         before=z.read('marker.bin');source=z.read('overlay-header.bin');bitmap=z.read('bitmap.bin')
-        old.validate(before,source,bitmap,plan['source_marker_lba'])
+        old.validate(before,source,bitmap,plan['source_marker_lba'],expected_seed)
         count=sum(b.bit_count() for b in bitmap)
         require(count==report.get('present_pages') and z.getinfo('pages.bin').file_size==count*BLOCK,
                 'Export page count differs')
@@ -92,7 +92,7 @@ def prepare(export,deployment,output):
             require(grown[:len(bitmap)]==bitmap and not any(grown[len(bitmap):]),'Extended bitmap differs')
             dest.seek(0);require(dest.read(BLOCK)==marker(plan['target_marker_lba'],1),'Pending marker differs')
             require(dest.read(BLOCK)==header(source),'Extended header differs')
-        plan.update(present_pages=count,pages_sha256=digest.hexdigest(),seed_sha256=old.SEED,
+        plan.update(present_pages=count,pages_sha256=digest.hexdigest(),seed_sha256=expected_seed,
                     source_metadata_sha256=hashlib.sha256(before+source+bitmap).hexdigest(),
                     output_bytes=BLOCKS*BLOCK,device_writes=0)
     partial.rename(output)
@@ -101,6 +101,7 @@ def prepare(export,deployment,output):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--deployment',type=Path,required=True)
+    p.add_argument('--seed-contract',type=Path,required=True)
     p.add_argument('--export',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
-    a=p.parse_args();print(json.dumps(prepare(a.export,json.loads(a.deployment.read_text()),a.output),indent=2))
+    a=p.parse_args();print(json.dumps(prepare(a.export,old.load_deployment(a.deployment,a.seed_contract),a.output),indent=2))

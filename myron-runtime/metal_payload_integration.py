@@ -22,10 +22,13 @@ def apply(d,replace):
         "    budget=capacity(kernel,seed['transport_bytes'],len(trust),kernel_transport_bytes,metal['addon_bytes'] if metal else 0)")
     replace(p,'own_code_entries_added=False,original_modules_modified=False,budget=budget,',
         'own_code_entries_added=bool(metal),original_modules_modified=False,budget=budget,metal_addon=metal,')
+    # The single-CPU phone must not prime unrelated system shader libraries in
+    # backboardd while serving the UI. The pinned plugin's existing switch
+    # leaves demand compilation and persistent shader caches enabled.
     replace(p,'    if startup_probe:\n',
         "    if metal:\n        report['adt_properties']+=['GpuAddon']\n"
         "    if startup_probe:\n"
-        "        if metal:report['required_boot_arguments']+=['myron-gpu-metal=1']\n")
+        "        if metal:report['required_boot_arguments']+=['myron-gpu-metal=1','gpu-prime=0']\n")
     # These tests construct a tiny synthetic kernel without GPU objects. The
     # real build's component selection must not turn that fixture into a Metal
     # integration candidate. Scope the override to each test and restore it.

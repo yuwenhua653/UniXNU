@@ -9,6 +9,7 @@ on:
       - myron27-build.py
       - tests/test_myron_log_worker.py
       - tests/test_myron_runtime_upgrade.py
+      - tests/test_myron_data_export.py
       - scripts/build-turnip-darwin.py
       - patches/mesa/turnip-darwin-kmd.patch
       - .github/workflows/myron-gpu-host.yml
@@ -41,6 +42,7 @@ jobs:
           git -C "$RUNNER_TEMP/ramblock-runtime" fetch --depth 1 https://github.com/UniXNU/RamBlock.git 4be2d7eb05ef5a98126c91e0302c149140c0e3e1
           git -C "$RUNNER_TEMP/ramblock-runtime" checkout --detach FETCH_HEAD
           python3 myron-runtime/check.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --ramblock "$RUNNER_TEMP/ramblock-runtime" --cxx g++
+          python3 tests/test_myron_data_export.py --reader-directory "$RUNNER_TEMP/myron-iphone27/device/myron27"
       - name: Fetch pinned A8xx dependencies
         run: |
           python3 myron-gpu/native/prepare_sources.py \

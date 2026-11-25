@@ -23,6 +23,8 @@ fixture=r'''
 #include <cstring>
 #include <cassert>
 #include "MyronGpuBoard.h"
+#include "MyronGpuRuntime.h"
+extern "C" void myron_gpu_runtime(MyronGpuRuntime *p){*p={1,2,30,4,0,15,0,19,18,0};}
 MODE7
 Mode7 gM7{};
 struct {uintptr_t va;} gSmmu{1};
@@ -43,13 +45,14 @@ int main(){
   assert(text[cap]==0x55);
   if(cap)assert(n<cap&&text[n]==0);else assert(n==0);
  }
- size_t n=myron_gpu_snapshot(text,768);assert(n<767);
+ size_t n=myron_gpu_snapshot(text,1024);assert(n<1023);
+ assert(strstr(text,"gpu_live valid=1 opens=2 calls=30")&&strstr(text,"submitted=19 retired=18"));
  assert(strstr(text,"ctx=e00002d8")&&strstr(text,"wait=-1")&&strstr(text,"zap_auth=-22"));
  myron_gpu_complete=0;myron_gpu_snapshot(text,sizeof text);assert(!strstr(text,"gpu_cp"));
- puts("PASS actual GPU snapshot: all capacities 0..1024, complete-only details, 768-byte log budget");
+ puts("PASS actual GPU snapshot: all capacities 0..1024, complete-only details and live counters");
 }
 '''.replace('MODE7',mode7).replace('BODY',body)
 with tempfile.TemporaryDirectory() as tmp:
  src=Path(tmp)/'snapshot.cpp';exe=Path(tmp)/'snapshot';src.write_text(fixture)
- subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined','-I',board_headers,src,'-o',exe],check=True)
+ subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined','-I',board_headers,'-I',here,src,'-o',exe],check=True)
  subprocess.run([exe],check=True)

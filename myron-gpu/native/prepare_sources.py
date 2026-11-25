@@ -132,6 +132,7 @@ def stage(references, destination):
     path.write_text(patch_lifecycle(text, replace))
     with path.open('a') as stream:
         stream.write('\n'+(HERE/'MyronGpuFenceProvider.h').read_text())
+        stream.write('\n'+(HERE/'MyronGpuRuntimeProvider.h').read_text())
     report['staged_sha256'] = {str(p.relative_to(destination)): hashlib.sha256(p.read_bytes()).hexdigest()
                               for p in destination.rglob('*') if p.is_file()}
     return report

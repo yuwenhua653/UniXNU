@@ -960,6 +960,7 @@ void runSteps() {
 
 // Called after the generated late initializer registration. There is one
 // startup per boot; failed hardware resources remain quarantined for reset.
+#include "MyronGpuRuntime.h"
 extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
     if(!out || !cap)return 0;
     // Publish the result array only after the worker stops changing it.
@@ -987,6 +988,14 @@ extern "C" size_t myron_gpu_snapshot(char *out, size_t cap) {
             uint32_t(gM10.ring_attach),uint32_t(gM10.cp_init),gM10.init_wait,gM10.init_seen,gM10.init_fence,
             gM10.write_wait,gM10.secure_wait,gM10.nop_wait,uint32_t(gM10.timer),uint32_t(gM10.publish),
             (long long)gM9.auth);
+        if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
+    }
+    if(complete && used<cap-1) {
+        MyronGpuRuntime live{};myron_gpu_runtime(&live);
+        n=snprintf(out+used,cap-used,
+            "gpu_live valid=%u opens=%u calls=%u selector=%u status=%08x mailbox=%u inflight=%u submitted=%u retired=%u poisoned=%u\n",
+            live.available,live.opens,live.calls,live.selector,live.status,live.mailbox,
+            live.inflight,live.submitted,live.retired,live.poisoned);
         if(n>0)used+=(size_t)n<cap-used?(size_t)n:cap-used-1;
     }
     return used;

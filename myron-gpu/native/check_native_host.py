@@ -28,6 +28,8 @@ def main():
                                                  '--cxx',a.cxx],text=True).strip()
     results['snapshot'] = subprocess.check_output([sys.executable,HERE/'test_snapshot.py',
                                                    '--cxx',a.cxx],text=True).strip()
+    results['runtime_snapshot'] = subprocess.check_output([sys.executable,HERE/'test_runtime_snapshot.py',
+        '--references',a.references,'--cxx',a.cxx],text=True).strip()
     results['metal_publication'] = subprocess.check_output([sys.executable,HERE/'test_metal_publish.py',
                                                             '--cxx',a.cxx],text=True).strip()
     for name in ('publish_lifecycle', 'publish_views', 'publish_open'):

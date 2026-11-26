@@ -26,6 +26,7 @@ jobs:
           python3 myron27-build.py --source-only
           python3 myron27-fault-extract.py --self-test
           python3 -m unittest discover -s tests -p test_myron_library_index.py -v
+          python3 -m unittest discover -s tests -p test_myron_posterboard_context.py -v
           python3 -m unittest discover -s tests -p test_myron_fault_symbolicate.py -v
           git init -q "$RUNNER_TEMP/index-upstream"
           git -C "$RUNNER_TEMP/index-upstream" fetch -q --depth 1 https://github.com/UniXNU/UniXNU.git 04573c510c5fd4892ca6948739389141cc9e05f5

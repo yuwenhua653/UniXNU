@@ -372,6 +372,11 @@ def write_posterboard_queries(cache, path):
  Path(path).write_text(json.dumps(dict(target='iPhone12,1/27.0.1/24A446',
   image=install,uuid=expected,sites=rows,runtime_observation=False,
   raw_image_bytes_exported=False),indent=2)+'\n')
+ context=load('myron_posterboard_context').collect(cache,image,starts,names,decoder,setup_method_flow)
+ context.update(target='iPhone12,1/27.0.1/24A446',image=install,uuid=expected)
+ encoded=json.dumps(context,indent=2)+'\n'
+ if len(encoded.encode())>4*1024*1024:raise ValueError('PosterBoard context exceeds bound')
+ Path(path).with_name('posterboard-context.json').write_text(encoded)
 
 
 def main():

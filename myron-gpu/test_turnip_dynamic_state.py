@@ -94,6 +94,64 @@ int main(){
                         '-fsanitize=undefined', str(src), '-o', str(exe)], check=True)
         subprocess.run([exe], check=True)
     print('PASS: actual Turnip dynamic-state macros, 14 success/zero/OOM/skip/FDM cases')
+    check_substream(source, cxx)
+
+
+def check_substream(source, cxx):
+    text=(source/'src/freedreno/vulkan/tu_cs.cc').read_text()
+    start=text.index('VkResult\ntu_cs_begin_sub_stream_aligned(')
+    end=text.index('\n}',start)+2
+    body=text[start:end]
+    fixture=r'''
+#include <cassert>
+#include <cstdint>
+#include <initializer_list>
+using VkResult=int;
+constexpr int VK_SUCCESS=0,VK_ERROR_OUT_OF_DEVICE_MEMORY=-2;
+constexpr int TU_CS_MODE_SUB_STREAM=1,TU_CS_MODE_EXTERNAL=2;
+struct tu_cs {
+ int mode=TU_CS_MODE_SUB_STREAM;uint32_t *base,*start,*cur,*end,*reserved_end;
+ void *device=nullptr;bool writeable=false;
+};
+static uint32_t fresh[64];static bool fail;static unsigned calls;
+static uint32_t tu_cs_get_space(tu_cs *cs){return cs->end-cs->cur;}
+static uint32_t tu_cs_get_offset(tu_cs *cs){return cs->start-cs->base;}
+static uint64_t tu_cs_get_cur_iova(tu_cs *cs){return 0x1000+(cs->cur-cs->base)*4;}
+static int tu_cs_reserve_space(tu_cs *cs,uint32_t n){
+ ++calls;
+ if(cs->mode!=TU_CS_MODE_EXTERNAL && fail && tu_cs_get_space(cs)<n)return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+ if(tu_cs_get_space(cs)<n){assert(cs->mode!=TU_CS_MODE_EXTERNAL);cs->base=cs->start=cs->cur=fresh;cs->end=fresh+64;}
+ cs->reserved_end=cs->cur+n;return VK_SUCCESS;
+}
+static void tu_cs_init_external(tu_cs *cs,void *device,uint32_t *start,uint32_t *end,uint64_t,bool writeable){
+ *cs={TU_CS_MODE_EXTERNAL,start,start,start,end,end,device,writeable};
+}
+static void tu_cs_begin(tu_cs *){}
+''' + body + r'''
+int main(){
+ uint32_t storage[64]={};
+ for(unsigned available:{2u,9u,20u})for(bool oom:{false,true}){
+  tu_cs parent={TU_CS_MODE_SUB_STREAM,storage,storage+1,storage+1,storage+1+available,storage+1};
+  tu_cs sub={TU_CS_MODE_EXTERNAL,storage+40,storage+40,storage+40,storage+44,storage+44};
+  fail=oom;calls=0;
+  int result=tu_cs_begin_sub_stream_aligned(&parent,2,4,&sub);
+  if(oom && available<11){
+   assert(result==VK_ERROR_OUT_OF_DEVICE_MEMORY && calls==1);
+   assert(parent.start==storage+1 && parent.cur==storage+1 && sub.start==storage+40);
+  }else{
+   assert(result==VK_SUCCESS && calls==2 && (parent.start-parent.base)%4==0);
+   assert(sub.cur==parent.start && sub.reserved_end-sub.cur==8);
+   assert(parent.start==(available<11?fresh:storage+4));
+  }
+ }
+}
+'''
+    with tempfile.TemporaryDirectory(prefix='turnip-substream-') as tmp:
+        src,exe=Path(tmp)/'fixture.cc',Path(tmp)/'fixture';src.write_text(fixture)
+        subprocess.run([cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined',
+                        str(src),'-o',str(exe)],check=True)
+        subprocess.run([exe],check=True)
+    print('PASS: actual aligned substream function, 6 reservation/alignment success and OOM cases')
 
 
 if __name__ == '__main__':

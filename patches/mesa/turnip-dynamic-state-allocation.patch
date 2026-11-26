@@ -152,3 +152,16 @@ index 8b010ed..4f7c7a7 100644
        }                                                                       \
        dirty_draw_states |= (1u << id);                                        \
     }
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -342,7 +342,8 @@
+       result = tu_cs_reserve_space(cs, count * size);
+    } else {
+       result = tu_cs_reserve_space(cs, count * size + (size - tu_cs_get_offset(cs)) % size);
+-      cs->start += (size - tu_cs_get_offset(cs)) % size;
++      if (result == VK_SUCCESS)
++         cs->start += (size - tu_cs_get_offset(cs)) % size;
+    }
+    if (result != VK_SUCCESS)
+       return result;

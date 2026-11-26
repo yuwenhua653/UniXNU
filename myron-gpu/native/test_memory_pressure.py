@@ -33,15 +33,28 @@ int main(){
  CHECK(a.allocate(half,40,false,half,true)==0);
  CHECK(b.allocate(half,40,false,half,true)==0);
  CHECK(myron_gpu_overflow_stats[0]==MYRON_GPU_OVERFLOW_BYTES);
+ CHECK(myron_gpu_overflow_stats[1]==MYRON_GPU_OVERFLOW_BYTES);
+ CHECK(myron_gpu_overflow_stats[2]==2);
  auto made=fixture.created;
  CHECK(c.allocate(4096,40,false,4096,true)==kIOReturnNoResources);
  CHECK(fixture.created==made);
+ CHECK(myron_gpu_overflow_stats[3]==1);
  CHECK(a.holdForDevice()==0 && a.release()==kIOReturnBusy);
  CHECK(myron_gpu_overflow_stats[0]==MYRON_GPU_OVERFLOW_BYTES);
  CHECK(a.retireAfterQuiescence()==0 && a.release()==0);
  CHECK(c.allocate(4096,40,false,4096,true)==0);
+ CHECK(myron_gpu_overflow_stats[2]==3);
  CHECK(b.release()==0 && c.release()==0 && !myron_gpu_overflow_stats[0]);
  CHECK(c.release()==0 && !myron_gpu_overflow_stats[0]);
+ // Diagnostic counters retain unsigned wrap semantics; byte accounting
+ // remains independent of their rollover.
+ myron_gpu_overflow_stats[2]=UINT32_MAX;
+ CHECK(c.allocate(4096,40,false,4096,true)==0);
+ CHECK(myron_gpu_overflow_stats[2]==0 && myron_gpu_overflow_stats[0]==4096);
+ CHECK(c.release()==0 && !myron_gpu_overflow_stats[0]);
+ myron_gpu_overflow_stats[3]=UINT32_MAX;
+ CHECK(c.allocate(MYRON_GPU_OVERFLOW_BYTES+4096,40,false,MYRON_GPU_OVERFLOW_BYTES+4096,true)==kIOReturnNoResources);
+ CHECK(myron_gpu_overflow_stats[3]==0 && !myron_gpu_overflow_stats[0]);
  // Allocation/prepare/metadata/cache failures must roll back the charge.
  for(unsigned failure=0;failure<4;++failure){
   reset();NativeAdrenoMemory m;
@@ -62,6 +75,8 @@ int main(){
 }
 ''')
     exe=root/'test'
-    subprocess.run([a.cxx,'-std=c++17','-Wno-return-type','-fsanitize=address,undefined','-g','-O1','-include',root/'include/HostTypes.h',
+    # C++17 missed the production compiler's deprecated volatile increments.
+    # Exercise C++20 with warnings fatal before the expensive native build.
+    subprocess.run([a.cxx,'-std=c++20','-Werror','-Wno-return-type','-fsanitize=address,undefined','-g','-O1','-include',root/'include/HostTypes.h',
         '-I',root/'include','-I',fixture,'-I',driver,'-I',here,test,driver/'NativeAdrenoMemory.cpp','-o',exe],check=True)
     subprocess.run([exe],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))

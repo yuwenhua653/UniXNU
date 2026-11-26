@@ -12,24 +12,24 @@ def patch(text, replace):
     // and quarantined DMA memory continue to consume the budget.
     if(pooled && (bytes>MYRON_GPU_OVERFLOW_BYTES ||
         myron_gpu_overflow_stats[0]>MYRON_GPU_OVERFLOW_BYTES-bytes)) {
-        ++myron_gpu_overflow_stats[3];return kIOReturnNoResources;
+        myron_gpu_overflow_stats[3]=myron_gpu_overflow_stats[3]+1;return kIOReturnNoResources;
     }
     IOOptionBits options=static_cast<IOOptionBits>(kIODirectionInOut)''')
     text = replace(text, '    if(!descriptor_)return kIOReturnNoMemory;\n    status=descriptor_->prepare();', '''    if(!descriptor_)return kIOReturnNoMemory;
     if(pooled) {
         overflow_bytes_=bytes;
-        myron_gpu_overflow_stats[0]+=(uint32_t)bytes;
+        myron_gpu_overflow_stats[0]=myron_gpu_overflow_stats[0]+(uint32_t)bytes;
         if(myron_gpu_overflow_stats[0]>myron_gpu_overflow_stats[1])
             myron_gpu_overflow_stats[1]=myron_gpu_overflow_stats[0];
-        ++myron_gpu_overflow_stats[2];
+        myron_gpu_overflow_stats[2]=myron_gpu_overflow_stats[2]+1;
     }
     status=descriptor_->prepare();''')
     text = replace(text, '    if(status!=kIOReturnSuccess) {descriptor_->release();descriptor_=nullptr;return status;}', '''    if(status!=kIOReturnSuccess) {
         descriptor_->release();descriptor_=nullptr;
-        myron_gpu_overflow_stats[0]-=(uint32_t)overflow_bytes_;overflow_bytes_=0;
+        myron_gpu_overflow_stats[0]=myron_gpu_overflow_stats[0]-(uint32_t)overflow_bytes_;overflow_bytes_=0;
         return status;
     }''')
     text = replace(text, '        descriptor_->release();descriptor_=nullptr;\n        native_adreno_trace_stage=34;', '''        descriptor_->release();descriptor_=nullptr;
-        myron_gpu_overflow_stats[0]-=(uint32_t)overflow_bytes_;overflow_bytes_=0;
+        myron_gpu_overflow_stats[0]=myron_gpu_overflow_stats[0]-(uint32_t)overflow_bytes_;overflow_bytes_=0;
         native_adreno_trace_stage=34;''')
     return text

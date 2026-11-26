@@ -36,6 +36,10 @@ jobs:
         run: |
           python3 tests/test_continuous_contract.py
           python3 tests/test_native_diagnostics.py
+      - name: Check actual GPU memory allocator under strict C++20
+        run: |
+          python3 myron-gpu/native/prepare_sources.py --references "$RUNNER_TEMP/gpu-memory-preflight" --fetch
+          python3 myron-gpu/native/test_memory_pressure.py --references "$RUNNER_TEMP/gpu-memory-preflight" --cxx clang++
       - name: Check GPU addon mount and Metal publication with the macOS SDK
         run: |
           python3 myron-runtime/test_gpu_addon_mount.py

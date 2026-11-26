@@ -2,18 +2,18 @@
   "format": 1,
   "target": "iPhone12,1/24A446",
   "component": {
-    "run": 45134750180,
-    "commit": "78dc7d57d9c3b61a29acb02e5011fead1c128cf2",
-    "artifact_sha256": "982b039c9796fc0bd6fb9701780d127f21c39db507dd850b86422de9ff384740"
+    "run": 45745441328,
+    "commit": "70919d982b024e946a127ce308de1ba840ebc025",
+    "artifact_sha256": "cadee50cf39956a2c7bb0c4ea044dbf34cb35ebf600677d2485590194a14b674"
   },
   "outputs": {
     "gpuaddon.bin": {
-      "bytes": 15295680,
-      "sha256": "ec71013c7b2afbcdd4acc094d3eb3a5bced0e7c422f0d15f400f601e11db7c29"
+      "bytes": 15290176,
+      "sha256": "ad02049c434947a1dfc1ffc0d9da229ba134a8fc8558f36f9ce1e0990505718d"
     },
     "kernel.macho.trustcache": {
       "bytes": 92344,
-      "sha256": "f546613a7f312cc0f2b19ace78e91e0c07875e2122677f2f7750537210384dfb"
+      "sha256": "152a252cadee2ecd721276de9b6d9301226eb913581d8877e022b37866efe0fd"
     }
   },
   "addon_files": {
@@ -25,22 +25,22 @@
     "addons/NativeAdrenoMetal.bundle/NativeAdrenoMetal": {
       "mode": 493,
       "bytes": 24933952,
-      "sha256": "5d673ed50b8dec60e396f4be28af375e558df034d022254a5440b2af936393f5"
+      "sha256": "0400c94e20a4a34299dcbd28c37a2d4ab39b58e8a948f5a6898048e62fd812ee"
     },
     "addons/NativeAdrenoMetal.bundle/_CodeSignature/CodeResources": {
       "mode": 420,
       "bytes": 2256,
-      "sha256": "23d79ebbc46202c46ad2585b13d56896df67f37698a5037937f2f3bb727869a2"
+      "sha256": "9865c28864bb0ada6480c2e5ebca70e301e96adff406176467a20bbed6c74a62"
     },
     "addons/NativeAdrenoMetal.bundle/gpu-build.json": {
       "mode": 420,
       "bytes": 2825,
-      "sha256": "ddcee8e77015903e92d32a405f2ceb94a690e85c3ec98090229dd9398252644f"
+      "sha256": "08398321c6aaf005ab1137442be07a58beeae8bd9a4311ca704725c86139e14f"
     },
     "addons/NativeAdrenoMetal.bundle/libvulkan_freedreno.dylib": {
       "mode": 493,
       "bytes": 17475920,
-      "sha256": "4a49ae7677fc17c9e9b419e8a95e2abafe1f1cd4b58a1de241854eb1c20eb949"
+      "sha256": "0fb2975be33ccd5b63e3ccd21a726138e05a8e3e940d0dcd209d275d0d443444"
     },
     "addons/NativeAdrenoMetal.publish": {
       "mode": 420,
@@ -49,8 +49,8 @@
     }
   },
   "owner_cdhashes": [
-    "5ae8024957b91c22d13b536849bcf9518235c8f6",
-    "823f43321d0887b04c0a58f0979ed3e67554bfbb"
+    "54824b9d2c6df502ecda2c00475bb25da3e854a9",
+    "f9c6f91784ac79014bc7d8af2239658edd527e7f"
   ],
   "original_trust_sha256": "095605d6abf4e82545579930d54a3476dfac35f754c504f87b456daa058cb9d4",
   "original_modules": [

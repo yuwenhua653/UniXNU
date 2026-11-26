@@ -40,13 +40,13 @@ def write_index(cache,path):
  return dict(images=len(result['images']),indexed=len(result['selected']),bytes=len(encoded))
 # Static attribution for the first-frame path in the pinned iPhone system image.
 # Keep this separate from the capped general index and emit no original code.
-def setup_method_flow(cache, image, decoder, names, start, end):
+def setup_method_flow(cache, image, decoder, names, start, end, string_limit=110):
     """Branch destinations and referenced selectors/configuration keys, without image bytes."""
     import struct
     from capstone.arm64 import ARM64_OP_IMM, ARM64_OP_MEM
     def refer(address):
         try:
-            data = cache.read(address, 120)[0]
+            data = cache.read(address, max(24,string_limit+1))[0]
         except (ValueError, RuntimeError):
             return None
         for indirect in [None, 0, 16]:
@@ -54,15 +54,17 @@ def setup_method_flow(cache, image, decoder, names, start, end):
                 texts = [data]
             else:
                 pointer = struct.unpack_from('<Q', data, indirect)[0]
+                if not pointer:
+                    continue
                 texts = []
                 for va in [pointer, cache.region_start+(pointer & 0x3ffffffff)]:
                     try:
-                        texts.append(cache.read(va,120)[0])
+                        texts.append(cache.read(va,string_limit+1)[0])
                     except (ValueError, RuntimeError):
                         pass
             for value in texts:
                 key, sep, _ = value.partition(bytes(1))
-                if sep and 3 <= len(key) <= 110 and all(32 <= b < 127 for b in key):
+                if sep and 3 <= len(key) <= string_limit and all(32 <= b < 127 for b in key):
                     return key.decode()
     def references(instructions):
         pages = {}
@@ -359,11 +361,14 @@ def write_posterboard_queries(cache, path):
   pc=base+offset;index=bisect_right(starts,pc)-1
   if index<0 or index+1>=len(starts) or not starts[index]<=pc<starts[index+1]:
    raise ValueError('PosterBoard target has no bounded function')
-  start,end=starts[index:index+2];low=max(start,pc-160);high=min(end,pc+64)
+  # Include the initializer's earlier predicates and full bounded assertion
+  # strings. A small PC window omitted the path into the cold assertion.
+  start,end=starts[index:index+2];low=start;high=min(end,start+2048)
   rows.append(dict(image_offset=hex(offset),function_offset=hex(start-base),
    offset_in_function=hex(pc-start),exact_start_names=sorted(names.get(start,())),
-   window_offset=hex(low-base),window_bytes=high-low,
-   references=setup_method_flow(cache,image,decoder,names,low,high)))
+   window_offset=hex(low-base),window_bytes=high-low,function_bytes=end-start,
+   truncated=high<end,
+   references=setup_method_flow(cache,image,decoder,names,low,high,string_limit=512)))
  Path(path).write_text(json.dumps(dict(target='iPhone12,1/27.0.1/24A446',
   image=install,uuid=expected,sites=rows,runtime_observation=False,
   raw_image_bytes_exported=False),indent=2)+'\n')

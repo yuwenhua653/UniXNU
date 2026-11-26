@@ -324,12 +324,6 @@ jobs:
       - name: Retain the exact installed persistent Data seed
         run: |
           python3 myron-runtime/reuse_data_seed.py --boot "$RUNNER_TEMP/retained-data-source/root-startup.img" --manifest "$RUNNER_TEMP/retained-data-source/deployment.json" --out "$RUNNER_TEMP/retained-data.dbr"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: myron-retained-data-seed
-          path: ${{ runner.temp }}/retained-data.dbr
-          if-no-files-found: error
-          retention-days: 90
       - name: Check authenticated public-header access before build setup
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -361,9 +355,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/yuwenhua653/UniXNU/actions/artifacts/14801780008/zip > "$RUNNER_TEMP/myron-metal-component.zip"
+          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15084084332/zip > "$RUNNER_TEMP/myron-metal-component.zip"
           python3 myron-gpu/audit_userspace_artifact.py "$RUNNER_TEMP/myron-metal-component.zip" \
-            --sha256 982b039c9796fc0bd6fb9701780d127f21c39db507dd850b86422de9ff384740 \
+            --sha256 cadee50cf39956a2c7bb0c4ea044dbf34cb35ebf600677d2485590194a14b674 \
             --output "$RUNNER_TEMP/myron-metal-component-audit.json"
       - name: Check retained Data byte identity before native compilation
         run: |

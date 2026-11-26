@@ -1,0 +1,65 @@
+{
+  "artifact_sha256": "cadee50cf39956a2c7bb0c4ea044dbf34cb35ebf600677d2485590194a14b674",
+  "target": "iPhone12,1/24A446",
+  "images": {
+    "NativeAdrenoMetal": {
+      "sha256": "0400c94e20a4a34299dcbd28c37a2d4ab39b58e8a948f5a6898048e62fd812ee",
+      "bytes": 24933952,
+      "cdhash": "54824b9d2c6df502ecda2c00475bb25da3e854a9",
+      "pages": 6036,
+      "arm64e": true,
+      "platform": "iOS",
+      "minimum_os": "27.0"
+    },
+    "libvulkan_freedreno.dylib": {
+      "sha256": "0fb2975be33ccd5b63e3ccd21a726138e05a8e3e940d0dcd209d275d0d443444",
+      "bytes": 17475920,
+      "cdhash": "f9c6f91784ac79014bc7d8af2239658edd527e7f",
+      "pages": 4230,
+      "arm64e": true,
+      "platform": "iOS",
+      "minimum_os": "27.0"
+    }
+  },
+  "daemon": {
+    "sha256": "81eba86ed58def0f928619e03e98c9b28a632286e4f1d1f717b8c01b3adac815",
+    "bytes": 129968,
+    "cdhash": "99e683dcfa582bccf601001fa45d7bb3f11b38c1",
+    "pages": 27,
+    "arm64e": true,
+    "platform": "iOS",
+    "minimum_os": "27.0"
+  },
+  "addon_sha256": "48a3cd55c652a8ad358c90d7635faa61ab038ba2a48e1262d5874a071de4dba9",
+  "addon_bytes": 15290096,
+  "addon_files": {
+    "addons/NativeAdrenoMetal.bundle/Info.plist": "826d9cd33b776048fa1b061f7363c380b450555e4fc0a27fcdf7c02831a832d9",
+    "addons/NativeAdrenoMetal.bundle/NativeAdrenoMetal": "0400c94e20a4a34299dcbd28c37a2d4ab39b58e8a948f5a6898048e62fd812ee",
+    "addons/NativeAdrenoMetal.bundle/_CodeSignature/CodeResources": "9865c28864bb0ada6480c2e5ebca70e301e96adff406176467a20bbed6c74a62",
+    "addons/NativeAdrenoMetal.bundle/gpu-build.json": "08398321c6aaf005ab1137442be07a58beeae8bd9a4311ca704725c86139e14f",
+    "addons/NativeAdrenoMetal.bundle/libvulkan_freedreno.dylib": "0fb2975be33ccd5b63e3ccd21a726138e05a8e3e940d0dcd209d275d0d443444"
+  },
+  "host_verified": true,
+  "hardware_tested": false,
+  "flashable": false,
+  "component_run": 45745441328,
+  "component_commit": "70919d982b024e946a127ce308de1ba840ebc025",
+  "all_staged_source_hashes_match": true,
+  "debug_uuids": {
+    "NativeAdrenoMetal": "05522bbd89c93439a8e41f214a8b2a93",
+    "libvulkan_freedreno.dylib": "aa401c38cc39316ab1142de4b48da5b5"
+  },
+  "debug_uuids_match": true,
+  "sidecars": {
+    "gpuaddon.bin": {
+      "bytes": 15290176,
+      "sha256": "ad02049c434947a1dfc1ffc0d9da229ba134a8fc8558f36f9ce1e0990505718d"
+    },
+    "kernel.macho.trustcache": {
+      "bytes": 92344,
+      "sha256": "152a252cadee2ecd721276de9b6d9301226eb913581d8877e022b37866efe0fd"
+    }
+  },
+  "original_modules_unchanged": true,
+  "sidecar_tests_passed": 4
+}

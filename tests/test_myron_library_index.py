@@ -50,9 +50,34 @@ class IndexTests(unittest.TestCase):
    self.assertEqual(flow.call_count,3)
    self.assertEqual(report['sites'][1]['exact_start_names'],[])
    self.assertEqual(report['sites'][2]['exact_start_names'],['_exact'])
-   self.assertTrue(all(row['window_bytes']<=224 for row in report['sites']))
+   self.assertTrue(all(row['window_bytes']<=2048 and not row['truncated'] for row in report['sites']))
+   self.assertTrue(all(row['window_offset']==row['function_offset'] for row in report['sites']))
+   self.assertTrue(all(call.kwargs['string_limit']==512 for call in flow.call_args_list))
    self.assertFalse(report['raw_image_bytes_exported'])
    c.images[0]['uuid']='wrong'
    with self.assertRaisesRegex(ValueError,'UUID'):m.write_posterboard_queries(c,Path(d)/'bad.json')
    self.assertFalse((Path(d)/'bad.json').exists())
+ def test_null_indirect_reference_does_not_resolve_cache_header(self):
+  from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM
+  import struct
+  c=Cache();decoder=Cs(CS_ARCH_ARM64,CS_MODE_ARM);decoder.detail=True
+  def read(address,size,executable=False):
+   if address==0x1000:return struct.pack('<I',0x10000800),None # adr x0, +0x100
+   if address==0x1100:return bytes(size),None
+   if address==c.region_start:return b'dyld_v1  arm64e\0'+bytes(size-16),None
+   raise ValueError('unmapped')
+  c.read=read
+  self.assertEqual(m.setup_method_flow(c,c.images[0],decoder,{},0x1000,0x1004),[])
+ def test_long_assertion_string_is_bounded_and_opt_in(self):
+  from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM
+  import struct
+  c=Cache();decoder=Cs(CS_ARCH_ARM64,CS_MODE_ARM);decoder.detail=True
+  message='assertion: '+('x'*240)
+  def read(address,size,executable=False):
+   if address==0x1000:return struct.pack('<I',0x10000800),None
+   if address==0x1100:return (message.encode()+b'\0'+bytes(size))[:size],None
+   raise ValueError('unmapped')
+  c.read=read
+  self.assertEqual(m.setup_method_flow(c,c.images[0],decoder,{},0x1000,0x1004),[])
+  self.assertEqual(m.setup_method_flow(c,c.images[0],decoder,{},0x1000,0x1004,string_limit=512),[('0x0',message)])
 if __name__=='__main__':unittest.main()

@@ -10,6 +10,7 @@ subprocess.run([__import__('sys').executable,str(here/'test_data_start.py'),
                 '--device',str(device),'--ramblock',str(a.ramblock),'--cxx',a.cxx],check=True)
 subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',str(here/'test_apfs_growth.c'),'-o',str(device/'test-apfs-growth')],check=True)
 subprocess.run([str(device/'test-apfs-growth')],check=True)
+subprocess.run([__import__('sys').executable,str(here/'test_data_helper_launch.py')],check=True)
 for test in ('test_myron_data_export.py','test_myron_data_growth.py'):
  subprocess.run([__import__('sys').executable,str(here.parent/'tests'/test),
                  '--reader-directory',str(device)],check=True)

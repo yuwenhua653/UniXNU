@@ -28,7 +28,11 @@ def apply(d,replace):
     replace(p,'    if startup_probe:\n',
         "    if metal:\n        report['adt_properties']+=['GpuAddon']\n"
         "    if startup_probe:\n"
-        "        if metal:report['required_boot_arguments']+=['myron-gpu-metal=1','gpu-prime=0']\n")
+        "        if metal:report['required_boot_arguments']+=['myron-gpu-metal=1','gpu-prime=0']\n"
+        "        growth=os.environ.get('MYRON_DATA_GROW')\n"
+        "        if growth is not None:\n"
+        "            require(growth=='16' and metal and bool(os.environ.get('MYRON_DATA_HELPER_ARTIFACT')), 'Data growth requires signed helper and exact 16 GiB selection')\n"
+        "            report['required_boot_arguments']+=['myron-data-grow=16']\n")
     # These tests construct a tiny synthetic kernel without GPU objects. The
     # real build's component selection must not turn that fixture into a Metal
     # integration candidate. Scope the override to each test and restore it.
@@ -38,7 +42,8 @@ def apply(d,replace):
         '    def setUp(self):\n'
         '        environment=patch.dict(os.environ)\n'
         '        environment.start();self.addCleanup(environment.stop)\n'
-        "        os.environ.pop('MYRON_METAL_ARTIFACT',None)\n")
+        "        os.environ.pop('MYRON_METAL_ARTIFACT',None)\n"
+        "        os.environ.pop('MYRON_DATA_GROW',None)\n")
     replace(p,'    def test_staging_names_args_and_existing_output(self):',
         '''    def test_metal_selection_keeps_real_audit_guards(self):
         self.bind()

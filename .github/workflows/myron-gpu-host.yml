@@ -36,6 +36,7 @@ jobs:
       - name: Check addon mount and Metal publication on Linux
         run: |
           python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-runtime/test_data_helper_launch.py
           python3 myron-gpu/native/test_metal_publish.py --cxx g++
       - name: Check bounded Data persistence and physical power input
         run: |
@@ -82,6 +83,7 @@ jobs:
       - name: Reconstruct and check actual arm64e display and power boundaries
         run: |
           python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-runtime/test_data_helper_launch.py
           python3 myron-gpu/native/test_metal_publish.py --cxx clang++
           python3 myron27-build.py --source-only
           python3 myron-gpu/native/test_display_fences.py --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --cxx clang++

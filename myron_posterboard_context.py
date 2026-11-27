@@ -111,7 +111,14 @@ def collect(cache, image, starts, names, decoder, flow):
         references=[]
         for section in range(address, high, 2048):
             refs=flow(cache,image,decoder,names,section,min(section+2048,high),string_limit=512)
-            references.extend((hex(int(offset,16)+section-address),value) for offset,value in refs)
+            for offset,value in refs:
+                # flow reports both source and branch destination relative to
+                # its slice. Keep the complete function's coordinate system.
+                if ' -> ' in value:
+                    prefix,sep,target=value.rpartition(' -> ')
+                    try:value=prefix+sep+hex(int(target,16)+section-address)
+                    except ValueError:pass
+                references.append((hex(int(offset,16)+section-address),value))
         rows.append(dict(offset=hex(address-base), names=sorted(names.get(address, ())),
             function_bytes=end-address, truncated=high<end,
             instructions=[(hex(op.address-address), op.mnemonic, op.op_str) for op in ops],

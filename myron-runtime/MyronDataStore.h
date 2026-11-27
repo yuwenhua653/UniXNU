@@ -23,7 +23,7 @@ extern "C" unsigned myron_data_store_gpt_check(void) {
 }
 // Called once before NativeRamBlock publishes any IOMedia. The opt-in copy
 // owns the destination exclusively until attachStore; the source stays read-only.
-// Normal boots perform selection only. No package enables this flag yet.
+// Without the explicit flag, boots perform selection only.
 static bool myronDataRunMigration(const unsigned char seed[32],uint64_t target) {
     unsigned gib=0;PE_parse_boot_argn("myron-data-grow",&gib,sizeof(gib));
     if(!gib)return true;

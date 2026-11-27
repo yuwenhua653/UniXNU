@@ -12,7 +12,7 @@ addon=text[start:end]
 assert hashlib.sha256(addon.encode()).hexdigest()=='ffe7c83e9bfc4a864a63ff5c062119c621f65c3c10f4bf5cee5326b0a7a7ab64'
 os.environ['MYRON_GPU_NATIVE']='1'
 real=source(addon,ROOT/'myron-gpu/metal-addon-contract.json')
-assert 'weak_import' not in real and 'O_TRUNC' not in real and 'daemons_source' not in real
+assert 'weak_import' not in real and 'O_TRUNC' not in real
 contract=json.loads((ROOT/'myron-gpu/metal-addon-contract.json').read_text())
 prelude=r'''
 #define _GNU_SOURCE
@@ -44,7 +44,7 @@ for name,r in sorted(contract['addon_files'].items()):
 prelude+='static const struct {const char *name;uint64_t size;uint32_t mode;const char *sha;} expected[]={'+','.join(rows)+'};\n'
 prelude+=r'''
 static int native_gpu_addon_write(proc_t p,user_addr_t scratch,const char *path,const uint8_t *data,uint64_t size,uint32_t mode,vfs_context_t ctx){
- (void)p;(void)scratch;(void)ctx;int i=calls++;assert(i<6&&!strcmp(path,expected[i].name)&&size==expected[i].size&&mode==expected[i].mode);
+ (void)p;(void)scratch;(void)ctx;int i=calls++;assert(i<8&&!strcmp(path,expected[i].name)&&size==expected[i].size&&mode==expected[i].mode);
  uint8_t hash[32];char text[65];SHA256(data,size,hash);for(unsigned j=0;j<32;j++)sprintf(text+2*j,"%02x",hash[j]);assert(!strcmp(text,expected[i].sha));
  return fail_at==calls?EIO:equal_mode?-1:0;
 }
@@ -59,8 +59,8 @@ prelude+='static const uint8_t myron_gpu_addon_contract[32]={'+','.join(map(str,
 main=r'''
 static void reset(void){native_gpu_addon_files=-1;native_gpu_addon_written=native_gpu_addon_same=native_gpu_addon_failed=native_gpu_addon_error=calls=0;assert(!allocations);}
 int main(int argc,char **argv){assert(argc==2);FILE *f=fopen(argv[1],"rb");assert(f);fseek(f,0,SEEK_END);payload_size=ftell(f);rewind(f);payload=malloc(payload_size);assert(payload&&fread(payload,1,payload_size,f)==payload_size);fclose(f);
- reset();native_gpu_addon_install(NULL,0);assert(calls==6&&native_gpu_addon_written==6&&!native_gpu_addon_error&&!allocations);
- equal_mode=1;reset();native_gpu_addon_install(NULL,0);assert(calls==6&&native_gpu_addon_same==6&&!native_gpu_addon_error&&!allocations);equal_mode=0;
+ reset();native_gpu_addon_install(NULL,0);assert(calls==8&&native_gpu_addon_written==8&&!native_gpu_addon_error&&!allocations);
+ equal_mode=1;reset();native_gpu_addon_install(NULL,0);assert(calls==8&&native_gpu_addon_same==8&&!native_gpu_addon_error&&!allocations);equal_mode=0;
  fail_at=2;reset();native_gpu_addon_install(NULL,0);assert(calls==2&&native_gpu_addon_failed==1&&native_gpu_addon_error==EIO&&!allocations);fail_at=0;
  for(unsigned at=0;at<96;at++){payload[at]^=1;reset();native_gpu_addon_install(NULL,0);assert(!calls&&native_gpu_addon_error==EINVAL&&!allocations);payload[at]^=1;}
  payload_size--;reset();native_gpu_addon_install(NULL,0);assert(!calls&&native_gpu_addon_error==EINVAL);payload_size++;

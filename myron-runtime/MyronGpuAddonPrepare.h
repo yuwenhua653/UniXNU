@@ -3,10 +3,9 @@
 #include <sys/dirent.h>
 
 static int
-myron_gpu_sealed_entry(char *path,size_t cap)
+myron_gpu_sealed_entry(const char *base,char *path,size_t cap)
 {
     vfs_context_t ctx=vfs_context_current();vnode_t dir=NULLVP;
-    const char *base="/System/Library/Extensions";
     int error=vnode_open(base,FREAD|O_NOFOLLOW,0,0,&dir,ctx);if(error)return error;
     uint8_t *entries=kalloc_data(4096,Z_WAITOK);
     if(!entries){vnode_close(dir,FREAD,ctx);return ENOMEM;}
@@ -29,7 +28,7 @@ myron_gpu_sealed_entry(char *path,size_t cap)
             if(n==length-head){error=EINVAL;break;}
             at+=length;
             if(!entry->d_ino || !n || !strcmp(name,".") || !strcmp(name,"..") ||
-               !strncmp(name,"NativeAdrenoMetal",17) || strchr(name,'/'))continue;
+               !strncmp(name,"NativeAdrenoMetal",17) || !strncmp(name,"org.unixnu.myron.",17) || strchr(name,'/'))continue;
             if(snprintf(path,cap,"%s/%s",base,name)>=(int)cap)continue;
             vnode_t child=NULLVP;error=vnode_lookup(path,VNODE_LOOKUP_NOFOLLOW,&child,ctx);
             if(!error){
@@ -49,17 +48,27 @@ native_gpu_addon_prepare(proc_t p,user_addr_t scratch)
     uint32_t enabled=0;
     if(!PE_parse_boot_argn("myron-gpu-metal",&enabled,sizeof enabled) || enabled!=1)return;
     native_gpu_addon_install(p,scratch);
-    if(native_gpu_addon_error || native_gpu_addon_failed || native_gpu_addon_files!=6 ||
+    if(native_gpu_addon_error || native_gpu_addon_failed || native_gpu_addon_files!=8 ||
        native_gpu_addon_written+native_gpu_addon_same!=native_gpu_addon_files){
         native_gpu_addon_status=native_gpu_addon_error?native_gpu_addon_error:EIO;return;
     }
-    char lower[512];int error=myron_gpu_sealed_entry(lower,sizeof lower);
+    char lower[512];int error=myron_gpu_sealed_entry("/System/Library/Extensions",lower,sizeof lower);
     if(error){native_gpu_addon_status=error;return;}
     static const char source[]="/private/var/ngpu/addons",point[]="/System/Library/Extensions";
     native_gpu_addon_mount(p,scratch,0x400,source,sizeof source,point,sizeof point,lower,
         "/System/Library/Extensions/NativeAdrenoMetal.bundle/Info.plist",
         &native_gpu_addon_stage,&native_gpu_addon_status);
     if(!native_gpu_addon_status && native_gpu_addon_stage==5)myron_gpu_addon_available();
+    if(native_gpu_addon_status || native_gpu_addon_stage!=5)return;
+    /* The helper itself requires a committed 16 GiB NativeRamBlock property.
+     * No resize occurs on an original 1 GiB disk or after an uncertain attempt. */
+    error=myron_gpu_sealed_entry("/System/Library/LaunchDaemons",lower,sizeof lower);
+    if(error){native_gpu_addon2_status=error;return;}
+    static const char helpers[]="/private/var/ngpu/addons/myron-data-daemons";
+    static const char launch[]="/System/Library/LaunchDaemons";
+    native_gpu_addon_mount(p,scratch,0x600,helpers,sizeof helpers,launch,sizeof launch,lower,
+        "/System/Library/LaunchDaemons/org.unixnu.myron.data-grow.plist",
+        &native_gpu_addon2_stage,&native_gpu_addon2_status);
 }
 static void
 myron_gpu_addon_prepare(proc_t p)
@@ -75,4 +84,5 @@ myron_gpu_addon_prepare(proc_t p)
     printf("myron-gpu-addon: stage=%d status=%d files=%d written=%d same=%d failed=%d error=%d\n",
         native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon_files,native_gpu_addon_written,
         native_gpu_addon_same,native_gpu_addon_failed,native_gpu_addon_error);
+    printf("myron-data-helper: stage=%d status=%d\n",native_gpu_addon2_stage,native_gpu_addon2_status);
 }

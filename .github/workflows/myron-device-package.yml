@@ -43,6 +43,7 @@ jobs:
       - name: Check GPU addon mount and Metal publication with the macOS SDK
         run: |
           python3 myron-runtime/test_gpu_addon_mount.py
+          python3 myron-runtime/test_data_helper_launch.py
           python3 myron-gpu/native/test_metal_publish.py --cxx clang++
       - name: Reconstruct source and fetch only pinned geometry references
         shell: python
@@ -363,6 +364,20 @@ jobs:
           python3 myron-gpu/audit_userspace_artifact.py "$RUNNER_TEMP/myron-metal-component.zip" \
             --sha256 14f73775ea5109f39d8a94837999ddc79ddb46bc76b1b2e87b47e691a1e12549 \
             --output "$RUNNER_TEMP/myron-metal-component-audit.json"
+      - name: Fetch the signed Data expansion helper
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15168827538/zip > "$RUNNER_TEMP/myron-data-helper.zip"
+          python3 - <<'PYHELPER'
+          import sys
+          sys.path.insert(0,'myron-gpu')
+          from prepare_metal_sidecars import data_helper
+          import os
+          data_helper(os.environ['RUNNER_TEMP']+'/myron-data-helper.zip')
+          print('PASS: pinned helper archive, signed code pages and identity')
+          PYHELPER
+          echo "MYRON_DATA_HELPER_ARTIFACT=$RUNNER_TEMP/myron-data-helper.zip" >> "$GITHUB_ENV"
       - name: Check retained Data byte identity before native compilation
         run: |
           python3 myron27-build.py --source-only
@@ -376,6 +391,7 @@ jobs:
           MYRON_GPU_NATIVE: '1'
           MYRON_PACKED_KERNEL: '1'
           MYRON_METAL_ARTIFACT: ${{ runner.temp }}/myron-metal-component.zip
+          MYRON_DATA_GROW: '16'
           MYRON_GPU_FIRMWARE: ${{ runner.temp }}/gpu-firmware
           MYRON_INPUT_SHA256: ${{ inputs.inputs_sha256 || '8e0b3b98e48ade9ff82ac4f85128e37327f2e69ac4191add64552b85a9e6ba48' }}
         run: python3 myron27-device-build.py --input-archive "$RUNNER_TEMP/device-inputs.zip"

@@ -8,12 +8,12 @@
   },
   "outputs": {
     "gpuaddon.bin": {
-      "bytes": 15289816,
-      "sha256": "10042ff20966df6402c2ad5e6a9575674f35c6d1ca407fd1cacb1fded5fe608b"
+      "bytes": 15298608,
+      "sha256": "a7761568a164f40b4c2734f825ac4c25033a9584e7034a4b952108bd0caf7ca8"
     },
     "kernel.macho.trustcache": {
-      "bytes": 92344,
-      "sha256": "079cbe6fb043ae3960e8e9c48ddb15677bb86ce05ffac9f06f8cb03f2954a063"
+      "bytes": 92368,
+      "sha256": "1ca837ce601d42b49cdf1acdd867b860ee2df12415f04eaa82588ec56fb6e927"
     }
   },
   "addon_files": {
@@ -46,15 +46,33 @@
       "mode": 420,
       "bytes": 2,
       "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "addons/myron-data-grow": {
+      "mode": 493,
+      "bytes": 89744,
+      "sha256": "3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93"
+    },
+    "addons/myron-data-daemons/org.unixnu.myron.data-grow.plist": {
+      "mode": 420,
+      "bytes": 715,
+      "sha256": "939585f5cd8278ea20ad51bda5438296a65ddbabcf7fb9a93d9ca05ce2960e63"
     }
   },
   "owner_cdhashes": [
     "0e94a0114e32dd6d25ba67636adf15472c04d20c",
-    "74625fb6ca7a9f46b92c712a64b628bbebaeb678"
+    "74625fb6ca7a9f46b92c712a64b628bbebaeb678",
+    "7890b3ffacb0db0edef6fb8aa75b57b0df6e0319"
   ],
   "original_trust_sha256": "095605d6abf4e82545579930d54a3476dfac35f754c504f87b456daa058cb9d4",
   "original_modules": [
     "3d81f304c3bc3c05ed32e729b64788ba245f69302ff6ede8c1272a38a7136ec5",
     "4a9332cd17629a94587fe3899157a397b4b9e0a48adad88f8bdf4b293a953ae9"
-  ]
+  ],
+  "data_helper": {
+    "run": 45931203957,
+    "commit": "9d0130bc2a156571e82527b0affb16722d8c465d",
+    "artifact_sha256": "b448603ad1a276414cd08e7c654fb91fc101cab749e38a648cde3daf5731a0ce",
+    "binary_sha256": "3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93",
+    "cdhash": "7890b3ffacb0db0edef6fb8aa75b57b0df6e0319"
+  }
 }

@@ -64,9 +64,11 @@ class Context(unittest.TestCase):
         factory=0x3000+60*4096
         names[factory]={'-[PBFPosterExtensionDataStoreXPCServiceGlue _lock_dataStoreWithError:]'}
         starts=sorted(names)+[factory+4096]
-        result=m.collect(Many([]),{'address':0},starts,names,self.decoder,lambda *a,**k:[])
+        result=m.collect(Many([]),{'address':0},starts,names,self.decoder,
+                         lambda *a,**k:[('0x4','cbz -> 0x20')])
         row=next(f for f in result['functions'] if f['offset']==hex(factory))
         self.assertFalse(row['truncated'])
         self.assertEqual(len(row['instructions']),1024)
+        self.assertEqual(row['references'],[('0x4','cbz -> 0x20'),('0x804','cbz -> 0x820')])
 
 if __name__=='__main__':unittest.main()

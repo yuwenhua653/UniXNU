@@ -2,9 +2,10 @@
 """Read generated sidecars back independently; no device access or build."""
 import argparse,json,struct,sys,unittest,zipfile,zlib
 from pathlib import Path
-from prepare_metal_sidecars import modules,owner_trust,addon,ORIGINAL_SHA,COMPONENT
+from prepare_metal_sidecars import modules,owner_trust,addon,ORIGINAL_SHA,COMPONENT,DATA_HELPER,data_helper
 from audit_userspace_artifact import sha,image
 p=argparse.ArgumentParser();p.add_argument('--artifact',type=Path,required=True)
+p.add_argument('--data-helper',type=Path,required=True)
 p.add_argument('--original-trust',type=Path,required=True);p.add_argument('--sidecars',type=Path,required=True)
 a,rest=p.parse_known_args()
 
@@ -17,14 +18,15 @@ class Sidecars(unittest.TestCase):
   with zipfile.ZipFile(a.artifact) as z:
    prefix='build/adreno-metal-plugin27/NativeAdrenoMetal.bundle/'
    special={1:z.read(prefix+'Info.plist'),3:z.read(prefix+'_CodeSignature/CodeResources')}
-   hashes=[]
+   helper_files=data_helper(a.data_helper)
+   hashes=[bytes.fromhex(DATA_HELPER['cdhash'])]
    for name,kind in [('NativeAdrenoMetal',8),('libvulkan_freedreno.dylib',6)]:
     hashes.append(bytes.fromhex(image(z.read(prefix+name),kind,special if kind==8 else {})['cdhash']))
    raw=(a.sidecars/'kernel.macho.trustcache').read_bytes();blocks=modules(raw)
    self.assertEqual(blocks[1:],modules(original));self.assertEqual(len(blocks),3)
    self.assertEqual(blocks[0][24:],b''.join(x+b'\x02\x00\x00\x00' for x in sorted(hashes)))
    raw=(a.sidecars/'gpuaddon.bin').read_bytes();magic,count,reserved,total=struct.unpack_from('<8sIIQ',raw)
-   self.assertEqual((magic,count,reserved,total),(b'NGPUADD2',6,0,len(raw)))
+   self.assertEqual((magic,count,reserved,total),(b'NGPUADD2',8,0,len(raw)))
    cursor=24;seen=set()
    for _ in range(count):
     plen,mode,size,n=struct.unpack_from('<IIQQ',raw,cursor);cursor+=24
@@ -32,6 +34,7 @@ class Sidecars(unittest.TestCase):
     cursor+=(plen+7)&~7;data=zlib.decompress(raw[cursor:cursor+n]);cursor+=(n+7)&~7
     self.assertEqual(len(data),size);self.assertNotIn(name,seen);seen.add(name)
     if name=='addons/NativeAdrenoMetal.publish':self.assertEqual((mode,data),(0o644,b'1\n'))
+    elif name in helper_files:self.assertEqual((mode,data),helper_files[name])
     else:self.assertEqual(data,z.read('build/adreno-metal-plugin27/'+name.removeprefix('addons/')))
     self.assertEqual(sha(data),report['addon_files'][name]['sha256'])
    self.assertEqual(cursor,len(raw));self.assertEqual(seen,set(report['addon_files']))

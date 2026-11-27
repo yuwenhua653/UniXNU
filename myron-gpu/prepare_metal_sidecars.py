@@ -5,9 +5,9 @@ Inputs are local verified artifacts. Output is NOT a flashable image. The
 loader/install/capacity integration must separately qualify before enabling
 myron-gpu-metal=1. Original Apple modules and signed plugin bytes stay exact.
 """
-import argparse, hashlib, json, struct, uuid, zipfile, zlib
+import argparse, hashlib, json, os, plistlib, struct, uuid, zipfile, zlib
 from pathlib import Path
-from audit_userspace_artifact import audit, require, sha
+from audit_userspace_artifact import audit, image, require, sha
 
 ORIGINAL_SHA = '095605d6abf4e82545579930d54a3476dfac35f754c504f87b456daa058cb9d4'
 ORIGINAL_MODULES = (
@@ -17,6 +17,25 @@ ORIGINAL_MODULES = (
 # Already compiled arm64e iOS27 component; no new component build is triggered.
 COMPONENT = dict(run=45925023720,commit='80b1c03cfa826cc34f8e06b93d7bebd4eae40f82',
  artifact_sha256='14f73775ea5109f39d8a94837999ddc79ddb46bc76b1b2e87b47e691a1e12549')
+DATA_HELPER = dict(run=45931203957,commit='9d0130bc2a156571e82527b0affb16722d8c465d',
+ artifact_sha256='b448603ad1a276414cd08e7c654fb91fc101cab749e38a648cde3daf5731a0ce',
+ binary_sha256='3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93',
+ cdhash='7890b3ffacb0db0edef6fb8aa75b57b0df6e0319')
+
+def data_helper(archive):
+ raw=Path(archive).read_bytes()
+ require(sha(raw)==DATA_HELPER['artifact_sha256'],'Wrong Data helper artifact')
+ with zipfile.ZipFile(archive) as z:
+  require(set(z.namelist())=={'myron-data-grow','build.json','entitlements.plist','host-checks.json'},'Data helper inventory')
+  binary=z.read('myron-data-grow');report=image(binary,2,{})
+  require(report['sha256']==DATA_HELPER['binary_sha256'] and report['cdhash']==DATA_HELPER['cdhash'],'Data helper signature identity')
+ daemon=plistlib.dumps(dict(Label='org.unixnu.myron.data-grow',
+  ProgramArguments=['/private/var/ngpu/addons/myron-data-grow','--grow'],
+  UserName='root',RunAtLoad=True,KeepAlive=False,ProcessType='Background',
+  StandardOutPath='/private/var/root/myron-data-grow.log',
+  StandardErrorPath='/private/var/root/myron-data-grow.err'))
+ return {'addons/myron-data-grow':(0o755,binary),
+  'addons/myron-data-daemons/org.unixnu.myron.data-grow.plist':(0o644,daemon)}
 
 
 def modules(data):
@@ -45,10 +64,10 @@ def owner_trust(original,cdhashes):
  old=modules(original)
  require(tuple(map(sha,old))==ORIGINAL_MODULES,'Changed original Apple trust modules')
  hashes=sorted(bytes.fromhex(x) for x in cdhashes)
- require(len(hashes)==2 and len(set(hashes))==2 and all(len(x)==20 for x in hashes),
-         'Exactly plugin and Turnip CDHashes are required')
+ require(len(hashes)==3 and len(set(hashes))==3 and all(len(x)==20 for x in hashes) and
+         bytes.fromhex(DATA_HELPER['cdhash']) in hashes,'Plugin, Turnip and pinned Data helper CDHashes required')
  ident=uuid.uuid5(uuid.NAMESPACE_URL,'org.unixnu.myron.24A446.metal:'+''.join(x.hex() for x in hashes))
- own=struct.pack('<I16sI',2,ident.bytes,2)+b''.join(x+bytes([2,0,0,0]) for x in hashes)
+ own=struct.pack('<I16sI',2,ident.bytes,len(hashes))+b''.join(x+bytes([2,0,0,0]) for x in hashes)
  blocks=[own,*old];cursor=4+4*len(blocks);offsets=[]
  for block in blocks: offsets.append(cursor);cursor+=len(block)
  out=struct.pack('<I',len(blocks))+struct.pack('<3I',*offsets)+b''.join(blocks)
@@ -69,10 +88,14 @@ def addon(files):
  return b'NGPUADD2'+struct.pack('<IIQ',len(files),0,24+len(body))+body
 
 
-def prepare(archive,original_path,out):
+def prepare(archive,original_path,out,helper_archive=None):
  report=audit(archive,COMPONENT['artifact_sha256'])
  original=original_path.read_bytes()
- trust=owner_trust(original,[x['cdhash'] for x in report['images'].values()])
+ helper_archive=helper_archive or os.environ.get('MYRON_DATA_HELPER_ARTIFACT')
+ require(bool(helper_archive),'Pinned Data helper artifact required')
+ helper_files=data_helper(helper_archive)
+ hashes=[x['cdhash'] for x in report['images'].values()]+[DATA_HELPER['cdhash']]
+ trust=owner_trust(original,hashes)
  files={}
  with zipfile.ZipFile(archive) as z:
   base='build/adreno-metal-plugin27/'
@@ -83,11 +106,12 @@ def prepare(archive,original_path,out):
  require(len(files)==5,'Unexpected component bundle')
  # Publication marker is outside the sealed bundle; code signatures unchanged.
  files['addons/NativeAdrenoMetal.publish']=(0o644,b'1\n')
+ files.update(helper_files)
  blob=addon(files)
  result=dict(format=1,target='iPhone12,1/24A446',component=COMPONENT,
   images=report['images'],original_trust_sha256=ORIGINAL_SHA,
   original_modules=list(ORIGINAL_MODULES),original_modules_unchanged=True,
-  owner_cdhashes=sorted(x['cdhash'] for x in report['images'].values()),
+  owner_cdhashes=sorted(hashes),data_helper=DATA_HELPER,
   outputs={'gpuaddon.bin':dict(bytes=len(blob),sha256=sha(blob)),
            'kernel.macho.trustcache':dict(bytes=len(trust),sha256=sha(trust))},
   addon_files={p:dict(mode=mode,bytes=len(raw),sha256=sha(raw)) for p,(mode,raw) in files.items()},
@@ -103,7 +127,7 @@ def prepare(archive,original_path,out):
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__)
  p.add_argument('--artifact',type=Path,required=True);p.add_argument('--original-trust',type=Path,required=True)
- p.add_argument('--out',type=Path,required=True);a=p.parse_args()
- r=prepare(a.artifact,a.original_trust,a.out)
+ p.add_argument('--out',type=Path,required=True);p.add_argument('--data-helper',type=Path);a=p.parse_args()
+ r=prepare(a.artifact,a.original_trust,a.out,a.data_helper)
  print('PASS: unchanged signed plugin/Turnip, publication marker and owner trust; not installed or flashable')
  print(json.dumps(r['outputs'],indent=2))

@@ -202,8 +202,12 @@ jobs:
           python-version: '3.12'
       - name: Install capsule test tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld qemu-system-arm mtools
+          # Only Ubuntu tools are needed; unrelated runner Microsoft feeds
+          # can return 403 and must not block a signed Ubuntu package update.
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
+          sudo apt-get "${apt_sources[@]}" update
+          sudo apt-get "${apt_sources[@]}" install -y clang lld qemu-system-arm mtools
           python3 -m pip install pyelftools==0.32
       - name: Reproduce and fix user PAC address width before native compilation
         run: |
@@ -243,8 +247,12 @@ jobs:
           persist-credentials: false
       - name: Build pinned EROFS extraction tool with file extraction support
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y autoconf automake libtool pkg-config liblz4-dev liblzma-dev libzstd-dev uuid-dev
+          # Only Ubuntu tools are needed; unrelated runner Microsoft feeds
+          # can return 403 and must not block a signed Ubuntu package update.
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
+          sudo apt-get "${apt_sources[@]}" update -qq
+          sudo apt-get "${apt_sources[@]}" install -y autoconf automake libtool pkg-config liblz4-dev liblzma-dev libzstd-dev uuid-dev
           git init "$RUNNER_TEMP/erofs-utils"
           git -C "$RUNNER_TEMP/erofs-utils" fetch --depth 1 https://github.com/erofs/erofs-utils.git 3689cbc2349bff05807d2f939146e92eb1bfaea1
           git -C "$RUNNER_TEMP/erofs-utils" checkout --detach FETCH_HEAD
@@ -469,8 +477,12 @@ jobs:
           path: native-input
       - name: Install phone-tested firmware compiler
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
+          # Only Ubuntu tools are needed; unrelated runner Microsoft feeds
+          # can return 403 and must not block a signed Ubuntu package update.
+          test -s /etc/apt/sources.list.d/ubuntu.sources
+          apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
+          sudo apt-get "${apt_sources[@]}" update
+          sudo apt-get "${apt_sources[@]}" install -y clang-18 llvm-18 lld-18 qemu-system-arm mtools build-essential uuid-dev libssl-dev
           python3 -m pip install pyelftools==0.32 capstone==5.0.6 unicorn==2.1.4 lz4==4.4.5
       - name: Automatically assemble continuous kernel with Linux firmware
         run: |

@@ -81,7 +81,8 @@ static void *current_thread(){return nullptr;}
 static uint64_t timerTicks(){return 0x1234;}
 static int kernel_thread_start(void (*f)(void *,wait_result_t),void *arg,thread_t *thread){*thread=(void*)1;f(arg,0);return 0;}
 static void thread_deallocate(thread_t){}
-static void IOSleep(unsigned ms){assert(ms==2000);++sleeps;gHost.ready=false;}
+static void IOSleep(unsigned ms){assert(ms==500);++sleeps;gHost.ready=false;}
+static void native_ufs_progress_text(char *p,size_t n){assert(n==2500);strcpy(p,"UFS CACHED SNAPSHOT\n");}
 static bool PE_parse_boot_argn(const char *key,void *v,unsigned n){assert(std::string(key)=="log"&&n==4);*(unsigned*)v=logArg;return true;}
 extern "C" size_t myron_display_snapshot(char *p,size_t n){++displaySnapshots;assert(n==1536);memset(p,'x',n-1);p[n-1]=0;return n-1;}
 extern "C" size_t myron_touch_snapshot(char *p,size_t n){assert(n==768);strcpy(p,"touch snapshot\n");return strlen(p);}

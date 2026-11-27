@@ -8,11 +8,13 @@ static uint64_t myronDataSelectedMarker, myronDataSelectedBytes;
 static unsigned char myronDataSelectedSeed[32];
 static bool myronDataMigrationWindow;
 static unsigned myronDataMigrationStatus;
+// 0=not attaching, 1=opening overlay, 2=ready to publish, 3=refused.
+static unsigned myronDataBootStage;
 extern "C" size_t myron_data_growth_snapshot(char *out,size_t cap) {
     if(!out || !cap)return 0;
-    int n=snprintf(out,cap,"myron-data-growth: copy=%u selectedMiB=%llu opened=%u failed=%u initializing=%u\n",
+    int n=snprintf(out,cap,"myron-data-growth: copy=%u selectedMiB=%llu opened=%u failed=%u initializing=%u media=%u\n",
         myronDataMigrationStatus,(unsigned long long)(myronDataSelectedBytes>>20),
-        myronDataBlocks?1u:0u,myronDataFailed?1u:0u,myronDataInitializing?1u:0u);
+        myronDataBlocks?1u:0u,myronDataFailed?1u:0u,myronDataInitializing?1u:0u,myronDataBootStage);
     return n<=0?0:(size_t)n<cap?(size_t)n:cap-1;
 }
 extern "C" unsigned myron_data_store_mode(void) { return 2; }

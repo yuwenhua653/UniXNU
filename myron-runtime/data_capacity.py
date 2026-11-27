@@ -10,6 +10,11 @@ def once(source, old, new):
 
 
 def prepare_ram_block(source):
+    # The board binds these callbacks strongly in the same translation unit.
+    source = once(source,
+                  'if (mode && (sparse.pages || isBig) && &myron_data_store_open && &myron_data_store_read && &myron_data_store_write &&\n'
+                  '        &myron_data_store_sync && &myron_data_store_gpt_check)',
+                  'if (mode && (sparse.pages || isBig))')
     source = once(source, '#include "SparseDisk.h"',
                   '#include "SparseDisk.h"\n#include "../MyronDataCapacity.h"')
     # Hashing must finish before changing the logical range. The hash remains
@@ -31,6 +36,23 @@ def prepare_ram_block(source):
   if(selectedBytes==MyronDataGrownBytes &&
      !setProperty("myron-data-grown-bytes",selectedBytes,64))return false;
   memcpy(native_ram_block_seed_sha256,seedHash,32);''')
+    # APFS probes as soon as registerService publishes the provider. Attaching
+    # the overlay in the later UUID resolver lets that probe cache seed-only
+    # container metadata, which can disagree with a resized persisted volume.
+    source = once(source, '  online = true;\n  native_ram_block_ready = 1;', '''  myronDataBootStage=1;
+  IOLog("NativeRamBlock: opening persistent Data before media publication\\n");
+  attachStore();
+  if(!storeAttached || !direct || directFailed || !overlay.active ||
+     myronDataFailed || myron_data_store_gpt_check()) {
+    myronDataBootStage=3;
+    IOLog("NativeRamBlock: Data publication refused, persist=%u header=%u\\n",
+          (unsigned)native_data_persist_state,(unsigned)native_data_persist_header);
+    return false;
+  }
+  myronDataBootStage=2;
+  IOLog("NativeRamBlock: persistent Data ready, bytes=%llu\\n",(unsigned long long)logical);
+  online = true;
+  native_ram_block_ready = 1;''')
     return source
 
 
@@ -47,6 +69,13 @@ def apply(root, replace):
             '  const size_t dataRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
             '  prefix+=(int)myron_data_growth_snapshot((char *)slot+prefix,dataRemaining<256?dataRemaining:256);\n'
             '  const size_t appsRemaining=')
+    replace(u/'MyronBootLog.h','  // Keep display status even when the general evidence fills the slot.',
+            '  // Passive cached UFS diagnostics; no new transport access.\n'
+            '  native_ufs_progress_text((char *)slot+prefix,2500);\n'
+            '  prefix+=(int)strlen((char *)slot+prefix);\n'
+            '  // Keep display status even when the general evidence fills the slot.')
+    replace(u/'MyronBootLog.h','  IOSleep(2000);',
+            '  IOSleep(h.rounds<20 ? 500 : 2000);')
     replace(d/'ram_data.py', '    return source',
             '    from data_capacity import prepare_ram_block\n    return prepare_ram_block(source)')
     replace(d/'ram_data.py', 'max_logical_bytes=0x80000000,',

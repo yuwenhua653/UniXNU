@@ -15,8 +15,8 @@ import myron_read_log as log
 PAGES=262144
 BITMAP_BLOCKS=8
 WINDOW_BLOCKS=1+BITMAP_BLOCKS+PAGES
-GROWN_PAGES=1048576
-GROWN_BLOCKS=2+32+GROWN_PAGES
+GROWN_PAGES=4194304
+GROWN_BLOCKS=2+128+GROWN_PAGES
 require=log.require
 
 def seed_identity(deployment):
@@ -60,12 +60,18 @@ def selected(device,deployment,original):
     if target-root_end<1024:return original,PAGES,None,None
     marker=device.read(target,1)
     require(len(marker)==4096,'Short growth marker')
-    if not any(marker):return original,PAGES,target,marker
+    if not any(marker):
+        require(not any(device.read(original-1048610,1)),
+                'Legacy expanded Data present; stale original export refused')
+        return original,PAGES,target,marker
     require(marker[:8]==b'MYRDATA1' and struct.unpack_from('<I',marker,8)[0]==1 and
             struct.unpack_from('<QQ',marker,16)==(target,GROWN_BLOCKS) and
             struct.unpack_from('<I',marker,32)[0]==zlib.crc32(marker[:32]),'Growth marker damaged; stale original export refused')
     state=struct.unpack_from('<I',marker,12)[0]
     require(state in (1,2),'Unknown growth marker state')
+    if state==1:
+        require(not any(device.read(original-1048610,1)),
+                'Legacy expanded Data present; stale original export refused')
     return (target,GROWN_PAGES,target,marker) if state==2 else (original,PAGES,target,marker)
 
 def capture(device,deployment,out):

@@ -20,7 +20,7 @@ SEED='11'*32 # synthetic test identity, never a device seed
 
 class Peer:
     def __init__(self,large=False,grown=False):
-        blocks=4000000 if large else 1000000
+        blocks=8000000 if large else 1000000
         self.g=dict(first=1000,last=blocks+999,diskLast=blocks+1000000,partitionGuid='test',reserveBlocks=256,
             carrierOffset=(blocks-256)*4096,carrierCapacity=4096)
         self.layout_value={k:self.g[k] for k in ('first','last','diskLast','partitionGuid')}
@@ -49,6 +49,8 @@ class Peer:
             assert n==1;self.reads.append((lba,n))
             if self.selection_flip and self.reads.count((lba,n))>1:return b'X'+bytes(self.growth_marker)[1:]
             return bytes(self.growth_marker)
+        if self.growth_first is not None and lba==m.geometry(self.d)-1048610:
+            self.reads.append((lba,n));return bytes(4096)
         assert self.first<=lba and lba+n<=self.first+self.window_blocks and 0<n<=128
         self.reads.append((lba,n))
         if lba==self.first:return bytes(self.marker)
@@ -98,10 +100,10 @@ class Tests(unittest.TestCase):
         with zipfile.ZipFile(self.out) as z:
             report=json.loads(z.read('report.json'));bitmap=z.read('bitmap.bin')
             self.assertEqual(report['pages'],m.GROWN_PAGES)
-            self.assertEqual(report['logical_bytes'],4*1024**3)
+            self.assertEqual(report['logical_bytes'],16*1024**3)
             self.assertEqual(report['marker_lba'],peer.growth_first)
             self.assertEqual(report['active_overlay'],'grown')
-            self.assertEqual(len(bitmap),32*4096)
+            self.assertEqual(len(bitmap),128*4096)
             self.assertEqual(z.read('pages.bin'),b'A'*4096+b'B'*4096+b'A'*4096)
         self.assertTrue(all(lba<m.geometry(peer.d) for lba,n in peer.reads))
     def test_pending_copy_exports_original(self):

@@ -81,7 +81,7 @@ def collect(cache, image, starts, names, decoder, flow):
     selected = {base + offset for offset in mandatory}
     for address, labels in names.items():
         if any(('DataStore' in name or 'PosterBoard' in name) and any(
-                word in name for word in (' init', 'dataStore', 'sharedInstance', 'load', 'create', 'setUp'))
+                word in name for word in (' init', 'dataStore', 'sharedInstance', 'load', 'create', 'setUp', 'buildDataStore', '_lock_ensureApplicationSupport'))
                for name in labels):
             selected.add(address)
     # The old address-order limit spent its budget on reload/gallery methods,
@@ -94,7 +94,9 @@ def collect(cache, image, starts, names, decoder, flow):
             '_PBFPosterExtensionDataStoreSQLiteDatabaseImpl initWithURL:',
             'PBFPosterExtensionDataStoreXPCServiceGlue _lock_dataStoreWithError:',
             'PBFPosterExtensionDataStoreXPCServiceGlue initWithOptions:',
-            'PBFPosterExtensionDataStoreXPCServiceGlue sharedInstance]'))
+            'PBFPosterExtensionDataStoreXPCServiceGlue sharedInstance]',
+            'PBFPosterExtensionDataStoreXPCServiceGlue buildDataStoreForURL:',
+            'PBFPosterExtensionDataStoreXPCServiceGlue _lock_ensureApplicationSupportDirectoriesCreated]'))
             for name in names.get(address, ()))
     ordered = sorted(selected, key=lambda address: (address-base not in mandatory,
                                                      not lifecycle(address), address))
@@ -106,10 +108,14 @@ def collect(cache, image, starts, names, decoder, flow):
         end = starts[index+1]
         high = min(end, address+(8192 if lifecycle(address) else 2048))
         ops = list(decoder.disasm(cache.read(address, high-address, executable=True)[0], address))
+        references=[]
+        for section in range(address, high, 2048):
+            refs=flow(cache,image,decoder,names,section,min(section+2048,high),string_limit=512)
+            references.extend((hex(int(offset,16)+section-address),value) for offset,value in refs)
         rows.append(dict(offset=hex(address-base), names=sorted(names.get(address, ())),
             function_bytes=end-address, truncated=high<end,
             instructions=[(hex(op.address-address), op.mnemonic, op.op_str) for op in ops],
-            references=flow(cache, image, decoder, names, address, high, string_limit=512)))
+            references=references))
         for op in ops:
             if op.mnemonic in ('bl', 'b') and op.operands[0].type == ARM64_OP_IMM:
                 target = op.operands[0].imm

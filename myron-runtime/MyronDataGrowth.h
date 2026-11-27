@@ -3,9 +3,12 @@
 #include "MyronDataWindow.h"
 enum : uint64_t {
     MyronDataSeedBytes=UINT64_C(1)<<30,
-    MyronDataGrownBytes=UINT64_C(4)<<30,
+    MyronDataGrownBytes=UINT64_C(16)<<30,
     MyronDataOldBlocks=262154,
-    MyronDataGrownBlocks=1048610
+    MyronDataGrownBitmapBlocks=128,
+    MyronDataGrownDataOffset=2+MyronDataGrownBitmapBlocks,
+    MyronDataGrownBlocks=MyronDataGrownDataOffset+(MyronDataGrownBytes/4096),
+    MyronDataLegacyBlocks=1048610
 };
 // The expanded copy is wholly BEFORE the original overlay. Neither the signed
 // root, its guard, the original Data nor the log/carrier tail may be reclaimed.

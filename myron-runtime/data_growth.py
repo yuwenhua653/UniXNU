@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a disjoint 4 GiB overlay image; never write a device or resize APFS.
+"""Prepare a disjoint 16 GiB overlay image; never write a device or resize APFS.
 
 The output is an intermediate migration image, NOT FLASHABLE. APFS still has
 its old container capacity until an on-device Apple resize operation succeeds.
@@ -15,7 +15,7 @@ import zlib
 import export_data as old
 
 BLOCK=4096
-PAGES=4*1024**3//BLOCK
+PAGES=old.GROWN_PAGES
 BITMAP_BLOCKS=PAGES//(8*BLOCK)
 BLOCKS=2+BITMAP_BLOCKS+PAGES
 require=old.require
@@ -24,9 +24,12 @@ def geometry(deployment):
     source=old.geometry(deployment)
     first=source-BLOCKS
     root_end=deployment['geometry']['first']+(deployment['files']['root-container.raw']['bytes']+BLOCK-1)//BLOCK
-    require(first-root_end>=1024,'No disjoint 4 GiB migration extent above signed root guard')
+    require(first-root_end>=1024,'No disjoint 16 GiB migration extent above signed root guard')
+    max_gib=(source-root_end-1024-2)//(262144+8)
     return dict(source_marker_lba=source,target_marker_lba=first,target_blocks=BLOCKS,
                 source_blocks=old.WINDOW_BLOCKS+1,target_logical_bytes=PAGES*BLOCK,
+                maximum_disjoint_whole_gib=max_gib,
+                remaining_gap_bytes=(first-root_end-1024)*BLOCK,
                 original_retained=True,apfs_resized=False,flashable=False)
 
 def marker(first,state):
@@ -102,6 +105,11 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--deployment',type=Path,required=True)
     p.add_argument('--seed-contract',type=Path,required=True)
-    p.add_argument('--export',type=Path,required=True)
-    p.add_argument('--output',type=Path,required=True)
-    a=p.parse_args();print(json.dumps(prepare(a.export,old.load_deployment(a.deployment,a.seed_contract),a.output),indent=2))
+    p.add_argument('--export',type=Path)
+    p.add_argument('--output',type=Path)
+    p.add_argument('--plan',action='store_true',help='Read local geometry only; no phone I/O or output image')
+    a=p.parse_args()
+    if a.plan and (a.export or a.output):p.error('--plan does not use --export/--output')
+    if not a.plan and (not a.export or not a.output):p.error('Preparation requires --export and --output')
+    deployment=old.load_deployment(a.deployment,a.seed_contract)
+    print(json.dumps(geometry(deployment) if a.plan else prepare(a.export,deployment,a.output),indent=2))

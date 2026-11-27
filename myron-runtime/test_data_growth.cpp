@@ -5,7 +5,7 @@
 int main(){
  MyronRootGeometry phone={249424640,257813247,257813503,34241249280ULL,117911552,28928};
  uint64_t target=0;assert(myronDataGrowthWindow(phone,15092154368ULL,&target));
- assert(target==256473556ULL && target+MyronDataGrownBlocks==257522166ULL);
+ assert(target==253327732ULL && target+MyronDataGrownBlocks==257522166ULL);
  assert(!myronDataGrowthWindow(phone,31ULL<<30,&target));
  assert(!myronDataGrowthWindow(phone,UINT64_MAX,&target));
  assert(!myronDataGrowthWindow(phone,0,&target));

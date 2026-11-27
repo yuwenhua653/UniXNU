@@ -1,18 +1,54 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 // Board-owned callbacks. The legacy sheng-data-persist write path stays closed.
 #include "MyronDataGrowth.h"
+#include "MyronDataMigration.h"
 static uint64_t myronDataFirst, myronDataBlocks;
 static bool myronDataFailed, myronDataInitializing;
 static uint64_t myronDataSelectedMarker, myronDataSelectedBytes;
 static unsigned char myronDataSelectedSeed[32];
+static bool myronDataMigrationWindow;
+static unsigned myronDataMigrationStatus;
+extern "C" size_t myron_data_growth_snapshot(char *out,size_t cap) {
+    if(!out || !cap)return 0;
+    int n=snprintf(out,cap,"myron-data-growth: copy=%u selectedMiB=%llu opened=%u failed=%u initializing=%u\n",
+        myronDataMigrationStatus,(unsigned long long)(myronDataSelectedBytes>>20),
+        myronDataBlocks?1u:0u,myronDataFailed?1u:0u,myronDataInitializing?1u:0u);
+    return n<=0?0:(size_t)n<cap?(size_t)n:cap-1;
+}
 extern "C" unsigned myron_data_store_mode(void) { return 2; }
 extern "C" unsigned myron_data_store_gpt_check(void) {
     unsigned result=native_ufs_store_gpt_check();
     if(result)myronDataFailed=true;
     return result;
 }
-// Called before the block provider is published, after hashing the original
-// seed. This probe never claims a destination or writes any device block.
+// Called once before NativeRamBlock publishes any IOMedia. The opt-in copy
+// owns the destination exclusively until attachStore; the source stays read-only.
+// Normal boots perform selection only. No package enables this flag yet.
+static bool myronDataRunMigration(const unsigned char seed[32],uint64_t target) {
+    unsigned gib=0;PE_parse_boot_argn("myron-data-grow",&gib,sizeof(gib));
+    if(!gib)return true;
+    if(gib!=16 || myronDataSelectedBytes || myronDataBlocks || myronDataMigrationWindow)return false;
+    auto scratch=static_cast<MyronDataMigrationScratch *>(IOMallocZero(sizeof(MyronDataMigrationScratch)));
+    if(!scratch)return false;
+    IOLockLock(gHost.lock);
+    bool opened=!gHost.poisoned && hostStoreOpen(target,MyronDataGrownBlocks);
+    IOLockUnlock(gHost.lock);
+    if(!opened){IOFree(scratch,sizeof(*scratch));return false;}
+    myronDataMigrationWindow=true;
+    struct Ops {
+        bool quiescent(){return myronDataMigrationWindow && !myronDataSelectedBytes &&
+            !myronDataBlocks && !myronDataFailed && gHost.ready && !gHost.poisoned &&
+            !myron_data_store_gpt_check();}
+        bool read(uint64_t at,uint32_t n,void *p){return hostRead4k(0,at,n,p)==kIOReturnSuccess;}
+        bool write(uint64_t at,uint32_t n,const void *p){return hostWrite4k(0,at,n,p,true)==kIOReturnSuccess;}
+        bool sync(){return hostSyncCache()==kIOReturnSuccess;}
+    } ops;
+    auto result=myronDataMigrate(ops,myron_root_geometry,gStoreGeometry.imageBytes,seed,*scratch);
+    myronDataMigrationStatus=1+(unsigned)result;
+    IOFree(scratch,sizeof(*scratch));
+    return result==MyronDataMigrationResult::Ready || result==MyronDataMigrationResult::AlreadyReady;
+}
+// Called before the block provider is published, after hashing the original seed.
 static bool myronDataProbeCapacity(const unsigned char seed[32],uint64_t originalBytes,
     unsigned char scratch[8192],uint64_t *logicalBytes) {
     uint64_t target=0;
@@ -24,6 +60,7 @@ static bool myronDataProbeCapacity(const unsigned char seed[32],uint64_t origina
        gStoreGeometry.first!=myron_root_geometry.first || gStoreGeometry.last!=myron_root_geometry.last ||
        !myronDataGrowthWindow(myron_root_geometry,gStoreGeometry.imageBytes,&target) ||
        myron_data_store_gpt_check())return false;
+    if(!myronDataRunMigration(seed,target)){myronDataFailed=true;return false;}
     if(hostRead4k(0,target,1,scratch)!=kIOReturnSuccess){myronDataFailed=true;return false;}
     unsigned state=myronDataGrowthMarker(scratch,target);
     if(state==3 || (!state && !myronDataBlank(scratch,4096))){myronDataFailed=true;return false;}
@@ -32,6 +69,10 @@ static bool myronDataProbeCapacity(const unsigned char seed[32],uint64_t origina
            !myronDataGrowthHeader(scratch+4096,seed)){myronDataFailed=true;return false;}
         myronDataSelectedMarker=target;myronDataSelectedBytes=MyronDataGrownBytes;
     }else{
+        const uint64_t legacy=target+MyronDataGrownBlocks-MyronDataLegacyBlocks;
+        if(hostRead4k(0,legacy,1,scratch)!=kIOReturnSuccess || !myronDataBlank(scratch,4096)){
+            myronDataFailed=true;return false;
+        }
         myronDataSelectedMarker=target+MyronDataGrownBlocks;myronDataSelectedBytes=originalBytes;
     }
     memcpy(myronDataSelectedSeed,seed,32);*logicalBytes=myronDataSelectedBytes;return true;
@@ -59,7 +100,9 @@ extern "C" __attribute__((noinline)) int myron_data_store_open(uint64_t blocks,u
     if(!grown && myronDataSelectedBytes &&
        (blocks!=MyronDataOldBlocks-1 || target!=myronDataSelectedMarker))return 0;
     IOLockLock(gHost.lock);
-    bool ok=!gHost.poisoned && hostStoreOpen(target,blocks+1);
+    bool ok=!gHost.poisoned && (myronDataMigrationWindow ?
+        (grown && target==myronDataSelectedMarker && blocks+1==MyronDataGrownBlocks) :
+        hostStoreOpen(target,blocks+1));
     if(ok){myronDataFirst=target+1;myronDataBlocks=blocks;*first=target+1;}
     IOLockUnlock(gHost.lock);
     if(!ok)return 0;

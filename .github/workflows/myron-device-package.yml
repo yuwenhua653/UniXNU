@@ -359,9 +359,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15084084332/zip > "$RUNNER_TEMP/myron-metal-component.zip"
+          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15167079658/zip > "$RUNNER_TEMP/myron-metal-component.zip"
           python3 myron-gpu/audit_userspace_artifact.py "$RUNNER_TEMP/myron-metal-component.zip" \
-            --sha256 cadee50cf39956a2c7bb0c4ea044dbf34cb35ebf600677d2485590194a14b674 \
+            --sha256 14f73775ea5109f39d8a94837999ddc79ddb46bc76b1b2e87b47e691a1e12549 \
             --output "$RUNNER_TEMP/myron-metal-component-audit.json"
       - name: Check retained Data byte identity before native compilation
         run: |

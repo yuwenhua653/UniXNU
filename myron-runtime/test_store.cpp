@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <cassert>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include "MyronDataWindow.h"
 static MyronRootGeometry myron_root_geometry={4096,8392703,8400000,31ULL<<30,4ULL<<20,262144};
 static struct {bool valid;uint64_t imageBytes,first,last;} gStoreGeometry={true,16ULL<<30,4096,8392703};
@@ -20,6 +22,9 @@ static bool hostStoreOpen(uint64_t f,uint64_t n){assert(locked);if(opened)return
 static int hostRead4k(unsigned lun,uint64_t f,uint32_t n,void *out){assert(!locked && lun==0 && f>=windowFirst && f+n<=windowFirst+windowBlocks);memset(out,0,n*4096);++commands;return 0;}
 static int hostWrite4k(unsigned lun,uint64_t f,uint32_t n,const void *,bool fua){assert(!locked && fua && lun==0 && f>=windowFirst && f+n<=windowFirst+windowBlocks);++commands;return failWrite?1:0;}
 static int hostSyncCache(){assert(!locked);++syncs;return 0;}
+static void PE_parse_boot_argn(const char *,unsigned *v,size_t){*v=0;}
+static void *IOMallocZero(size_t n){return calloc(1,n);}
+static void IOFree(void *p,size_t){free(p);}
 #include "MyronDataStore.h"
 int main(){
  uint64_t first=0;const char *why=nullptr;

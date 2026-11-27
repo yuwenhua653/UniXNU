@@ -8,7 +8,7 @@
 using Page=std::array<unsigned char,4096>;
 using Result=MyronDataMigrationResult;
 static const MyronRootGeometry phone={249424640,257813247,257813503,34241249280ULL,117911552,28928};
-static constexpr uint64_t rootBytes=15092154368ULL, dest=256473556ULL, source=257522166ULL;
+static constexpr uint64_t rootBytes=15092154368ULL, dest=253327732ULL, source=257522166ULL;
 static const unsigned char seed[32]={1};
 struct Store {
  std::map<uint64_t,Page> disk;
@@ -57,9 +57,9 @@ int main(){
  auto scratch=std::make_unique<MyronDataMigrationScratch>();Store old=original(),s=old;
  assert(myronDataMigrate(s,phone,rootBytes,seed,*scratch)==Result::Ready);oldUnchanged(s,old);
  unsigned operations=s.calls;assert(marker(s)==2 && myronDataGrowthHeader(s.disk.at(dest+1).data(),seed));
- for(unsigned i=0;i<33;++i)assert(s.disk.at(dest+34+i)==old.disk.at(source+10+i));
- assert(s.disk.at(dest+34+MyronDataSeedBytes/4096-1)==old.disk.at(source+10+MyronDataSeedBytes/4096-1));
- for(unsigned i=8;i<32;++i)for(auto b:s.disk.at(dest+2+i))assert(!b);
+ for(unsigned i=0;i<33;++i)assert(s.disk.at(dest+MyronDataGrownDataOffset+i)==old.disk.at(source+10+i));
+ assert(s.disk.at(dest+MyronDataGrownDataOffset+MyronDataSeedBytes/4096-1)==old.disk.at(source+10+MyronDataSeedBytes/4096-1));
+ for(unsigned i=8;i<MyronDataGrownBitmapBlocks;++i)for(auto b:s.disk.at(dest+2+i))assert(!b);
  unsigned writes=s.writes;assert(myronDataMigrate(s,phone,rootBytes,seed,*scratch)==Result::AlreadyReady && s.writes==writes);
  // Fail every storage operation; a partial copy can be retried, but a ready
  // marker (even if its final sync/read failed) must never be copied over.
@@ -75,9 +75,9 @@ int main(){
  s=old;myronDataMark(s.disk[dest].data(),dest,MyronDataGrownBlocks,2);s.disk[dest][32]^=1;
  assert(myronDataMigrate(s,phone,rootBytes,seed,*scratch)==Result::DestinationInvalid && !s.writes);
  s=old;s.changeSource=true;assert(myronDataMigrate(s,phone,rootBytes,seed,*scratch)==Result::SourceChanged && marker(s)==1);
- // First destination page readback follows 4 metadata reads, pending write,
+ // First destination page readback follows 5 metadata reads, pending write,
  // sync, pending readback, source page read and page write.
- s=old;s.corruptReadAt=10;
+ s=old;s.corruptReadAt=11;
  assert(myronDataMigrate(s,phone,rootBytes,seed,*scratch)==Result::ReadbackFailed && marker(s)==1);oldUnchanged(s,old);
  MyronDataSelection selected={};
  s=old;assert(myronDataSelect(s,phone,rootBytes,seed,scratch->data,selected));

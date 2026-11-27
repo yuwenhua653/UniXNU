@@ -35,7 +35,7 @@ static std::array<uint8_t,32+16+4096> packedDisk;
 static unsigned long gPhysBase=0x100000,gPhysSize=0x100000;
 static void *ml_static_ptovirt(uint64_t){return packedDisk.data();}
 static void *IOMallocZero(uint64_t n){
- if((fault==2 && n==8192)||(fault==3 && n==8*1024*1024))return nullptr;
+ if((fault==2 && n==8192)||(fault==3 && n==MyronDataGrownBytes/4096*sizeof(void*)))return nullptr;
  return calloc(1,n);
 }
 static void IOFree(void *p,uint64_t){free(p);}
@@ -67,6 +67,10 @@ struct NativeRamBlock:IOBlockStorageDevice {
  uint8_t *memory=nullptr;void *gate=nullptr;uint64_t capacity=0;
  RamSparseDisk sparse={};SeedDisk big={};bool isBig=false,online=false;uint8_t seedHash[32]={};
  bool start(IOService*);
+ bool setProperty(const char *name,uint64_t bytes,unsigned bits){
+  assert(!strcmp(name,"myron-data-grown-bytes") && bytes==MyronDataGrownBytes && bits==64);
+  return fault!=5;
+ }
  void registerService(){++published;assert(online && native_ram_block_ready && probes);}
  ~NativeRamBlock(){
   if(sparse.pages){for(uint64_t i=0;i<sparse.bytes/4096;++i)free(sparse.pages[i]);free(sparse.pages);}
@@ -80,7 +84,7 @@ int main(){
  memcpy(packedDisk.data()+16,&bytes,8);memcpy(packedDisk.data()+24,&count,8);
  memcpy(packedDisk.data()+32,&at,8);memcpy(packedDisk.data()+40,&len,8);
  memset(packedDisk.data()+48,0x53,4096);
- for(fault=0;fault<=4;++fault){
+ for(fault=0;fault<=5;++fault){
   published=probes=native_ram_block_ready=0;hashed=0;
   NativeRamBlock disk;IOService parent;
   bool ok=disk.start(&parent);assert(ok==(fault==0 || fault==4));
@@ -102,4 +106,4 @@ with tempfile.TemporaryDirectory(prefix='myron-data-start-') as tmp:
         '-fno-sanitize-recover=all','-I',str(a.ramblock.resolve()),'-I',str(Path(__file__).resolve().parent),
         '-I',str(a.device.resolve().parent/'sm8850/drivers/NativeUfs'),str(src),'-o',str(out)],check=True)
     subprocess.run([out],check=True,env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0'))
-print('PASS: actual RamBlock start, original seed hashing, 1/4 GiB publication and allocation/probe failure refusal')
+print('PASS: actual RamBlock start, original seed hashing, 1/16 GiB publication and allocation/probe failure refusal')

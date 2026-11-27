@@ -28,6 +28,8 @@ def prepare_ram_block(source):
     if(isBig || !myronDataExpandSeed(sparse,selectedBytes,alloc))return false;
     logical=selectedBytes;capacity=logical/512;
   }
+  if(selectedBytes==MyronDataGrownBytes &&
+     !setProperty("myron-data-grown-bytes",selectedBytes,64))return false;
   memcpy(native_ram_block_seed_sha256,seedHash,32);''')
     return source
 
@@ -35,13 +37,20 @@ def prepare_ram_block(source):
 def apply(root, replace):
     here=Path(__file__).resolve().parent
     d=root/'device/myron27'; u=root/'device/sm8850/drivers/NativeUfs'
-    for name in ('MyronDataGrowth.h','MyronDataCapacity.h'):
+    for name in ('MyronDataGrowth.h','MyronDataCapacity.h','MyronDataMigration.h'):
         shutil.copyfile(here/name,u/name)
     shutil.copyfile(here/'data_capacity.py',d/'data_capacity.py')
+    replace(u/'MyronBootLog.h','extern "C" size_t myron_staged_apps_snapshot(char *,size_t);',
+            'extern "C" size_t myron_staged_apps_snapshot(char *,size_t);\n'
+            'extern "C" size_t myron_data_growth_snapshot(char *,size_t);')
+    replace(u/'MyronBootLog.h','  const size_t appsRemaining=',
+            '  const size_t dataRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
+            '  prefix+=(int)myron_data_growth_snapshot((char *)slot+prefix,dataRemaining<256?dataRemaining:256);\n'
+            '  const size_t appsRemaining=')
     replace(d/'ram_data.py', '    return source',
             '    from data_capacity import prepare_ram_block\n    return prepare_ram_block(source)')
     replace(d/'ram_data.py', 'max_logical_bytes=0x80000000,',
-            'max_logical_bytes=0x100000000, original_seed_bytes=0x40000000,')
+            'max_logical_bytes=0x400000000, original_seed_bytes=0x40000000,')
     replace(d/'build_ufs_dormant.py', "'_myron_data_store_sync')",
             "'_myron_data_store_sync','_myron_data_capacity_valid')")
     p=d/'root_runtime.py'
@@ -57,7 +66,7 @@ def apply(root, replace):
     replace(p, "{'_native_ram_block_volume_seed', '_myron_data_start_state',",
             "{'_native_ram_block_volume_seed', '_myron_data_start_state', '_myron_data_capacity_valid',")
     replace(d/'tests/test_ram_data.py', "self.assertEqual(report['max_logical_bytes'], 1 << 31)",
-            "self.assertEqual(report['max_logical_bytes'], 1 << 32)\n"
+            "self.assertEqual(report['max_logical_bytes'], 1 << 34)\n"
             "            self.assertEqual(report['original_seed_bytes'], 1 << 30)")
     # Run the existing real generated mount function with expanded capacity as
     # well as every existing root/cache/seed failure. No mount APIs are changed.
@@ -67,11 +76,11 @@ def apply(root, replace):
     block=once(block,"logical_bytes=16384, logical_sha256='42'*32)",
                "logical_bytes=1073741824, logical_sha256='42'*32)")
     block=once(block,'*size=fault==16?8192:16384;',
-               '*size=fault==16?8192:fault==44?(UINT64_C(8)<<30):fault>=41?(UINT64_C(4)<<30):(UINT64_C(1)<<30);')
+               '*size=fault==16?8192:fault==44?(UINT64_C(32)<<30):fault>=41?(UINT64_C(16)<<30):(UINT64_C(1)<<30);')
     block=once(block,'memset(digest,fault==17?0x41:0x42,32);',
                'memset(digest,(fault==17 || fault==43)?0x41:0x42,32);')
     block=once(block,'int copyout(const void *from,user_addr_t to,size_t n){',
-               'int myron_data_capacity_valid(uint64_t bytes){return fault!=42 && bytes==(UINT64_C(4)<<30);}\n'
+               'int myron_data_capacity_valid(uint64_t bytes){return fault!=42 && bytes==(UINT64_C(16)<<30);}\n'
                'int copyout(const void *from,user_addr_t to,size_t n){')
     block=once(block,'34,35,36,40};','34,35,36,40,41,42,43,44};')
     block=once(block,'(fault==0 || fault==40)', '(fault==0 || fault==40 || fault==41)')

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 #include <map>
 #include <memory>
@@ -12,12 +13,16 @@
 using Page=std::array<unsigned char,4096>;
 // Synthetic geometry, not a user's GPT or deployment.
 static MyronRootGeometry myron_root_geometry={4096,8392703,8400000,31ULL<<30,4ULL<<20,262144};
-static struct {bool valid;uint64_t imageBytes,first,last;} gStoreGeometry={true,16ULL<<30,4096,8392703};
+static struct {bool valid;uint64_t imageBytes,first,last;} gStoreGeometry={true,12ULL<<30,4096,8392703};
 static struct {bool ready,poisoned;void *lock;} gHost={true,false,nullptr};
 static unsigned myron_root_start_ready=1,gptError=0,reads=0,writes=0;
 static bool locked=false,opened=false;
+static unsigned growGib=0;
+static void PE_parse_boot_argn(const char *,unsigned *v,size_t){*v=growGib;}
+static void *IOMallocZero(size_t n){return calloc(1,n);}
+static void IOFree(void *p,size_t){free(p);}
 static uint64_t windowFirst,windowBlocks;
-static constexpr uint64_t dest=6819796ULL,source=7868406ULL;
+static constexpr uint64_t dest=3673972ULL,source=7868406ULL;
 static constexpr unsigned kDataMax=131072,kIOReturnSuccess=0;
 static std::map<uint64_t,Page> disk;
 static unsigned storeMode(){return 0;}static unsigned logMode(){return 0;}
@@ -47,7 +52,8 @@ static const unsigned char seed[32]={1};
 static void reset(unsigned state){
  disk.clear();reads=writes=0;opened=locked=false;gHost.ready=true;gHost.poisoned=false;gptError=0;
  myronDataFirst=myronDataBlocks=myronDataSelectedMarker=myronDataSelectedBytes=0;
- myronDataFailed=myronDataInitializing=false;
+ myronDataFailed=myronDataInitializing=myronDataMigrationWindow=false;
+ myronDataMigrationStatus=0;growGib=0;
  myronDataMark(disk[source].data(),source,MyronDataOldBlocks,2);
  persist::encodeHeader(disk[source+1].data(),MyronDataSeedBytes/4096,seed,3);
  if(state){myronDataMark(disk[dest].data(),dest,MyronDataGrownBlocks,state);
@@ -96,7 +102,7 @@ int main(){
  alloc.fail=false;assert(myronDataExpandSeed(sparse,logical,alloc));
  assert(sparse.bytes==logical && sparse.resident==4096 && sparse.find(MyronDataSeedBytes/4096-1)==oldPage);
  assert(!sparse.find(MyronDataSeedBytes/4096) && !sparse.find(logical/4096-1));
- auto bits=std::make_unique<unsigned char[]>(32*4096),stage=std::make_unique<unsigned char[]>(4096);
+ auto bits=std::make_unique<unsigned char[]>(MyronDataGrownBitmapBlocks*4096),stage=std::make_unique<unsigned char[]>(4096);
  Store store;persist::Overlay overlay;
  assert(overlay.open(store,logical/4096,seed,false,bits.get(),false)==persist::Open::Resumed);
  Buffer buffer;bool failed=false;
@@ -124,4 +130,17 @@ int main(){
   if(fault==4)disk[dest][0]^=1;
   assert(!myronDataProbeCapacity(seed,MyronDataSeedBytes,scratch.get(),&logical) && !writes && !opened);
  }
+ // Opt-in executes the real pre-publication migration through actual callbacks.
+ reset(0);growGib=16;
+ assert(myronDataProbeCapacity(seed,MyronDataSeedBytes,scratch.get(),&logical));
+ assert(logical==MyronDataGrownBytes && opened && writes && myronDataMigrationStatus==1);
+ assert(myron_data_store_open(MyronDataGrownBlocks-1,&first,&why));
+ assert(myron_data_capacity_valid(logical));
+ reset(0);growGib=4;
+ assert(!myronDataProbeCapacity(seed,MyronDataSeedBytes,scratch.get(),&logical));
+ assert(!opened && !writes);
+ reset(0);disk[source-MyronDataLegacyBlocks][0]=1;
+ assert(!myronDataProbeCapacity(seed,MyronDataSeedBytes,scratch.get(),&logical));
+ assert(!opened && !writes);
+
 }

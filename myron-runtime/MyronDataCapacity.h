@@ -4,7 +4,7 @@
 
 // Expand only the pointer index after hashing the ORIGINAL immutable seed.
 // New slots are zero; DirectDisk reads them as zero unless the overlay has a
-// durable page. This allocates 8 MiB of pointers, never a 4 GiB RAM disk.
+// durable page. This allocates 32 MiB of pointers, never a 16 GiB RAM disk.
 template<class Disk,class Alloc>
 static bool myronDataExpandSeed(Disk &disk,uint64_t capacity,Alloc &alloc) {
     if(capacity==disk.bytes)return true;

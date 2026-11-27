@@ -15,8 +15,8 @@ ORIGINAL_MODULES = (
  '4a9332cd17629a94587fe3899157a397b4b9e0a48adad88f8bdf4b293a953ae9',
 )
 # Already compiled arm64e iOS27 component; no new component build is triggered.
-COMPONENT = dict(run=45745441328,commit='70919d982b024e946a127ce308de1ba840ebc025',
- artifact_sha256='cadee50cf39956a2c7bb0c4ea044dbf34cb35ebf600677d2485590194a14b674')
+COMPONENT = dict(run=45925023720,commit='80b1c03cfa826cc34f8e06b93d7bebd4eae40f82',
+ artifact_sha256='14f73775ea5109f39d8a94837999ddc79ddb46bc76b1b2e87b47e691a1e12549')
 
 
 def modules(data):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic 4 GiB sparse-image checks; no physical disk or private data."""
+"""Synthetic 16 GiB sparse-image checks; no physical disk or private data."""
 import argparse
 import hashlib
 import json
@@ -20,9 +20,9 @@ class Tests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name);self.export=self.root/'input.zip';self.output=self.root/'NOT-FLASHABLE.raw'
-        g=dict(first=1000,last=4000999,diskLast=5000000,partitionGuid='test',reserveBlocks=256,
-               carrierOffset=(4000000-256)*4096,carrierCapacity=4096)
-        layout={k:g[k] for k in ('first','last','diskLast','partitionGuid')};layout['partition_bytes']=4000000*4096
+        g=dict(first=1000,last=8000999,diskLast=9000000,partitionGuid='test',reserveBlocks=256,
+               carrierOffset=(8000000-256)*4096,carrierCapacity=4096)
+        layout={k:g[k] for k in ('first','last','diskLast','partitionGuid')};layout['partition_bytes']=8000000*4096
         self.d=dict(device='myron',partition='unixnu',device_bound=True,geometry=g,layout=layout,
                     files={'root-container.raw':{'bytes':1024**3}},
                     data_seed=dict(format=1,logical_bytes=m.old.PAGES*4096,logical_sha256=SEED))
@@ -61,7 +61,7 @@ class Tests(unittest.TestCase):
         self.assertFalse(self.output.exists())
         with self.output.with_suffix('.raw.partial').open('rb') as f:self.assertEqual(struct.unpack_from('<I',f.read(4096),12)[0],1)
     def test_no_room(self):
-        self.make();self.d['files']['root-container.raw']['bytes']=15*1024**3
+        self.make();self.d['files']['root-container.raw']['bytes']=31*1024**3
         with self.assertRaises(ValueError):m.prepare(self.export,self.d,self.output)
         self.assertFalse(self.output.exists())
     def test_foreign_export(self):

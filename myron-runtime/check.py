@@ -8,6 +8,8 @@ subprocess.run([__import__('sys').executable,str(here/'test_buttons.py'),'--cxx'
 subprocess.run([__import__('sys').executable,str(here/'test_power.py'),'--cxx',a.cxx],check=True)
 subprocess.run([__import__('sys').executable,str(here/'test_data_start.py'),
                 '--device',str(device),'--ramblock',str(a.ramblock),'--cxx',a.cxx],check=True)
+subprocess.run([__import__('sys').executable,str(here/'test_data_dyld.py'),
+                '--device',str(device),'--cc',a.cxx],check=True)
 subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',str(here/'test_apfs_growth.c'),'-o',str(device/'test-apfs-growth')],check=True)
 subprocess.run([str(device/'test-apfs-growth')],check=True)
 subprocess.run([__import__('sys').executable,str(here/'test_data_helper_launch.py')],check=True)
@@ -40,6 +42,6 @@ board=tomllib.loads((device/'board.toml').read_text())
 assert board['adt']['chosen']['u32']['display-scale']==board['adt']['product']['u32']['artwork-scale-factor']==3
 assert board['adt']['product']['u32']['artwork-device-subtype']==2556
 assert board['adt']['product']['string']['compatible-device-fallback']=='iPhone15,2'
-report=dict(host_passed=True,hardware_tested=False,tests=['bounded UFS ranges and failure closure','durable overlay reopen and seed mismatch','16 GiB disjoint migration geometry and seed identity','pre-mount migration: all injected I/O failures, retries and fail-closed selection','actual RamBlock start: immutable seed hash and 1/16 GiB publication','16 GiB store selection, boundary I/O and allocation/metadata failure refusal','power debounce, boot-held suppression and read timeout','3x paired presentation properties'],physical_framebuffer_changed=False)
+report=dict(host_passed=True,hardware_tested=False,tests=['bounded UFS ranges and failure closure','durable overlay reopen and seed mismatch','16 GiB disjoint migration geometry and seed identity','pre-mount migration: all injected I/O failures, retries and fail-closed selection','actual RamBlock start: immutable seed hash and 1/16 GiB publication','post-mount dyld gate: baseline 16 GiB rejection and 280 corrected startup scenarios','16 GiB store selection, boundary I/O and allocation/metadata failure refusal','power debounce, boot-held suppression and read timeout','3x paired presentation properties'],physical_framebuffer_changed=False)
 if a.output:a.output.write_text(json.dumps(report,indent=2)+'\n')
 print('PASS: Data geometry, actual store callbacks, overlay reopen, PMIC debounce; hardware untested')

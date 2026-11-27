@@ -83,6 +83,12 @@ def apply(root, replace):
     replace(d/'build_ufs_dormant.py', "'_myron_data_store_sync')",
             "'_myron_data_store_sync','_myron_data_capacity_valid')")
     p=d/'root_runtime.py'
+    # The post-mount dyld gate must accept the same committed capacity as the
+    # Data mount gate. The immutable seed's size/hash are still unchanged.
+    replace(p,
+            '        bytes != MYRON_DATA_SEED_BYTES || memcmp(digest, myron_data_expected_sha256, 32)) goto done;',
+            '        (bytes != MYRON_DATA_SEED_BYTES && !(MYRON_DATA_SEED_BYTES == UINT64_C(1073741824) &&\n'
+            '          myron_data_capacity_valid(bytes))) || memcmp(digest, myron_data_expected_sha256, 32)) goto done;')
     replace(p, "'_myron_start_data', '_myron_data_start_state', '_myron_data_start_status',",
             "'_myron_start_data', '_myron_data_start_state', '_myron_data_start_status',\n"
             "                '_myron_data_capacity_valid',")
@@ -115,4 +121,13 @@ def apply(root, replace):
     block=once(block,'(fault==0 || fault==40)', '(fault==0 || fault==40 || fault==41)')
     block=once(block,'if((fault>=1&&fault<=19)||fault==30||fault==31)',
                'if((fault>=1&&fault<=19)||fault==30||fault==31||fault>=42)')
+    p.write_text(text[:begin]+block+text[end:])
+    # Keep the original small synthetic-seed test compiling under strict C11;
+    # the separate full startup test exercises authorized 1/16 GiB capacities.
+    text=p.read_text()
+    begin=text.index('    def test_dyld_startup_production_gate_and_failures(')
+    end=text.index('\n    def ',begin+1);block=text[begin:end]
+    block=once(block,'int native_verified_block_root_authorized(dev_t device){',
+               'int myron_data_capacity_valid(uint64_t bytes){(void)bytes;return 0;}\n'
+               'int native_verified_block_root_authorized(dev_t device){')
     p.write_text(text[:begin]+block+text[end:])

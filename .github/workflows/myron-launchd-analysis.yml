@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   analyze:
-    if: github.event.head_commit.message == 'Analyze original myron launchd reboot' || github.event.head_commit.message == 'Identify myron backboard first-frame wait'
+    if: github.event.head_commit.message == 'Analyze original myron launchd reboot' || github.event.head_commit.message == 'Identify myron backboard first-frame wait' || github.event.head_commit.message == 'Analyze myron Data helper startup'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -23,6 +23,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p test_myron_launchd_analysis.py -v
+          python3 -m unittest discover -s tests -p test_myron_data_helper_analysis.py -v
+          python3 myron-runtime/test_data_helper_launch.py
           python3 myron27-fault-extract.py --self-test
           python3 myron27-build.py --source-only
           git init -q "$RUNNER_TEMP/launchd-upstream"
@@ -34,7 +36,12 @@ jobs:
           set -euo pipefail
           analysis_python="$(python3 -c 'import sys; print(sys.executable)')"
           analysis_ipsw="$(python3 -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("ipsw")).resolve())')"
-          sudo -n env GITHUB_SHA="$GITHUB_SHA" "$analysis_python" myron27-launchd-analysis.py ${{ github.event.head_commit.message == 'Identify myron backboard first-frame wait' && '--backboard-wait' || '' }} --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --upstream "$RUNNER_TEMP/launchd-upstream" --work "$RUNNER_TEMP/launchd-private" --output "$RUNNER_TEMP/launchd-public" --archive-tool "$analysis_ipsw"
+          analysis_mode=()
+          if [ "$ANALYSIS_MESSAGE" = 'Identify myron backboard first-frame wait' ]; then analysis_mode+=(--backboard-wait); fi
+          if [ "$ANALYSIS_MESSAGE" = 'Analyze myron Data helper startup' ]; then analysis_mode+=(--data-helper-startup); fi
+          sudo -n env GITHUB_SHA="$GITHUB_SHA" "$analysis_python" myron27-launchd-analysis.py "${analysis_mode[@]}" --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --upstream "$RUNNER_TEMP/launchd-upstream" --work "$RUNNER_TEMP/launchd-private" --output "$RUNNER_TEMP/launchd-public" --archive-tool "$analysis_ipsw"
+        env:
+          ANALYSIS_MESSAGE: ${{ github.event.head_commit.message }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: myron-launchd-reboot-analysis

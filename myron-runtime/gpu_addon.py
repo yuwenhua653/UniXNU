@@ -4,7 +4,8 @@ from pathlib import Path
 
 def source(addon, contract_path):
     if os.environ.get('MYRON_GPU_NATIVE')!='1':
-        return 'static void myron_gpu_addon_prepare(proc_t p){(void)p;}\n'
+        return ('static void myron_gpu_addon_prepare(proc_t p){(void)p;}\n'
+                'size_t myron_data_helper_snapshot(char *out,size_t cap){(void)out;(void)cap;return 0;}\n')
     # root_runtime already SHA-pins the complete upstream block before calling us.
     contract=json.loads(Path(contract_path).read_text());entry=contract['outputs']['gpuaddon.bin']
     text=addon[:addon.index('/* The deletable system apps')]

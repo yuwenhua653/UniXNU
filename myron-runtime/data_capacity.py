@@ -64,10 +64,13 @@ def apply(root, replace):
     shutil.copyfile(here/'data_capacity.py',d/'data_capacity.py')
     replace(u/'MyronBootLog.h','extern "C" size_t myron_staged_apps_snapshot(char *,size_t);',
             'extern "C" size_t myron_staged_apps_snapshot(char *,size_t);\n'
-            'extern "C" size_t myron_data_growth_snapshot(char *,size_t);')
+            'extern "C" size_t myron_data_growth_snapshot(char *,size_t);\n'
+            'extern "C" size_t myron_data_helper_snapshot(char *,size_t);')
     replace(u/'MyronBootLog.h','  const size_t appsRemaining=',
             '  const size_t dataRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
             '  prefix+=(int)myron_data_growth_snapshot((char *)slot+prefix,dataRemaining<256?dataRemaining:256);\n'
+            '  const size_t helperRemaining=MyLogSlotBlocks*MyLogBlock-(size_t)prefix;\n'
+            '  prefix+=(int)myron_data_helper_snapshot((char *)slot+prefix,helperRemaining<256?helperRemaining:256);\n'
             '  const size_t appsRemaining=')
     replace(u/'MyronBootLog.h','  // Keep display status even when the general evidence fills the slot.',
             '  // Passive cached UFS diagnostics; no new transport access.\n'

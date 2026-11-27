@@ -70,6 +70,17 @@ native_gpu_addon_prepare(proc_t p,user_addr_t scratch)
         "/System/Library/LaunchDaemons/org.unixnu.myron.data-grow.plist",
         &native_gpu_addon2_stage,&native_gpu_addon2_status);
 }
+/* Cached installation/publication state only. Stage 5 proves visibility of
+ * the plist, not launchd acceptance, helper execution or APFS growth. */
+size_t myron_data_helper_snapshot(char *out,size_t cap)
+{
+    if(!out || !cap)return 0;
+    int n=snprintf(out,cap,"[myron helper] addon_stage=%d addon_status=%d files=%d written=%d same=%d failed=%d error=%d daemon_stage=%d daemon_status=%d\n",
+        native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon_files,
+        native_gpu_addon_written,native_gpu_addon_same,native_gpu_addon_failed,
+        native_gpu_addon_error,native_gpu_addon2_stage,native_gpu_addon2_status);
+    return n<0?0:((size_t)n<cap?(size_t)n:cap-1);
+}
 static void
 myron_gpu_addon_prepare(proc_t p)
 {

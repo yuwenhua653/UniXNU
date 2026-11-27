@@ -93,7 +93,17 @@ int main(void){
   if(fault==17){assert(mountCalls==2&&published==1&&native_gpu_addon2_status==EIO);continue;}
   assert(!mountCalls&&!published);
  }
- puts("PASS: actual helper/GPU publication, sealed lower scan, 17 faults, no helper launch after incomplete install");
+ native_gpu_addon2_stage=5;native_gpu_addon2_status=0;
+ char full[256];size_t length=myron_data_helper_snapshot(full,sizeof full);
+ assert(length==strlen(full)&&strstr(full,"daemon_stage=5 daemon_status=0"));
+ assert(!myron_data_helper_snapshot(NULL,256));
+ for(size_t cap=0;cap<=sizeof full;cap++){
+  char buffer[258];memset(buffer,0x5a,sizeof buffer);
+  size_t n=myron_data_helper_snapshot(buffer+1,cap);
+  assert(buffer[0]==0x5a&&buffer[cap+1]==0x5a);
+  if(cap)assert(n<cap&&buffer[1+n]==0);else assert(!n&&buffer[1]==0x5a);
+ }
+ puts("PASS: actual helper/GPU publication, sealed lower scan, 17 faults and bounded persistent snapshot");
 }
 '''
 with tempfile.TemporaryDirectory() as tmp:

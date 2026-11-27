@@ -28,6 +28,10 @@ class Context(unittest.TestCase):
         rows=m.call_entry(Cache([0x14000040]),self.decoder,0x1000)
         self.assertEqual(rows[-1]['exact_symbol'],'_target')
         self.assertNotIn('bytes',rows[0])
+    def test_adrp_add_branch_thunk(self):
+        # adrp x16,0x1000; add x16,x16,#0x100; br x16
+        rows=m.call_entry(Cache([0x90000010,0x91040210,0xd61f0200]),self.decoder,0x1000)
+        self.assertEqual(rows[-1]['exact_symbol'],'_target')
     def test_indirect_target_requires_verified_chain(self):
         # adrp x16, 0x2000; ldr x16, [x16]; br x16
         cache=Cache([0xb0000010,0xf9400210,0xd61f0200])
@@ -52,5 +56,17 @@ class Context(unittest.TestCase):
         self.assertGreater(result['omitted_functions'],0)
         self.assertTrue(all(x['truncated'] and len(x['instructions'])==512 for x in result['functions']))
         self.assertFalse(result['runtime_observation'])
+    def test_initialization_chain_precedes_gallery_and_is_not_truncated(self):
+        class Many(Cache):
+            def read(self,address,size,executable=False):
+                return struct.pack('<I',0xd503201f)*(size//4),None
+        names={0x3000+i*4096:{'-[PBFPosterExtensionDataStore reload]'} for i in range(60)}
+        factory=0x3000+60*4096
+        names[factory]={'-[PBFPosterExtensionDataStoreXPCServiceGlue _lock_dataStoreWithError:]'}
+        starts=sorted(names)+[factory+4096]
+        result=m.collect(Many([]),{'address':0},starts,names,self.decoder,lambda *a,**k:[])
+        row=next(f for f in result['functions'] if f['offset']==hex(factory))
+        self.assertFalse(row['truncated'])
+        self.assertEqual(len(row['instructions']),1024)
 
 if __name__=='__main__':unittest.main()

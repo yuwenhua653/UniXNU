@@ -56,7 +56,7 @@ def call_entry(cache, decoder, address):
                                 slot=hex(slot), target=chain['unsigned_runtime_target'],
                                 static_chain_only=True))
                 elif op.mnemonic in ('br', 'braa', 'braaz', 'brab', 'brabz'):
-                    target = pointers.get(operands[0].reg)
+                    target = pointers.get(operands[0].reg, pages.get(operands[0].reg))
                     break
                 else:
                     # Do not propagate an address across a register overwrite.
@@ -84,13 +84,27 @@ def collect(cache, image, starts, names, decoder, flow):
                 word in name for word in (' init', 'dataStore', 'sharedInstance', 'load', 'create', 'setUp'))
                for name in labels):
             selected.add(address)
-    ordered = sorted(selected, key=lambda address: (address-base not in mandatory, address))
+    # The old address-order limit spent its budget on reload/gallery methods,
+    # omitting the XPC store factory, SQLite initializer and their cold errors.
+    # Follow the failed initialization chain before unrelated store operations.
+    def lifecycle(address):
+        return any(any(part in name for part in (
+            'PBFPosterExtensionDataStore initWithURL:',
+            'PBFPosterExtensionDataStoreSQLiteDatabase initWithURL:',
+            '_PBFPosterExtensionDataStoreSQLiteDatabaseImpl initWithURL:',
+            'PBFPosterExtensionDataStoreXPCServiceGlue _lock_dataStoreWithError:',
+            'PBFPosterExtensionDataStoreXPCServiceGlue initWithOptions:',
+            'PBFPosterExtensionDataStoreXPCServiceGlue sharedInstance]'))
+            for name in names.get(address, ()))
+    ordered = sorted(selected, key=lambda address: (address-base not in mandatory,
+                                                     not lifecycle(address), address))
     rows = []; calls = set()
     for address in ordered[:48]:
         index = bisect_right(starts, address)-1
         if index < 0 or index+1 >= len(starts) or starts[index] != address:
             continue
-        end = starts[index+1]; high = min(end, address+2048)
+        end = starts[index+1]
+        high = min(end, address+(8192 if lifecycle(address) else 2048))
         ops = list(decoder.disasm(cache.read(address, high-address, executable=True)[0], address))
         rows.append(dict(offset=hex(address-base), names=sorted(names.get(address, ())),
             function_bytes=end-address, truncated=high<end,

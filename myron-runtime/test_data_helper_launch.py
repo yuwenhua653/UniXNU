@@ -26,7 +26,9 @@ prelude=r'''
 #define VNODE_READDIR_EXTENDED 1
 #define VNODE_LOOKUP_NOFOLLOW 1
 #define NULLVP NULL
-#define CAST_USER_ADDR_T(p) ((uintptr_t)(p))
+#ifndef CAST_USER_ADDR_T
+#define CAST_USER_ADDR_T(p) ((user_addr_t)(uintptr_t)(p))
+#endif
 typedef void *proc_t;typedef void *vfs_context_t;
 #if !defined(__APPLE__)
 typedef uintptr_t user_addr_t;

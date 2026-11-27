@@ -9,6 +9,14 @@ enum { MYRON_GPU_POOL_MIB = 256, MYRON_GPU_BOOT_PERF = 7 };
 // 256 MiB early pool plus at most 128 MiB reclaimable BO overflow. This does
 // not raise per-object, VA-window, GPU OPP or imported-page limits.
 enum { MYRON_GPU_OVERFLOW_BYTES = 128u * 1024u * 1024u };
+// Vulkan's owned-memory heap shares the kernel's pool/overflow ceiling.
+// This is capacity, not currently free memory, and not a per-client grant.
+static inline uint64_t myron_gpu_heap_bytes(uint64_t system_heap_bytes)
+{
+    const uint64_t capacity = (uint64_t)MYRON_GPU_POOL_MIB * 1024u * 1024u +
+                              MYRON_GPU_OVERFLOW_BYTES;
+    return system_heap_bytes < capacity ? system_heap_bytes : capacity;
+}
 static inline unsigned myron_gpu_pool_mib(unsigned requested)
 {
     return requested >= 16 && requested <= MYRON_GPU_POOL_MIB

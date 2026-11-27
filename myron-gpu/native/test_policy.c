@@ -4,6 +4,10 @@
 #include <stdio.h>
 int main(void)
 {
+    assert(myron_gpu_heap_bytes(UINT64_MAX) == UINT64_C(384)*1024*1024);
+    assert(myron_gpu_heap_bytes(UINT64_C(2)*1024*1024*1024) == UINT64_C(384)*1024*1024);
+    assert(myron_gpu_heap_bytes(UINT64_C(64)*1024*1024) == UINT64_C(64)*1024*1024);
+    assert(myron_gpu_heap_bytes(0) == 0);
     assert(myron_gpu_pool_mib(0) == 256);
     assert(myron_gpu_pool_mib(16) == 16);
     assert(myron_gpu_pool_mib(128) == 128);

@@ -88,6 +88,14 @@ def prepare(refs, native_refs, out, download=False):
         copy(ROOT/'scripts'/name, 'scripts/'+name)
     for name in json.loads((ROOT/'scripts/data/adreno-compiler-inputs.json').read_text())['patches']:
         copy(ROOT/name, name)
+    # Only this resolved board tree advertises the board's owned BO capacity.
+    # Keep the generic Darwin backend and the wire ABI unchanged.
+    heap_patch = 'myron-gpu/patches/0002-turnip-myron-owned-heap.patch'
+    copy(ROOT/heap_patch, heap_patch)
+    compiler_inputs = out/'scripts/data/adreno-compiler-inputs.json'
+    compiler_pins = json.loads(compiler_inputs.read_text())
+    compiler_pins['patches'].append(heap_patch)
+    compiler_inputs.write_text(json.dumps(compiler_pins, indent=2)+'\n')
     copy(ROOT/'myron-gpu/native/userspace_contract.py', 'myron-gpu/native/userspace_contract.py')
     # The upstream recipes record the actual component commit through git.
     subprocess.run(['git', 'clone', '-q', '--no-hardlinks', str(refs/'AdrenoMetal'),
@@ -98,6 +106,7 @@ def prepare(refs, native_refs, out, download=False):
             if source.is_file() and (source.suffix in ('.h', '.c') or source.name.startswith('LICENSE')):
                 copy(source, prefix+'/'+source.name)
     copy(ROOT/'myron-gpu/native/MyronGpuMailbox.h', 'drivers/NativeAdreno/MyronGpuMailbox.h')
+    copy(ROOT/'myron-gpu/native/MyronGpuPolicy.h', 'drivers/NativeAdreno/MyronGpuPolicy.h')
     recipe = out/'scripts/build-adreno-metal-plugin.py'
     text = recipe.read_text().replace("ROOT / 'drivers/Adreno740'", "ROOT / 'drivers/NativeAdreno'")
     text = replace(text, "args = parser.parse_args()", "args = parser.parse_args()\n"

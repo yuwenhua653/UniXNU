@@ -105,6 +105,8 @@ def build(root):
     # Exercise the exact patched Mesa macros before starting the macOS build.
     from test_turnip_dynamic_state import check as check_dynamic_state
     check_dynamic_state(root/'.cache/mesa-work', 'clang++')
+    from test_heap_contract import check as check_heap_contract
+    check_heap_contract(root/'.cache/mesa-work', root/'drivers/NativeAdreno', 'clang++')
     run([sys.executable,root/'scripts/build-turnip-darwin.py','--target','ios27',
          '--native-adreno',root/'drivers/NativeAdreno'],cwd=root)
     run([sys.executable,root/'scripts/build-adreno-metal-plugin.py','--target','ios27','--no-replay'],cwd=root)

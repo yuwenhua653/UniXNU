@@ -4,7 +4,7 @@ import shutil
 
 def apply(d,replace):
     here=Path(__file__).resolve().parent;root=here.parent
-    for name in ('prepare_metal_sidecars.py','audit_userspace_artifact.py','data_launch_cache.py','data-helper-sources.json'):
+    for name in ('prepare_metal_sidecars.py','audit_userspace_artifact.py','data-helper-sources.json'):
         shutil.copyfile(root/'myron-gpu'/name,d/name)
     shutil.copyfile(here/'metal_payload.py',d/'metal_payload.py')
     shutil.copyfile(root/'myron_continuous_contract.py',d/'myron_continuous_contract.py')
@@ -31,7 +31,7 @@ def apply(d,replace):
         "        if metal:report['required_boot_arguments']+=['myron-gpu-metal=1','gpu-prime=0']\n"
         "        growth=os.environ.get('MYRON_DATA_GROW')\n"
         "        if growth is not None:\n"
-        "            require(growth=='16' and metal and bool(os.environ.get('MYRON_DATA_HELPER_ARTIFACT')) and bool(os.environ.get('MYRON_DATA_CACHE_ARTIFACT')), 'Data growth requires signed helper, service cache and exact 16 GiB selection')\n"
+        "            require(growth=='16' and metal and bool(os.environ.get('MYRON_DATA_HELPER_ARTIFACT')), 'Data growth requires signed early helper and exact 16 GiB selection')\n"
         "            report['required_boot_arguments']+=['myron-data-grow=16']\n")
     # These tests construct a tiny synthetic kernel without GPU objects. The
     # real build's component selection must not turn that fixture into a Metal

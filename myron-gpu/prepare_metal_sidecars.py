@@ -8,12 +8,6 @@ myron-gpu-metal=1. Original Apple modules and signed plugin bytes stay exact.
 import argparse, hashlib, json, os, plistlib, struct, uuid, zipfile, zlib
 from pathlib import Path
 from audit_userspace_artifact import audit, image, require, sha
-from data_launch_cache import daemon as data_daemon, load_archive as cache_files
-
-# Original-cache component, independently regenerated and checked on readback.
-DATA_CACHE = dict(run=46085527736,commit='f22c5a0d2166dea93576a7211062915621dbb2c6',
- artifact_sha256='e23bc0601b18063be0ee19a2913e1c0e132e1990561e1ca9932be7abc1169749')
-
 ORIGINAL_SHA = '095605d6abf4e82545579930d54a3476dfac35f754c504f87b456daa058cb9d4'
 ORIGINAL_MODULES = (
  '3d81f304c3bc3c05ed32e729b64788ba245f69302ff6ede8c1272a38a7136ec5',
@@ -36,13 +30,19 @@ def data_helper(archive):
  raw=Path(archive).read_bytes()
  require(sha(raw)==DATA_HELPER['artifact_sha256'],'Wrong Data helper artifact')
  with zipfile.ZipFile(archive) as z:
-  require(set(z.namelist())=={'myron-data-grow','build.json','entitlements.plist','host-checks.json'},'Data helper inventory')
+  require(set(z.namelist())=={'myron-data-grow','HorizonSetup','build.json','entitlements.plist','earlyboot-entitlements.plist','host-checks.json'},'Data helper inventory')
   verify_helper_sources(json.loads(z.read('build.json')))
   binary=z.read('myron-data-grow');report=image(binary,2,{})
   require(report['sha256']==DATA_HELPER['binary_sha256'] and report['cdhash']==DATA_HELPER['cdhash'],'Data helper signature identity')
- daemon=plistlib.dumps(data_daemon())
+  early=z.read('HorizonSetup')
+  ent={k:True for k in ('platform-application','com.apple.private.security.no-container',
+                      'com.apple.private.security.no-sandbox')}
+  early_report=image(early,2,{},identifier='com.apple.HorizonSetup',entitlements=ent)
+  require(early_report['sha256']==DATA_HELPER['earlyboot_sha256'] and
+          early_report['cdhash']==DATA_HELPER['earlyboot_cdhash'],'Early adapter signature identity')
  return {'addons/myron-data-grow':(0o755,binary),
-  'addons/myron-data-daemons/org.unixnu.myron.data-grow.plist':(0o644,daemon)}
+         'addons/myron-data-earlyboot/HorizonSetup':(0o755,early)}
+
 
 
 def modules(data):
@@ -71,8 +71,9 @@ def owner_trust(original,cdhashes):
  old=modules(original)
  require(tuple(map(sha,old))==ORIGINAL_MODULES,'Changed original Apple trust modules')
  hashes=sorted(bytes.fromhex(x) for x in cdhashes)
- require(len(hashes)==3 and len(set(hashes))==3 and all(len(x)==20 for x in hashes) and
-         bytes.fromhex(DATA_HELPER['cdhash']) in hashes,'Plugin, Turnip and pinned Data helper CDHashes required')
+ require(len(hashes)==4 and len(set(hashes))==4 and all(len(x)==20 for x in hashes) and
+         bytes.fromhex(DATA_HELPER['cdhash']) in hashes and bytes.fromhex(DATA_HELPER['earlyboot_cdhash']) in hashes,
+         'Plugin, Turnip, Data helper and early adapter CDHashes required')
  ident=uuid.uuid5(uuid.NAMESPACE_URL,'org.unixnu.myron.24A446.metal:'+''.join(x.hex() for x in hashes))
  own=struct.pack('<I16sI',2,ident.bytes,len(hashes))+b''.join(x+bytes([2,0,0,0]) for x in hashes)
  blocks=[own,*old];cursor=4+4*len(blocks);offsets=[]
@@ -95,16 +96,13 @@ def addon(files):
  return b'NGPUADD2'+struct.pack('<IIQ',len(files),0,24+len(body))+body
 
 
-def prepare(archive,original_path,out,helper_archive=None,cache_archive=None):
+def prepare(archive,original_path,out,helper_archive=None):
  report=audit(archive,COMPONENT['artifact_sha256'])
  original=original_path.read_bytes()
  helper_archive=helper_archive or os.environ.get('MYRON_DATA_HELPER_ARTIFACT')
  require(bool(helper_archive),'Pinned Data helper artifact required')
  helper_files=data_helper(helper_archive)
- cache_archive=cache_archive or os.environ.get('MYRON_DATA_CACHE_ARTIFACT')
- require(bool(cache_archive) and DATA_CACHE is not None,'Pinned Data service cache required')
- service_cache=cache_files(cache_archive,DATA_CACHE)
- hashes=[x['cdhash'] for x in report['images'].values()]+[DATA_HELPER['cdhash']]
+ hashes=[x['cdhash'] for x in report['images'].values()]+[DATA_HELPER['cdhash'],DATA_HELPER['earlyboot_cdhash']]
  trust=owner_trust(original,hashes)
  files={}
  with zipfile.ZipFile(archive) as z:
@@ -117,12 +115,14 @@ def prepare(archive,original_path,out,helper_archive=None,cache_archive=None):
  # Publication marker is outside the sealed bundle; code signatures unchanged.
  files['addons/NativeAdrenoMetal.publish']=(0o644,b'1\n')
  files.update(helper_files)
- files.update(service_cache)
  blob=addon(files)
  result=dict(format=1,target='iPhone12,1/24A446',component=COMPONENT,
   images=report['images'],original_trust_sha256=ORIGINAL_SHA,
   original_modules=list(ORIGINAL_MODULES),original_modules_unchanged=True,
-  owner_cdhashes=sorted(hashes),data_helper=DATA_HELPER,data_cache=DATA_CACHE,
+  owner_cdhashes=sorted(hashes),data_helper=DATA_HELPER,
+  data_helper_sources_sha256=sha(Path(__file__).with_name('data-helper-sources.json').read_bytes()),
+  earlyboot_task='restore-datapartition',earlyboot_program='/usr/libexec/HorizonSetup',
+  service_cache_modified=False,
   outputs={'gpuaddon.bin':dict(bytes=len(blob),sha256=sha(blob)),
            'kernel.macho.trustcache':dict(bytes=len(trust),sha256=sha(trust))},
   addon_files={p:dict(mode=mode,bytes=len(raw),sha256=sha(raw)) for p,(mode,raw) in files.items()},
@@ -139,7 +139,7 @@ if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__)
  p.add_argument('--artifact',type=Path,required=True);p.add_argument('--original-trust',type=Path,required=True)
  p.add_argument('--out',type=Path,required=True);p.add_argument('--data-helper',type=Path)
- p.add_argument('--service-cache',type=Path);a=p.parse_args()
- r=prepare(a.artifact,a.original_trust,a.out,a.data_helper,a.service_cache)
+ a=p.parse_args()
+ r=prepare(a.artifact,a.original_trust,a.out,a.data_helper)
  print('PASS: unchanged signed plugin/Turnip, publication marker and owner trust; not installed or flashable')
  print(json.dumps(r['outputs'],indent=2))

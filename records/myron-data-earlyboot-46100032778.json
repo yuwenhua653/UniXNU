@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "analysis_run": 46100032778,
+  "analysis_commit": "9d3ba6117155df39213d79baeb812127cbcd4774",
+  "artifact_id": 15245326742,
+  "artifact_sha256": "1d1cd61e0e721a3c214df6738bbb731b47104b12f03e395eb68835c8091abc06",
+  "target": "iPhone12,1/27.0.1/24A446",
+  "launchd_sha256": "c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b",
+  "launchd_uuid": "ca54230d400531318dc3ccb7e7ef18e6",
+  "task": "restore-datapartition",
+  "program": "/usr/libexec/HorizonSetup",
+  "original_path_kind": "absent",
+  "task_config": {"PerformInRestore": true, "RequireSuccess": true, "Program": "/usr/libexec/HorizonSetup"},
+  "order": ["mount-phase-1", "restore-datapartition", "mount-phase-2", "MSUEarlyBootTask", "launchd_cache_loader"],
+  "task_spawn_function": "0x100044f10-0x1000457c4",
+  "task_order_function": "0x100046288",
+  "requires_platform_binary": true,
+  "required_signing_identifier": "com.apple.HorizonSetup",
+  "require_success_crash_behavior": 3,
+  "child_spawn_review": {
+    "xnu_commit": "ac9718fb1af618d5ce8678d0dc6e8a58f252216f",
+    "file": "bsd/kern/kern_exec.c",
+    "fresh_spawn_crash_behavior": 0,
+    "explicit_child_assignment_line": 4863
+  },
+  "trust_review": {
+    "file": "bsd/kern/kern_trustcache.c",
+    "first_external_module_type": "kTCTypeStatic",
+    "owner_module_position": 0,
+    "original_apple_modules_modified": false,
+    "global_signature_checks_modified": false
+  },
+  "host_cases": {"adapter": 78, "publication": 198, "transaction": 60, "journal_io": 12},
+  "source_implemented": true,
+  "helper_ios_compiled": false,
+  "phone_executed": false,
+  "apfs_resized": false,
+  "limitations": ["Host peers do not execute launchd or iOS APFS", "Adapter self-crash remains boot-critical", "Existing or uncertain journals remain preserved and block another mutation", "No raw phone logs or Data included"]
+}

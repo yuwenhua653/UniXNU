@@ -51,11 +51,12 @@ volatile int native_bindfs_boot_mount,native_gpu_addon_stage,native_gpu_addon_st
 volatile int native_gpu_addon_files,native_gpu_addon_written,native_gpu_addon_same,native_gpu_addon_failed,native_gpu_addon_error;
 static vfs_context_t vfs_context_current(void){return NULL;}
 static int vnode_open(const char *p,int flags,int mode,int x,vnode_t *out,vfs_context_t ctx){
- (void)mode;(void)x;(void)ctx;assert((!strcmp(p,"/System/Library/Extensions")||!strcmp(p,"/System/Library/LaunchDaemons")||!strcmp(p,"/System/Library/xpc"))&&flags==(FREAD|O_NOFOLLOW));
+ (void)mode;(void)x;(void)ctx;assert((!strcmp(p,"/System/Library/Extensions")||!strcmp(p,"/usr/libexec"))&&flags==(FREAD|O_NOFOLLOW));
  if(scenario==3)return EIO;*out=&root;handles++;return 0;}
 static int vnode_close(vnode_t n,int flags,vfs_context_t c){(void)n;(void)flags;(void)c;assert(handles);handles--;return 0;}
 static int vnode_lookup(const char *p,int flags,vnode_t *out,vfs_context_t ctx){
  (void)flags;(void)ctx;
+ if(!strcmp(p,"/usr/libexec/HorizonSetup")&&!mounts)return ENOENT;
  if((scenario==4&&strstr(p,"/private/var/")) || (scenario==7&&mounts&&!strstr(p,"NativeAdrenoMetal")) || (scenario==8&&strstr(p,"NativeAdrenoMetal")))return ENOENT;
  *out=&child;refs++;return 0;}
 static void vnode_put(vnode_t n){(void)n;assert(refs);refs--;}
@@ -76,9 +77,9 @@ static int vnode_readdir64(vnode_t dir,uio_t u,int flags,int *eof,int *count,vfs
 static int copyout(const void *p,user_addr_t to,size_t n){if(scenario==5)return EFAULT;memcpy((void*)to,p,n);return 0;}
 static int mount(proc_t p,struct mount_args *r,int32_t *result){(void)p;(void)result;
  assert(native_bindfs_boot_mount==1 && r->flags==(MNT_RDONLY|MNT_UNION)&&!strcmp((char*)r->type,"bindfs")&&
- ((!strcmp((char*)r->path,"/System/Library/Extensions")&&!strcmp((char*)r->data,"/private/var/ngpu/addons"))||(!strcmp((char*)r->path,"/System/Library/LaunchDaemons")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-daemons"))));mounts++;return scenario==6?EPERM:0;}
-static int PE_parse_boot_argn(const char *s,void *p,size_t n){assert(!strcmp(s,"myron-gpu-metal")&&n==4);*(uint32_t*)p=scenario?1:0;return 1;}
-static void native_gpu_addon_install(proc_t p,user_addr_t scratch){(void)p;assert(scratch);native_gpu_addon_files=9;native_gpu_addon_written=scenario==2?8:9;native_gpu_addon_error=scenario==1?EIO:0;}
+ ((!strcmp((char*)r->path,"/System/Library/Extensions")&&!strcmp((char*)r->data,"/private/var/ngpu/addons"))||(!strcmp((char*)r->path,"/usr/libexec")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-earlyboot"))));mounts++;return scenario==6?EPERM:0;}
+static int PE_parse_boot_argn(const char *s,void *p,size_t n){assert(n==4);if(!strcmp(s,"myron-data-grow")){*(uint32_t*)p=16;return 1;}assert(!strcmp(s,"myron-gpu-metal"));*(uint32_t*)p=scenario?1:0;return 1;}
+static void native_gpu_addon_install(proc_t p,user_addr_t scratch){(void)p;assert(scratch);native_gpu_addon_files=8;native_gpu_addon_written=scenario==2?7:8;native_gpu_addon_error=scenario==1?EIO:0;}
 static void myron_gpu_addon_available(void){assert(native_gpu_addon_stage==5&&!native_gpu_addon_status&&!native_bindfs_boot_mount);published++;}
 static vm_map_t current_map(void){return NULL;}
 static int mach_vm_allocate_kernel(vm_map_t map,mach_vm_address_t *out,size_t n,int flags){(void)map;(void)flags;assert(n==4096);if(scenario==10)return 1;*out=(uintptr_t)calloc(1,n);livevm++;return 0;}

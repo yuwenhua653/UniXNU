@@ -13,6 +13,8 @@ subprocess.run([__import__('sys').executable,str(here/'test_data_dyld.py'),
 subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',str(here/'test_apfs_growth.c'),'-o',str(device/'test-apfs-growth')],check=True)
 subprocess.run([str(device/'test-apfs-growth')],check=True)
 subprocess.run([__import__('sys').executable,str(here/'test_data_helper_launch.py')],check=True)
+subprocess.run([__import__('sys').executable,str(here/'test_gpu_addon_mount.py')],check=True)
+subprocess.run([__import__('sys').executable,str(here/'test_data_earlyboot.py')],check=True)
 for test in ('test_myron_data_export.py','test_myron_data_growth.py'):
  subprocess.run([__import__('sys').executable,str(here.parent/'tests'/test),
                  '--reader-directory',str(device)],check=True)

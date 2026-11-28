@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Independently check downloaded component bytes; never hardware qualification."""
-import argparse, hashlib, json, struct, zlib, zipfile
+import argparse, hashlib, json, plistlib, struct, zlib, zipfile
 from pathlib import Path
 
 
@@ -11,7 +11,7 @@ def require(ok, reason):
 def sha(data): return hashlib.sha256(data).hexdigest()
 
 
-def image(data, kind, special):
+def image(data, kind, special, identifier=None, entitlements=None):
     require(len(data)>=32,'short Mach-O')
     magic,cpu,subtype,actual,ncmd,size=struct.unpack_from('<6I',data)
     require((magic,cpu,subtype&0xffffff,actual)==(0xfeedfacf,0x100000c,2,kind),'wrong arm64e Mach-O type')
@@ -45,6 +45,15 @@ def image(data, kind, special):
     require(magic==0xfade0c02 and n==len(cd) and flags&2,'not an ad-hoc CodeDirectory')
     require((hsize,htype,page)==(32,2,12) and limit==offset,'unsupported signature coverage')
     require(nc==(limit+4095)//4096 and hoff>=ns*32 and hoff+nc*32<=n,'invalid code hash table')
+    if identifier is not None:
+        require(44<=ident<hoff-ns*32,'invalid signature identifier offset')
+        name=cd[ident:hoff-ns*32]
+        require(b'\0' in name and name.split(b'\0',1)[0]==identifier.encode(),'wrong signed identifier')
+    if entitlements is not None:
+        require(ns>=5 and 5 in slots and len(slots[5])>=8,'missing signed entitlements')
+        require(struct.unpack_from('>I',slots[5])[0]==0xfade7171 and
+                hashlib.sha256(slots[5]).digest()==cd[hoff-5*32:hoff-4*32], 'unsigned entitlements')
+        require(plistlib.loads(slots[5][8:])==entitlements,'wrong signed entitlements')
     for i in range(nc):
         require(hashlib.sha256(data[i*4096:min((i+1)*4096,limit)]).digest()==cd[hoff+i*32:hoff+(i+1)*32],f'code page {i} mismatch')
     for i in range(1,ns+1):

@@ -86,3 +86,47 @@ The system-cache overlay stays disabled. A proven startup path remains
 unresolved; do NOT call these source repairs a complete phone expansion fix,
 and do NOT start a full package build from this checkpoint. No rollback-only
 or speculative boot-argument build is requested.
+
+## Implemented early task, pending signed-component qualification
+
+The later read-only run `46100032778` resolves the startup source question.
+Its exact-donor evidence and source references are recorded in
+`records/myron-data-earlyboot-46100032778.json`. `restore-datapartition` is an
+optional `/usr/libexec/HorizonSetup` task before `mount-phase-2`, MSU and the
+service cache loader. The hash-verified donor has no file at that path. The
+existing phone capture also records this task being attempted and absent.
+
+The new read-only union publishes just the owner adapter at that absent path.
+It refuses an existing file or symlink and any lookup error other than ENOENT,
+requires a sealed read-only lower directory and the exact growth boot option,
+and checks that an original lower entry remains visible. The eight-file addon
+must finish its hash-bound installation before either union is attempted.
+The early union no longer depends on the GPU mount succeeding. Neither the
+LaunchDaemons directory nor the system service cache is overlaid. Old owner
+files on Data are not deleted.
+
+Original launchd spawns this task suspended, requires CS_PLATFORM_BINARY and
+signing identifier `com.apple.HorizonSetup`, then resumes it. Its RequireSuccess
+crash behavior is 3. The minimal C adapter is therefore a separate executable:
+it checks PID 1 parent, root, fixed executable path and exact boot option,
+spawns the APFS helper once with fresh default crash attributes, waits without
+killing/retrying a resize, and returns zero even if the helper refuses or
+crashes. Pinned XNU `kern_exec.c` explicitly assigns the fresh child crash
+behavior; it does not inherit the task's panic policy. A crash of the adapter
+itself is still boot-critical and is not claimed to have been phone-tested.
+
+Code-page and entitlement hashes, exact signing identity and both executable
+CDHashes are checked. The owner module remains first in the external trust
+bundle, which pinned XNU loads as static/platform trust; the two Apple modules
+remain byte-identical. No global AMFI or launch-constraint bypass is added.
+The component build must compile and sign both real iOS executables before
+updating addon/trust/kernel pins. `check_data_helper_contract.py` blocks a full
+build until those pins and all reviewed helper source hashes agree.
+
+Host checks passed 78 actual-wrapper cases and 198 actual-publication cases,
+including child signals, bad boot options, existing/dangling-symlink paths,
+independent mount failures and resource cleanup. The real union mount harness,
+60 transaction cases, journal I/O tests and 280 reconstructed startup cases
+also passed. These are source-path tests, not device execution or successful
+filesystem expansion. The old artifact stays rejected while the new component
+is being qualified; a successful component build alone is not a flash package.

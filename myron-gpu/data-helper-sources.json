@@ -5,5 +5,7 @@
   "test_apfs_growth.c": "9d022ebc23f6c41dec774417b5360e8d1e132fbbbdff74ae4abd25062aa49344",
   "test_apfs_transaction.c": "6199d216272ba0dee2dd721f3e01358589fc76c3a9d2e8070320ce1b3b6e03f3",
   "test_apfs_journal.py": "de3bc6365dc72dd2b3a99400cf36ff7bb4ce0d692653edff3f77ca7e9d78f14b",
-  "build_data_helper.py": "691ba10706ae307af40fb2b1edbfce11755b4794c13af6af588b14a10b0bdf62"
+  "build_data_helper.py": "4310c5bee8e46d3f32932601852f88c67944339b77725e6fe74eb99df91301e4",
+  "myron-data-earlyboot.c": "f0a52e45f6c9ecd254e225a09c1bbd5d015b19cf9d4c053f9af6607d456b8dfa",
+  "test_data_earlyboot.py": "9c1fc076a47eae1be9bb16049554346d6d76f4755d51da1be8e85f674059e9b8"
 }

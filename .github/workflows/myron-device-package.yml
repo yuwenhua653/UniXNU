@@ -32,6 +32,8 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
+      - name: Refuse stale Data helper binaries before starting a full build
+        run: python3 myron-gpu/check_data_helper_contract.py
       - name: Check staged symbol contracts before building
         run: |
           python3 tests/test_continuous_contract.py
@@ -44,7 +46,7 @@ jobs:
         run: |
           python3 myron-runtime/test_gpu_addon_mount.py
           python3 myron-runtime/test_data_helper_launch.py
-          python3 myron-gpu/test_data_launch_cache.py
+          python3 myron-runtime/test_data_earlyboot.py
           python3 myron-gpu/native/test_metal_publish.py --cxx clang++
       - name: Reconstruct source and fetch only pinned geometry references
         shell: python
@@ -387,20 +389,6 @@ jobs:
           print('PASS: pinned helper archive, signed code pages and identity')
           PYHELPER
           echo "MYRON_DATA_HELPER_ARTIFACT=$RUNNER_TEMP/myron-data-helper.zip" >> "$GITHUB_ENV"
-      - name: Fetch and independently verify the Data service cache
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15239123343/zip > "$RUNNER_TEMP/myron-data-cache.zip"
-          python3 - <<'PYCACHE'
-          import os, sys
-          sys.path.insert(0,'myron-gpu')
-          from prepare_metal_sidecars import DATA_CACHE
-          from data_launch_cache import load_archive
-          load_archive(os.environ['RUNNER_TEMP']+'/myron-data-cache.zip', DATA_CACHE)
-          print('PASS: pinned original cache, one owner job added, all original entries preserved')
-          PYCACHE
-          echo "MYRON_DATA_CACHE_ARTIFACT=$RUNNER_TEMP/myron-data-cache.zip" >> "$GITHUB_ENV"
       - name: Check retained Data byte identity before native compilation
         run: |
           python3 myron27-build.py --source-only

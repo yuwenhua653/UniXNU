@@ -43,15 +43,40 @@ myron_gpu_sealed_entry(const char *base,char *path,size_t cap)
     return error?error:close_error?close_error:found?0:ENOENT;
 }
 static void
+myron_data_earlyboot_prepare(proc_t p,user_addr_t scratch)
+{
+    uint32_t growth=0;
+    if(!PE_parse_boot_argn("myron-data-grow",&growth,sizeof growth) || growth!=16){
+        native_gpu_addon2_stage=-1;native_gpu_addon2_status=ECANCELED;return;
+    }
+    /* Only the hash-pinned donor's absent optional boot task is usable.
+     * NOFOLLOW also refuses a dangling symlink; never shadow a stock task. */
+    static const char owner[]="/usr/libexec/HorizonSetup";
+    vnode_t existing=NULLVP;
+    int error=vnode_lookup(owner,VNODE_LOOKUP_NOFOLLOW,&existing,vfs_context_current());
+    if(!error){vnode_put(existing);native_gpu_addon2_status=EEXIST;return;}
+    if(error!=ENOENT){native_gpu_addon2_status=error;return;}
+    char lower[512];error=myron_gpu_sealed_entry("/usr/libexec",lower,sizeof lower);
+    if(error){native_gpu_addon2_status=error;return;}
+    static const char helpers[]="/private/var/ngpu/addons/myron-data-earlyboot";
+    static const char point[]="/usr/libexec";
+    native_gpu_addon_mount(p,scratch,0x600,helpers,sizeof helpers,point,sizeof point,lower,
+        owner,&native_gpu_addon2_stage,&native_gpu_addon2_status);
+}
+static void
 native_gpu_addon_prepare(proc_t p,user_addr_t scratch)
 {
     uint32_t enabled=0;
     if(!PE_parse_boot_argn("myron-gpu-metal",&enabled,sizeof enabled) || enabled!=1)return;
     native_gpu_addon_install(p,scratch);
-    if(native_gpu_addon_error || native_gpu_addon_failed || native_gpu_addon_files!=9 ||
+    if(native_gpu_addon_error || native_gpu_addon_failed || native_gpu_addon_files!=8 ||
        native_gpu_addon_written+native_gpu_addon_same!=native_gpu_addon_files){
         native_gpu_addon_status=native_gpu_addon_error?native_gpu_addon_error:EIO;return;
     }
+    /* Publish the early task independently of GPU extension readiness.
+     * The original sealed service cache and LaunchDaemons remain untouched. */
+    native_gpu_addon3_stage=-1;native_gpu_addon3_status=ECANCELED;
+    myron_data_earlyboot_prepare(p,scratch);
     char lower[512];int error=myron_gpu_sealed_entry("/System/Library/Extensions",lower,sizeof lower);
     if(error){native_gpu_addon_status=error;return;}
     static const char source[]="/private/var/ngpu/addons",point[]="/System/Library/Extensions";
@@ -59,32 +84,13 @@ native_gpu_addon_prepare(proc_t p,user_addr_t scratch)
         "/System/Library/Extensions/NativeAdrenoMetal.bundle/Info.plist",
         &native_gpu_addon_stage,&native_gpu_addon_status);
     if(!native_gpu_addon_status && native_gpu_addon_stage==5)myron_gpu_addon_available();
-    if(native_gpu_addon_status || native_gpu_addon_stage!=5)return;
-    /* The helper itself requires a committed 16 GiB NativeRamBlock property.
-     * No resize occurs on an original 1 GiB disk or after an uncertain attempt. */
-    error=myron_gpu_sealed_entry("/System/Library/LaunchDaemons",lower,sizeof lower);
-    if(error){native_gpu_addon2_status=error;return;}
-    static const char helpers[]="/private/var/ngpu/addons/myron-data-daemons";
-    static const char launch[]="/System/Library/LaunchDaemons";
-    native_gpu_addon_mount(p,scratch,0x600,helpers,sizeof helpers,launch,sizeof launch,lower,
-        "/System/Library/LaunchDaemons/org.unixnu.myron.data-grow.plist",
-        &native_gpu_addon2_stage,&native_gpu_addon2_status);
-    if(native_gpu_addon2_status || native_gpu_addon2_stage!=5)return;
-    /* Quarantine the service-cache overlay after the 46087333358 boot
-     * regression. File/hash preservation and a successful union mount do not
-     * qualify the runtime launchd cache consumer. Keep the original sealed
-     * /System/Library/xpc visible; never unmount, rename or delete user Data.
-     * The inert ninth file may remain in the owner directory, but there is no
-     * boot argument or error path that can publish it over the system cache. */
-    native_gpu_addon3_stage=-1;
-    native_gpu_addon3_status=ECANCELED;
 }
 /* Cache stage -1 / ECANCELED is intentionally disabled, not a mount error.
- * Daemon stage 5 still does not prove helper execution or APFS growth. */
+ * Early stage 5 still does not prove helper execution or APFS growth. */
 size_t myron_data_helper_snapshot(char *out,size_t cap)
 {
     if(!out || !cap)return 0;
-    int n=snprintf(out,cap,"[myron helper] addon_stage=%d addon_status=%d files=%d written=%d same=%d failed=%d error=%d daemon_stage=%d daemon_status=%d cache_stage=%d cache_status=%d cache_policy=disabled\n",
+    int n=snprintf(out,cap,"[myron helper] addon_stage=%d addon_status=%d files=%d written=%d same=%d failed=%d error=%d early_stage=%d early_status=%d cache_stage=%d cache_status=%d cache_policy=disabled\n",
         native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon_files,
         native_gpu_addon_written,native_gpu_addon_same,native_gpu_addon_failed,
         native_gpu_addon_error,native_gpu_addon2_stage,native_gpu_addon2_status,
@@ -105,6 +111,6 @@ myron_gpu_addon_prepare(proc_t p)
     printf("myron-gpu-addon: stage=%d status=%d files=%d written=%d same=%d failed=%d error=%d\n",
         native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon_files,native_gpu_addon_written,
         native_gpu_addon_same,native_gpu_addon_failed,native_gpu_addon_error);
-    printf("myron-data-helper: daemon_stage=%d daemon_status=%d cache_stage=%d cache_status=%d cache_policy=disabled\n",
+    printf("myron-data-helper: early_stage=%d early_status=%d cache_stage=%d cache_status=%d cache_policy=disabled\n",
         native_gpu_addon2_stage,native_gpu_addon2_status,native_gpu_addon3_stage,native_gpu_addon3_status);
 }

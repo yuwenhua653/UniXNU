@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the real addon publication path with bounded VFS faults and service-cache quarantine."""
+"""Execute the real addon publication path with bounded VFS faults and optional early-task publication."""
 from pathlib import Path
 import subprocess,tempfile
 source=Path(__file__).with_name('MyronGpuAddonPrepare.h').read_text()
@@ -36,8 +36,8 @@ typedef uintptr_t user_addr_t;
 struct node {int mount,kind;};typedef struct node *vnode_t;
 struct direntry {uint64_t d_ino;uint16_t d_reclen;char d_name[64];};
 struct io {void *buffer;uint64_t left;off_t offset;};typedef struct io *uio_t;
-static struct node directory={1,VDIR},child={1,3};
-static int fault,handles,allocations,scan,mountCalls,published,enabled;
+static struct node directory={1,VDIR},child={1,3},existing={1,3};
+static int fault,handles,allocations,scan,mountCalls,published,enabled,growth;
 static int native_gpu_addon_error,native_gpu_addon_failed,native_gpu_addon_files,native_gpu_addon_written,native_gpu_addon_same;
 static int native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon2_stage,native_gpu_addon2_status;
 static int native_gpu_addon3_stage,native_gpu_addon3_status;
@@ -45,7 +45,7 @@ static vfs_context_t vfs_context_current(void){return NULL;}
 static int vnode_open(const char *path,int flags,int mode,int x,vnode_t *out,vfs_context_t ctx){
  (void)mode;(void)x;(void)ctx;assert(flags==(FREAD|O_NOFOLLOW));
  assert(strcmp(path,"/System/Library/xpc")); /* must retain the sealed cache */
- scan=!strcmp(path,"/System/Library/LaunchDaemons")?2:1;
+ scan=!strcmp(path,"/usr/libexec")?2:1;
  assert(scan!=1||!strcmp(path,"/System/Library/Extensions"));
  if(fault==scan+4)return EACCES;*out=&directory;handles++;return 0;
 }
@@ -61,7 +61,7 @@ static int vnode_readdir64(vnode_t n,uio_t u,int flags,int *eof,int *count,vfs_c
  (void)n;(void)flags;(void)c;*eof=1;*count=1;
  if(fault==11)return EIO;
  struct direntry *d=u->buffer;d->d_ino=1;d->d_reclen=sizeof *d;
- strcpy(d->d_name,scan==1?"AppleExisting.bundle":"com.apple.existing.plist");
+ strcpy(d->d_name,scan==1?"AppleExisting.bundle":"installd");
  if(fault==12)d->d_reclen=1;if(fault==13)memset(d->d_name,'x',sizeof *d - offsetof(struct direntry,d_name));
  if(fault==14)strcpy(d->d_name,".");
  u->left-=sizeof *d;u->offset+=sizeof *d;return 0;
@@ -69,37 +69,56 @@ static int vnode_readdir64(vnode_t n,uio_t u,int flags,int *eof,int *count,vfs_c
 static uint64_t uio_resid(uio_t u){return u->left;}
 static off_t uio_offset(uio_t u){return u->offset;}
 static void uio_free(uio_t u){free(u);allocations--;}
-static int vnode_lookup(const char *p,int flags,vnode_t *out,vfs_context_t c){(void)p;(void)flags;(void)c;if(fault==15)return ENOENT;*out=&child;handles++;return 0;}
+static int vnode_lookup(const char *p,int flags,vnode_t *out,vfs_context_t c){
+ (void)c;assert(flags==VNODE_LOOKUP_NOFOLLOW);
+ if(!strcmp(p,"/usr/libexec/HorizonSetup")){
+  if(fault==20)return EACCES;if(fault==21)return EIO;
+  if(fault!=18&&fault!=19)return ENOENT;
+  existing.kind=fault==19?VLNK:3;*out=&existing;handles++;return 0;
+ } else if(fault==15)return ENOENT;
+ *out=&child;handles++;return 0;
+}
 static void vnode_put(vnode_t n){(void)n;handles--;}
-static int PE_parse_boot_argn(const char *name,void *out,int n){assert(!strcmp(name,"myron-gpu-metal")&&n==4);*(uint32_t*)out=enabled;return enabled!=0;}
-static void native_gpu_addon_install(proc_t p,user_addr_t s){(void)p;(void)s;native_gpu_addon_files=fault==1?8:9;native_gpu_addon_error=fault==2?EIO:0;native_gpu_addon_failed=fault==3?1:0;native_gpu_addon_written=fault==4?8:9;}
+static int PE_parse_boot_argn(const char *name,void *out,int n){assert(n==4);if(!strcmp(name,"myron-data-grow")){*(uint32_t*)out=growth;return growth!=0;}assert(!strcmp(name,"myron-gpu-metal"));*(uint32_t*)out=enabled;return enabled!=0;}
+static void native_gpu_addon_install(proc_t p,user_addr_t s){(void)p;(void)s;native_gpu_addon_files=fault==1?7:8;native_gpu_addon_error=fault==2?EIO:0;native_gpu_addon_failed=fault==3?1:0;native_gpu_addon_written=fault==4?7:8;}
 static void myron_gpu_addon_available(void){published++;}
 static void native_gpu_addon_mount(proc_t p,user_addr_t scratch,user_addr_t offset,const char *src,size_t sn,const char *point,size_t pn,const char *lower,const char *own,int *stage,int *status){
  (void)p;(void)scratch;mountCalls++;
  assert(sn==strlen(src)+1&&pn==strlen(point)+1&&!strncmp(lower,point,strlen(point)));
- if(mountCalls==1){assert(offset==0x400&&!strcmp(point,"/System/Library/Extensions"));assert(strstr(own,"NativeAdrenoMetal.bundle/Info.plist"));}
- else if(mountCalls==2){assert(offset==0x600);assert(!strcmp(src,"/private/var/ngpu/addons/myron-data-daemons"));assert(!strcmp(point,"/System/Library/LaunchDaemons"));assert(!strcmp(own,"/System/Library/LaunchDaemons/org.unixnu.myron.data-grow.plist"));}
- else{assert(!"unexpected mount: service cache must not be published");}
- *status=fault==mountCalls+15?EIO:0;*stage=*status?2:5;
+ if(!strcmp(point,"/System/Library/Extensions")){
+  assert(offset==0x400&&!strcmp(src,"/private/var/ngpu/addons"));assert(strstr(own,"NativeAdrenoMetal.bundle/Info.plist"));
+  *status=fault==16?EIO:0;
+ }else{
+  assert(offset==0x600&&mountCalls==1&&growth==16);
+  assert(!strcmp(src,"/private/var/ngpu/addons/myron-data-earlyboot")&&!strcmp(point,"/usr/libexec"));
+  assert(!strcmp(own,"/usr/libexec/HorizonSetup"));*status=fault==17?EIO:0;
+ }
+ *stage=*status?2:5;
 }
 '''
 main=r'''
 int main(void){
- for(enabled=0;enabled<=2;enabled++)for(fault=0;fault<=17;fault++){
-  handles=allocations=scan=mountCalls=published=0;
+ unsigned cases=0;
+ for(enabled=0;enabled<=2;enabled++)for(growth=0;growth<=16;growth+=8)for(fault=0;fault<=21;fault++){
+  handles=allocations=scan=mountCalls=published=0;child.kind=3;
   native_gpu_addon_stage=native_gpu_addon2_stage=0;native_gpu_addon_status=native_gpu_addon2_status=-1;
   native_gpu_addon3_stage=0;native_gpu_addon3_status=-1;
-  native_gpu_addon_prepare(NULL,0);assert(!handles&&!allocations);
-  if(enabled!=1){assert(!mountCalls&&!published);continue;}
-  if(!fault){assert(mountCalls==2&&published==1&&native_gpu_addon2_stage==5&&!native_gpu_addon2_status&&native_gpu_addon3_stage==-1&&native_gpu_addon3_status==ECANCELED);continue;}
-  if(fault==6){assert(mountCalls==1&&published==1&&native_gpu_addon2_status==EACCES);continue;}
-  if(fault==16){assert(mountCalls==1&&!published&&native_gpu_addon_status==EIO);continue;}
-  if(fault==17){assert(mountCalls==2&&published==1&&native_gpu_addon2_status==EIO);continue;}
-  assert(!mountCalls&&!published);
+  native_gpu_addon_prepare(NULL,0);assert(!handles&&!allocations);++cases;
+  if(enabled!=1|| (fault>=1&&fault<=4)){assert(!mountCalls&&!published);continue;}
+  int shared=fault>=7&&fault<=15;
+  int early=growth==16&&!shared&&fault!=6&&fault<18;
+  int gpu=!shared&&fault!=5;
+  assert(mountCalls==early+gpu&&published==(gpu&&fault!=16));
+  assert(native_gpu_addon3_stage==-1&&native_gpu_addon3_status==ECANCELED);
+  if(early)assert(native_gpu_addon2_stage==(fault==17?2:5)&&native_gpu_addon2_status==(fault==17?EIO:0));
+  if(growth!=16)assert(native_gpu_addon2_stage==-1&&native_gpu_addon2_status==ECANCELED);
+  if(growth==16&&(fault==18||fault==19))assert(native_gpu_addon2_status==EEXIST);
+  if(growth==16&&fault==20)assert(native_gpu_addon2_status==EACCES);
+  if(growth==16&&fault==21)assert(native_gpu_addon2_status==EIO);
  }
  native_gpu_addon2_stage=5;native_gpu_addon2_status=0;
  char full[256];size_t length=myron_data_helper_snapshot(full,sizeof full);
- assert(length==strlen(full)&&strstr(full,"daemon_stage=5 daemon_status=0")&&strstr(full,"cache_policy=disabled"));
+ assert(length==strlen(full)&&strstr(full,"early_stage=5 early_status=0")&&strstr(full,"cache_policy=disabled"));
  assert(!myron_data_helper_snapshot(NULL,256));
  for(size_t cap=0;cap<=sizeof full;cap++){
   char buffer[258];memset(buffer,0x5a,sizeof buffer);
@@ -107,7 +126,7 @@ int main(void){
   assert(buffer[0]==0x5a&&buffer[cap+1]==0x5a);
   if(cap)assert(n<cap&&buffer[1+n]==0);else assert(!n&&buffer[1]==0x5a);
  }
- puts("PASS: actual GPU/helper publication, cache never scanned/mounted, 17 faults and bounded snapshot");
+ printf("PASS: %u actual publication cases; absent-slot guard, independent GPU/early mounts, cache untouched and bounded snapshot\n",cases);
 }
 '''
 with tempfile.TemporaryDirectory() as tmp:

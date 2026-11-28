@@ -98,11 +98,12 @@ kernel_file=read('Payloads/kernel.macho');kernel=unpack(kernel_file);definitions
 metal=None
 if has_metal:
     from metal_payload import final_contract
-    from prepare_metal_sidecars import modules,ORIGINAL_MODULES
+    from prepare_metal_sidecars import modules,ORIGINAL_MODULES,verify_owner_policy
     contract=json.loads((device/'metal-addon-contract.json').read_text())
     addon=read('Payloads/kernel.macho.gpuaddon');trust=read('Payloads/kernel.macho.trustcache')
     need(dict(bytes=len(addon),sha256=sha(addon))==contract['outputs']['gpuaddon.bin'],'GPU addon identity differs')
     need(dict(bytes=len(trust),sha256=sha(trust))==contract['outputs']['kernel.macho.trustcache'],'GPU owner trust differs')
+    verify_owner_policy(trust,contract['owner_cdhashes'])
     need(tuple(map(sha,modules(trust)[1:]))==ORIGINAL_MODULES,'Original Apple trust modules differ')
     need(embedded_adt['/device-tree/chosen/memory-map'].get('GpuAddon')==bytes(16),'GPU addon handoff slot missing')
     logical=a.work/'logical-kernel.macho';logical.write_bytes(kernel)

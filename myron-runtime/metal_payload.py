@@ -1,7 +1,8 @@
 """Bind one signed addon to the actual native/final kernel before packaging it."""
 import hashlib,json,struct,tempfile
 from pathlib import Path
-from prepare_metal_sidecars import prepare,modules,ORIGINAL_MODULES
+from prepare_metal_sidecars import prepare,modules,ORIGINAL_MODULES,verify_owner_policy
+from earlyboot_launch_policy import verify_kernel_policy
 from audit_userspace_artifact import require,sha
 from myron_continuous_contract import kernel_definitions
 
@@ -21,7 +22,8 @@ def final_contract(kernel,contract):
     require(len(locations)==1,'GPU addon contract is not uniquely file backed')
     require(raw[locations[0]:locations[0]+32]==bytes.fromhex(contract['outputs']['gpuaddon.bin']['sha256']),
         'Final compiled addon identity differs')
-    return dict(kernel_sha256=sha(raw),symbols={n:hex(symbols[n]) for n in sorted(wanted)},
+    launch_policy=verify_kernel_policy(raw)
+    return dict(kernel_sha256=sha(raw),earlyboot_launch_policy=launch_policy,symbols={n:hex(symbols[n]) for n in sorted(wanted)},
         addon_contract_offset=locations[0],compiled_addon_sha256=raw[locations[0]:locations[0]+32].hex())
 
 def stage(archive,original,out,kernel,root_report):
@@ -38,6 +40,7 @@ def stage(archive,original,out,kernel,root_report):
         report=prepare(Path(archive),path,Path(out))
     for key in contract:require(report[key]==contract[key],'Metal component contract differs: '+key)
     trust=(Path(out)/'kernel.macho.trustcache').read_bytes()
+    verify_owner_policy(trust,contract['owner_cdhashes'])
     require(modules(trust)[1:]==modules(original) and tuple(map(sha,modules(original)))==ORIGINAL_MODULES,
         'Original Apple trust modules changed')
     return dict(addon_bytes=report['outputs']['gpuaddon.bin']['bytes'],

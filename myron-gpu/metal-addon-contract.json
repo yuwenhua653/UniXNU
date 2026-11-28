@@ -13,7 +13,7 @@
     },
     "kernel.macho.trustcache": {
       "bytes": 92392,
-      "sha256": "fc25ef1b74714212e9ca2a56962b5e673094dbb0760d3b5096ca140cad1f95a6"
+      "sha256": "e3ba67574849c51bb94b94c46b455ffff0277040d692ab5dfa53a531282b0591"
     }
   },
   "addon_files": {
@@ -81,5 +81,11 @@
   "data_helper_sources_sha256": "4b48775309debbcf8f1a9285c4e9bb38ff9cdaa27e7d150b6cd54a523a18263b",
   "earlyboot_task": "restore-datapartition",
   "earlyboot_program": "/usr/libexec/HorizonSetup",
-  "service_cache_modified": false
+  "service_cache_modified": false,
+  "owner_constraint_categories": {
+    "0e94a0114e32dd6d25ba67636adf15472c04d20c": 0,
+    "43f44f5c45a8a3e143166bb20042a28b526bc346": 0,
+    "51cce781ca983db76dd990f7cab5ede0dc7ff13b": 5,
+    "74625fb6ca7a9f46b92c712a64b628bbebaeb678": 0
+  }
 }

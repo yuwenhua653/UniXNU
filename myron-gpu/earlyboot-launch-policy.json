@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "target": "iPhone12,1/24A446",
+  "amfi_modified": false,
+  "category": 5,
+  "launch_type": 1,
+  "system_service_category_mask": "0x890ba",
+  "self_requirement": {
+    "validation-category": 1
+  },
+  "parent_requirement": {
+    "$or": {
+      "$and": {
+        "on-system-volume": true,
+        "signing-identifier": "com.apple.mbfloagent",
+        "validation-category": 1
+      },
+      "is-init-proc": true
+    }
+  },
+  "ranges": [
+    {
+      "name": "self_dispatch",
+      "address": "0xfffffff008eff86c",
+      "bytes": 508,
+      "sha256": "f960433d66ce788f837e370152bf55d7dee43e39b4a75feac1044d3c127d50f7"
+    },
+    {
+      "name": "self_table",
+      "address": "0xfffffff008effa68",
+      "bytes": 84,
+      "sha256": "e0cf6138d7240f0346d1d8ff7f705045963a042df0da055b58a27d14b559fbc0"
+    },
+    {
+      "name": "parent_dispatch",
+      "address": "0xfffffff008effb78",
+      "bytes": 340,
+      "sha256": "7021ce5668094e997cdaa686fffd60a70caedf586121bb397cb892a56927c3a8"
+    },
+    {
+      "name": "parent_table",
+      "address": "0xfffffff008effccc",
+      "bytes": 84,
+      "sha256": "fe85c17abfdaf7cdcc1b2fa76d922847de7a6d435039db86228fb216439636ea"
+    },
+    {
+      "name": "system_service_categories",
+      "address": "0xfffffff008f1139c",
+      "bytes": 32,
+      "sha256": "fd4c54bdd3a2f2a8b75640cefb055015d4ecd8b6f66285540ec06cb9a7ed5e70"
+    },
+    {
+      "name": "system_service_mark",
+      "address": "0xfffffff008f113bc",
+      "bytes": 76,
+      "sha256": "22223586f1fbb665126ecaf16ad629f5576213674bf861b2851ddc5021ca0a9f"
+    },
+    {
+      "name": "system_service_fallback",
+      "address": "0xfffffff008f11408",
+      "bytes": 260,
+      "sha256": "ebbfb5aa4b8923a3d2703921d124722a9def740c352e51315a2c6acbcad9e59a"
+    },
+    {
+      "name": "category5_self",
+      "address": "0xfffffff00765a9fe",
+      "bytes": 33,
+      "sha256": "04b6d655318975d668e4c6c499940f3eda888b6ee13e344feb499962a36f9a8e"
+    },
+    {
+      "name": "category5_parent",
+      "address": "0xfffffff00765b192",
+      "bytes": 141,
+      "sha256": "e90ff0cc0a8e75b7cf28ceef924f167a9a3b0b38b9a4ba0f7d3cdc249351c39f"
+    }
+  ],
+  "hardware_qualified": false
+}

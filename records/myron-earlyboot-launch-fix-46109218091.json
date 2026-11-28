@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "failed_run": 46109218091,
+  "base_commit": "4b5d65e18875910d6f69914b1963376fcedc8941",
+  "cause": "AMFI system-service constraint rejected category-zero early adapter before main; launchd RequireSuccess led to panic",
+  "correction": "Assign retained category 5 to exact HorizonSetup CDHash only; keep original parent constraint and global enforcement",
+  "trust_sha256": "e3ba67574849c51bb94b94c46b455ffff0277040d692ab5dfa53a531282b0591",
+  "addon_sha256": "e6732c20a589d6db354633cd32c5042b97d595d841ec3261f9a4cd5d8647149c",
+  "host_checks": {
+    "actual_kernel_policy_tests": 3,
+    "sidecar_tests": 5,
+    "continuous_contract_tests": 13,
+    "mutated_policy_ranges_rejected": 9,
+    "mutated_owner_entry_fields_rejected": 16,
+    "actual_previous_trust_rejected": true,
+    "reconstructed_source_contract_passed": true
+  },
+  "original_trust_modules_unchanged": true,
+  "helper_binaries_unchanged": true,
+  "apfs_target_bytes": 17179869184,
+  "phone_tested_after_fix": false,
+  "apfs_resize_confirmed": false
+}

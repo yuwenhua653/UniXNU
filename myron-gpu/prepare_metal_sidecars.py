@@ -77,13 +77,40 @@ def owner_trust(original,cdhashes):
  require(len(hashes)==4 and len(set(hashes))==4 and all(len(x)==20 for x in hashes) and
          bytes.fromhex(DATA_HELPER['cdhash']) in hashes and bytes.fromhex(DATA_HELPER['earlyboot_cdhash']) in hashes,
          'Plugin, Turnip, Data helper and early adapter CDHashes required')
- ident=uuid.uuid5(uuid.NAMESPACE_URL,'org.unixnu.myron.24A446.metal:'+''.join(x.hex() for x in hashes))
- own=struct.pack('<I16sI',2,ident.bytes,len(hashes))+b''.join(x+bytes([2,0,0,0]) for x in hashes)
+ # HorizonSetup is launched as a system service (type 1) by PID 1. Category
+ # zero is not a system-service category in the retained 24A446 AMFI and
+ # triggers its rejecting fallback on our Data-backed union. Category 5
+ # requires trusted code and the original parent constraint; it is explicitly
+ # accepted by the donor's system-service policy. All other entries stay zero.
+ entries=b''.join(x+bytes([2,0,5 if x.hex()==DATA_HELPER['earlyboot_cdhash'] else 0,0]) for x in hashes)
+ ident=uuid.uuid5(uuid.NAMESPACE_URL,'org.unixnu.myron.24A446.metal-policy:'+entries.hex())
+ own=struct.pack('<I16sI',2,ident.bytes,len(hashes))+entries
  blocks=[own,*old];cursor=4+4*len(blocks);offsets=[]
  for block in blocks: offsets.append(cursor);cursor+=len(block)
  out=struct.pack('<I',len(blocks))+struct.pack('<3I',*offsets)+b''.join(blocks)
  require(modules(out)[1:]==old,'Original trust preservation failed')
+ verify_owner_policy(out,cdhashes)
  return out
+
+
+def owner_categories(cdhashes):
+ return {h:(5 if h==DATA_HELPER['earlyboot_cdhash'] else 0) for h in sorted(cdhashes)}
+
+
+def verify_owner_policy(trust,cdhashes):
+ blocks=modules(trust)
+ require(len(blocks)==3 and tuple(map(sha,blocks[1:]))==ORIGINAL_MODULES,
+         'Launch policy requires unchanged original Apple trust modules')
+ expected=owner_categories(cdhashes)
+ require(len(expected)==4 and DATA_HELPER['earlyboot_cdhash'] in expected,
+         'Early boot launch policy identity missing')
+ actual={}
+ for at in range(24,len(blocks[0]),24):
+  h=blocks[0][at:at+20].hex();kind,flags,category,reserved=blocks[0][at+20:at+24]
+  require((kind,flags,reserved)==(2,0,0),'Unexpected owner trust type/flags/reserved')
+  actual[h]=category
+ require(actual==expected,'Wrong owner launch constraint categories; HorizonSetup requires category 5')
+ return actual
 
 
 def addon(files):
@@ -122,7 +149,7 @@ def prepare(archive,original_path,out,helper_archive=None):
  result=dict(format=1,target='iPhone12,1/24A446',component=COMPONENT,
   images=report['images'],original_trust_sha256=ORIGINAL_SHA,
   original_modules=list(ORIGINAL_MODULES),original_modules_unchanged=True,
-  owner_cdhashes=sorted(hashes),data_helper=DATA_HELPER,
+  owner_cdhashes=sorted(hashes),owner_constraint_categories=owner_categories(hashes),data_helper=DATA_HELPER,
   data_helper_sources_sha256=sha(Path(__file__).with_name('data-helper-sources.json').read_bytes()),
   earlyboot_task='restore-datapartition',earlyboot_program='/usr/libexec/HorizonSetup',
   service_cache_modified=False,

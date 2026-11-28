@@ -2,7 +2,7 @@
 """Refuse a full build before helper binaries, source and addon pins agree."""
 import hashlib,json
 from pathlib import Path
-from prepare_metal_sidecars import DATA_HELPER
+from prepare_metal_sidecars import DATA_HELPER,owner_categories
 from audit_userspace_artifact import require
 
 def check():
@@ -26,6 +26,8 @@ def check():
     hashes=contract['owner_cdhashes']
     require(len(set(hashes))==len(hashes)==4 and
             {DATA_HELPER['cdhash'],DATA_HELPER['earlyboot_cdhash']}<=set(hashes),'Incomplete owner platform trust')
+    require(contract.get('owner_constraint_categories')==owner_categories(hashes),
+            'Missing or stale early-boot system-service launch constraint policy')
     require(contract.get('service_cache_modified') is False and
             contract.get('earlyboot_program')=='/usr/libexec/HorizonSetup' and
             contract.get('earlyboot_task')=='restore-datapartition','Wrong early startup route')

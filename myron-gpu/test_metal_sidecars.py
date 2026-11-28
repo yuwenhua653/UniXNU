@@ -2,7 +2,7 @@
 """Read generated sidecars back independently; no device access or build."""
 import argparse,json,struct,sys,unittest,zipfile,zlib
 from pathlib import Path
-from prepare_metal_sidecars import modules,owner_trust,addon,ORIGINAL_SHA,COMPONENT,DATA_HELPER,data_helper
+from prepare_metal_sidecars import modules,owner_trust,addon,ORIGINAL_SHA,COMPONENT,DATA_HELPER,data_helper,verify_owner_policy
 from audit_userspace_artifact import sha,image
 p=argparse.ArgumentParser();p.add_argument('--artifact',type=Path,required=True)
 p.add_argument('--data-helper',type=Path,required=True)
@@ -24,7 +24,8 @@ class Sidecars(unittest.TestCase):
     hashes.append(bytes.fromhex(image(z.read(prefix+name),kind,special if kind==8 else {})['cdhash']))
    raw=(a.sidecars/'kernel.macho.trustcache').read_bytes();blocks=modules(raw)
    self.assertEqual(blocks[1:],modules(original));self.assertEqual(len(blocks),3)
-   self.assertEqual(blocks[0][24:],b''.join(x+b'\x02\x00\x00\x00' for x in sorted(hashes)))
+   self.assertEqual(blocks[0][24:],b''.join(x+bytes([2,0,5 if x.hex()==DATA_HELPER['earlyboot_cdhash'] else 0,0]) for x in sorted(hashes)))
+   self.assertEqual(verify_owner_policy(raw,[x.hex() for x in hashes]),report['owner_constraint_categories'])
    raw=(a.sidecars/'gpuaddon.bin').read_bytes();magic,count,reserved,total=struct.unpack_from('<8sIIQ',raw)
    self.assertEqual((magic,count,reserved,total),(b'NGPUADD2',8,0,len(raw)))
    cursor=24;seen=set()
@@ -56,5 +57,14 @@ class Sidecars(unittest.TestCase):
  def test_invalid_addon_paths_and_modes_rejected(self):
   for path,mode in [('addons/../etc/passwd',0o644),('/addons/x',0o644),('addons/x',0o777),('addons/a\0b',0o644)]:
    with self.assertRaises(ValueError):addon({path:(mode,b'x')})
+
+ def test_old_zero_category_and_changes_to_other_entries_rejected(self):
+  raw=(a.sidecars/'kernel.macho.trustcache').read_bytes()
+  start=struct.unpack_from('<I',raw,4)[0]
+  hashes=[modules(raw)[0][at:at+20].hex() for at in range(24,120,24)]
+  for i,h in enumerate(hashes):
+   for field,value in ((20,1),(21,1),(22,0 if h==DATA_HELPER['earlyboot_cdhash'] else 5),(23,1)):
+    bad=bytearray(raw);bad[start+24+i*24+field]=value
+    with self.assertRaises(ValueError):verify_owner_policy(bytes(bad),hashes)
 
 if __name__=='__main__':unittest.main(argv=[sys.argv[0],*rest])

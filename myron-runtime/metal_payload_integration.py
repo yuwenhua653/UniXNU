@@ -4,7 +4,8 @@ import shutil
 
 def apply(d,replace):
     here=Path(__file__).resolve().parent;root=here.parent
-    for name in ('prepare_metal_sidecars.py','audit_userspace_artifact.py','data-helper-sources.json'):
+    for name in ('prepare_metal_sidecars.py','audit_userspace_artifact.py','data-helper-sources.json',
+                 'earlyboot_launch_policy.py','earlyboot-launch-policy.json'):
         shutil.copyfile(root/'myron-gpu'/name,d/name)
     shutil.copyfile(here/'metal_payload.py',d/'metal_payload.py')
     shutil.copyfile(root/'myron_continuous_contract.py',d/'myron_continuous_contract.py')

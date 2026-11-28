@@ -17,12 +17,16 @@ REASONS={
 'Data geometry or APFS superblock check failed','growth guards refused; no resize attempted',
 'APFS sizing API returned implausible limits','prior or unavailable operation journal',
 'operation journal not durable',
+'live Data snapshot unavailable or inconsistent','mounted Data has not acquired expanded capacity',
+'Data identity or capacity changed before journal','Data identity or capacity changed before resize',
+'APFS live-space or resize API unavailable',
 *{name+' unavailable' for name in ('IOBSDNameMatching','IOServiceGetMatchingService',
-'IORegistryEntryGetParentIterator','IOIteratorNext','IOObjectRelease','IOObjectConformsTo','IORegistryEntryCreateCFProperty')}}
+'IORegistryEntryGetParentIterator','IOIteratorNext','IOObjectRelease','IOObjectConformsTo','IORegistryEntryCreateCFProperty','IORegistryEntryGetRegistryEntryID')}}
 NUMBERS={'physical_bytes','container_bytes_before','authorized_bytes','free_bytes_before',
-'decision','minimum_status','minimum_bytes','resize_status','container_bytes_after','free_bytes_after'}
+'decision','minimum_status','minimum_bytes','resize_status','container_bytes_after','free_bytes_after',
+'observation_stage','observation_status'}
 KEYS={'format','resize_called','changes_gpt','exit_status','status','reason','volume','volume_uuid',
-'physical_store','resize_api_available'}|NUMBERS
+'physical_store','container_media','resize_api_available'}|NUMBERS
 
 def clean_report(r):
     if not isinstance(r,dict) or not set(r)<=KEYS:return None
@@ -33,7 +37,7 @@ def clean_report(r):
     if r['status']=='refused' and 'reason' not in r:return None
     for k,v in r.items():
         if k in NUMBERS and (type(v) is not int or not -(1<<63)<=v<(1<<64)):return None
-        if k in ('volume','physical_store') and (not isinstance(v,str) or not re.fullmatch(r'disk\d+(?:s\d+)*',v) or len(v)>24):return None
+        if k in ('volume','physical_store','container_media') and (not isinstance(v,str) or not re.fullmatch(r'disk\d+(?:s\d+)*',v) or len(v)>24):return None
         if k=='volume_uuid' and (not isinstance(v,str) or not re.fullmatch(r'[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}',v)):return None
         if k=='resize_api_available' and type(v) is not bool:return None
     return r

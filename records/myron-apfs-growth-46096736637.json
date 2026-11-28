@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "analysis_run": 46096736637,
+  "analysis_commit": "0bce64e9a2ad844a5cb0cd49e444e62c1b529452",
+  "target": "iPhone12,1/27.0.1/24A446",
+  "apfs_uuid": "0132dfdba9b63234a2d7c326b5a4575f",
+  "artifacts": {
+    "api": {
+      "id": 15243911332,
+      "sha256": "85cef811992717f3ffc6aa057325b5dd2ac2e8117b780e7eb84874265fa74d43"
+    },
+    "launch": {
+      "id": 15243856068,
+      "sha256": "ed3d5775d3430eb0f70884412b3a16488cd05772c4271bafb596a4fb239fe4a7"
+    }
+  },
+  "static_api_review": {
+    "resize": "0x24f666d3c -> ResizeEx with x2=0",
+    "minimum": "0x24f666c94; 8-byte output",
+    "space": "0x24f6670c4; two 8-byte byte-count outputs",
+    "resize_physical_store_fallback": true,
+    "minimum_physical_store_fallback": true,
+    "space_physical_store_fallback": false
+  },
+  "launch_review": {
+    "launchd_sha256": "c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b",
+    "library_launchdaemons_in_bootstrap_paths": false,
+    "embedded_ignore_cache": true,
+    "ignore_cache_does_not_prove_disk_search": true,
+    "native_plist_parser": "macOS plutil only; not iOS XPC parser",
+    "startup_qualified": false
+  },
+  "full_package_allowed": false,
+  "helper_ios_compiled": false,
+  "helper_executed": false,
+  "apfs_resized": false,
+  "limitations": [
+    "Static donor ABI and config only",
+    "A working launch path is still required",
+    "Current pinned helper artifact is stale and must be rejected",
+    "No device data or logs are included"
+  ]
+}

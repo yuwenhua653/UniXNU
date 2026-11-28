@@ -11,8 +11,10 @@ from audit_userspace_artifact import image
 def run(cmd):subprocess.run(list(map(str,cmd)),check=True)
 out=a.out.resolve();out.mkdir(parents=True,exist_ok=False)
 test=out/'host-check'
-run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',here/'test_apfs_growth.c','-o',test])
-run([test]);test.unlink()
+for source in ('test_apfs_growth.c','test_apfs_transaction.c'):
+    run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',here/source,'-o',test])
+    run([test]);test.unlink()
+run([sys.executable,here/'test_apfs_journal.py'])
 sdk=subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-path'],text=True).strip()
 binary=out/'myron-data-grow'
 run(['xcrun','--sdk','iphoneos','clang','-target','arm64e-apple-ios27.0','-isysroot',sdk,
@@ -30,6 +32,7 @@ report=audit_image(binary,2);independent=image(binary.read_bytes(),2,{})
 assert all(independent[k]==v for k,v in report.items())
 report.update(format=1,compiled=True,hardware_tested=False,apfs_resized=False,installed=False,
     entitlements=entitlements,source_sha256={name:hashlib.sha256((here/name).read_bytes()).hexdigest()
-        for name in ('myron-data-grow.m','MyronAPFSGrow.h','test_apfs_growth.c','build_data_helper.py')})
+        for name in ('myron-data-grow.m','MyronAPFSGrow.h','MyronAPFSTransaction.h',
+                     'test_apfs_growth.c','test_apfs_transaction.c','test_apfs_journal.py','build_data_helper.py')})
 (out/'build.json').write_text(json.dumps(report,indent=2)+'\n')
 print('PASS: signed arm64e iOS27 helper; not executed, installed or qualified on phone')

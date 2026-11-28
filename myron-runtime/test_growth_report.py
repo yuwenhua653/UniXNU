@@ -13,6 +13,12 @@ exec(compile(ast.Module(body=[peer],type_ignores=[]),'<sparse peer>','exec'),sco
 Peer=scope['Peer']
 GOOD=dict(format=1,changes_gpt=False,resize_called=False,exit_status=2,status='refused',reason='unexpected APFS parent chain')
 class Tests(unittest.TestCase):
+ def test_live_space_report_fields(self):
+  r=dict(GOOD,reason='live Data snapshot unavailable or inconsistent',container_media='disk3',
+         observation_stage=10,observation_status=49154)
+  self.assertEqual(m.clean_report(r),r)
+  self.assertIsNone(m.clean_report(dict(r,container_media='/private/secret')))
+  self.assertIsNone(m.clean_report(dict(r,observation_status='private note')))
  def test_only_allowlisted_fields(self):
   self.assertEqual(m.clean_report(GOOD),GOOD)
   for key,value in [('reason','private note'),('status','private note'),('volume','/private/secret'),('extra','private'),('physical_bytes','private'),('resize_called',1),('changes_gpt',True),('exit_status',64),('format',True)]:

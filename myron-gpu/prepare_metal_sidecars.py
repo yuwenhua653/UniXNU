@@ -27,11 +27,17 @@ DATA_HELPER = dict(run=45931203957,commit='9d0130bc2a156571e82527b0affb16722d8c4
  binary_sha256='3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93',
  cdhash='7890b3ffacb0db0edef6fb8aa75b57b0df6e0319')
 
+def verify_helper_sources(report):
+ expected=json.loads(Path(__file__).with_name('data-helper-sources.json').read_text())
+ require(isinstance(report,dict) and report.get('source_sha256')==expected,
+         'Data helper contains older or unverified expansion sources; repair startup and rebuild the helper before packaging')
+
 def data_helper(archive):
  raw=Path(archive).read_bytes()
  require(sha(raw)==DATA_HELPER['artifact_sha256'],'Wrong Data helper artifact')
  with zipfile.ZipFile(archive) as z:
   require(set(z.namelist())=={'myron-data-grow','build.json','entitlements.plist','host-checks.json'},'Data helper inventory')
+  verify_helper_sources(json.loads(z.read('build.json')))
   binary=z.read('myron-data-grow');report=image(binary,2,{})
   require(report['sha256']==DATA_HELPER['binary_sha256'] and report['cdhash']==DATA_HELPER['cdhash'],'Data helper signature identity')
  daemon=plistlib.dumps(data_daemon())

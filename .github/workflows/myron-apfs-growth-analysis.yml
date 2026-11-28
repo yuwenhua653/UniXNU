@@ -9,11 +9,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   analyze:
-    if: github.event.head_commit.message == 'Analyze myron APFS growth before package'
+    if: github.event.head_commit.message == 'Analyze myron APFS growth before package' || github.event.head_commit.message == 'Analyze myron Data early boot'
     strategy:
       fail-fast: false
       matrix:
-        component: [api, launch]
+        component: ${{ fromJSON(github.event.head_commit.message == 'Analyze myron Data early boot' && '["launch"]' || '["api", "launch"]') }}
     runs-on: macos-26
     timeout-minutes: 40
     steps:

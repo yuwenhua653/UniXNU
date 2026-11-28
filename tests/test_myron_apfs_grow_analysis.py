@@ -10,6 +10,17 @@ class Cache:
  def read(self,a,n,executable=False):return bytes.fromhex('c0035fd6')*(n//4),None
  def image_for(self,a):return self.images[0]
 class Tests(unittest.TestCase):
+ def test_boot_slot_distinguishes_absence_and_symlink(self):
+  config=[dict(value={'Boot':{'restore-datapartition':{'Program':'/usr/libexec/HorizonSetup','RequireSuccess':True}}})]
+  with tempfile.TemporaryDirectory() as t:
+   p=Path(t);(p/'usr/libexec').mkdir(parents=True)
+   self.assertEqual(m.early_boot_slot(p,config)['path_kind'],'absent')
+   target=p/'usr/libexec/HorizonSetup';target.symlink_to('missing')
+   self.assertEqual(m.early_boot_slot(p,config)['path_kind'],'symlink')
+   target.unlink();target.write_text('fixture')
+   self.assertEqual(m.early_boot_slot(p,config)['path_kind'],'regular')
+   self.assertEqual(target.read_text(),'fixture')
+   with self.assertRaisesRegex(ValueError,'Ambiguous'):m.early_boot_slot(p,config*2)
  def test_embedded_xml_parsed_not_text_grep(self):
   import plistlib
   x=plistlib.dumps({'LaunchDaemons':['/fixture/jobs']});r=m.embedded_plists(b'prefix\0'+x+b'\0suffix')

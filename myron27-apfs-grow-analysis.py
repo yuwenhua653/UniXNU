@@ -60,6 +60,22 @@ def embedded_plists(raw):
         if isinstance(r,dict):result.append(dict(offset=m.start(),sha256=hashlib.sha256(blob).hexdigest(),value=r))
     require(len(result)<32,'Too many embedded plists');return result
 
+def early_boot_slot(mount,plists):
+    """Describe an original optional task; never install or execute a program."""
+    configs=[p['value'] for p in plists if isinstance(p['value'].get('Boot'),dict)]
+    require(len(configs)==1,'Ambiguous original boot configuration')
+    task=configs[0]['Boot'].get('restore-datapartition')
+    require(isinstance(task,dict),'Original optional boot task missing')
+    require(task.get('Program')=='/usr/libexec/HorizonSetup','Unexpected original task path')
+    import stat
+    directory=mount/'usr/libexec';target=directory/'HorizonSetup'
+    require(directory.is_dir() and not directory.is_symlink(),'Invalid original executable directory')
+    try:st=target.lstat()
+    except FileNotFoundError:kind='absent'
+    else:kind='symlink' if stat.S_ISLNK(st.st_mode) else 'regular' if stat.S_ISREG(st.st_mode) else 'other'
+    return dict(task=task,path_kind=kind,original_modified=False,
+        warning='RequireSuccess requires handling helper refusal without returning a boot-task failure; crashes remain unqualified.')
+
 def write_launch(mount,audit,trust,launch,out):
     from capstone import Cs,CS_ARCH_ARM64,CS_MODE_ARM
     binary=mount/'sbin/launchd';info=audit.macho(binary,trust,2);raw=binary.read_bytes();exe=launch.Executable(raw,info)
@@ -90,7 +106,18 @@ def write_launch(mount,audit,trust,launch,out):
             require(r.returncode==0,'Apple plist parser rejected '+name)
             decoded=plistlib.loads(r.stdout);require(decoded==plistlib.loads(data),'Native plist roundtrip changed '+name)
             native.append(dict(name=name,parsed=True,job_count=len(decoded['LaunchDaemons'])))
-    result=dict(format=1,launchd_sha256=info['sha256'],uuid=exe.uuid,embedded_plists=embedded_plists(raw),functions=rows,
+    plists=embedded_plists(raw)
+    early=set()
+    for start,d in descriptions.items():
+        if any(any(k in r['text'] for k in ('optional boot task not present','RequireSuccess','RequireRun','restore-datapartition')) for r in d['string_references']):early.add(start)
+    require(len(early)<=24,'Unexpected early-boot function count')
+    early_rows=[]
+    for start in sorted(early):
+        d=descriptions[start];end=int(d['end'],16);off=exe.text['offset']+start-exe.low
+        ops=list(cs.disasm(raw[off:off+min(end-start,16384)],start))
+        early_rows.append(dict(**d,truncated=end-start>16384,instructions=[dict(offset=hex(x.address-start),op=x.mnemonic,args=x.op_str) for x in ops]))
+    result=dict(format=2,launchd_sha256=info['sha256'],uuid=exe.uuid,embedded_plists=plists,functions=rows,
+        early_boot_slot=early_boot_slot(mount,plists),early_boot_functions=early_rows,
         merge=merge_report,native_plist_parser=native,phone_accessed=False,resize_called=False,original_files_modified=False,
         limitation='Native macOS plist acceptance is not iOS launchd runtime qualification.')
     payload=(json.dumps(result,indent=2)+'\n').encode();require(len(payload)<4*1024*1024,'Launch report exceeds bound')

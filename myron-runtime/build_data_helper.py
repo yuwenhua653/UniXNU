@@ -15,6 +15,7 @@ for source in ('test_apfs_growth.c','test_apfs_transaction.c'):
     run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined',here/source,'-o',test])
     run([test]);test.unlink()
 run([sys.executable,here/'test_apfs_journal.py'])
+run([sys.executable,here/'test_apfs_report.py'])
 run([sys.executable,here/'test_data_earlyboot.py'])
 sdk=subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-path'],text=True).strip()
 binary=out/'myron-data-grow'
@@ -49,6 +50,6 @@ report.update(format=2,compiled=True,hardware_tested=False,apfs_resized=False,in
     source_sha256={name:hashlib.sha256((here/name).read_bytes()).hexdigest()
         for name in ('myron-data-grow.m','MyronAPFSGrow.h','MyronAPFSTransaction.h',
                      'test_apfs_growth.c','test_apfs_transaction.c','test_apfs_journal.py',
-                     'myron-data-earlyboot.c','test_data_earlyboot.py','build_data_helper.py')})
+                     'myron-data-earlyboot.c','test_data_earlyboot.py','MyronAPFSReport.h','test_apfs_report.py','build_data_helper.py')})
 (out/'build.json').write_text(json.dumps(report,indent=2)+'\n')
 print('PASS: signed arm64e iOS27 helper and early adapter; not executed, installed or qualified on phone')

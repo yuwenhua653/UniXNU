@@ -33,7 +33,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Refuse stale Data helper binaries before starting a full build
-        run: python3 myron-gpu/check_data_helper_contract.py
+        run: |
+          python3 myron-gpu/check_data_helper_contract.py
+          python3 tests/test_myron_earlyboot_donor.py
       - name: Check staged symbol contracts before building
         run: |
           python3 tests/test_continuous_contract.py
@@ -379,7 +381,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15168827538/zip > "$RUNNER_TEMP/myron-data-helper.zip"
+          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15245233955/zip > "$RUNNER_TEMP/myron-data-helper.zip"
           python3 - <<'PYHELPER'
           import sys
           sys.path.insert(0,'myron-gpu')

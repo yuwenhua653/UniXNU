@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include "MyronAPFSTransaction.h"
+#include "MyronAPFSReport.h"
 
 // Public IOKit C ABI loaded dynamically: iPhone SDKs omit IOKitLib.h.
 typedef mach_port_t IORef;
@@ -209,7 +210,10 @@ int main(int argc,char **argv) {
         int rc=run(grow,r);r[@"exit_status"]=@(rc);
         event(NULL,[r[@"status"] UTF8String]);
         NSData *json=[NSJSONSerialization dataWithJSONObject:r options:NSJSONWritingPrettyPrinted error:NULL];
-        if(json){fwrite(json.bytes,1,json.length,stdout);fputc('\n',stdout);}
+        if(json){
+            event(NULL,myronAPFSReport(json.bytes,json.length)?"report-saved":"report-unavailable");
+            fwrite(json.bytes,1,json.length,stdout);fputc('\n',stdout);
+        }
         return rc;
     }
 }

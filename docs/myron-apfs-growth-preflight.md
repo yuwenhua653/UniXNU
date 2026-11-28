@@ -130,3 +130,23 @@ independent mount failures and resource cleanup. The real union mount harness,
 also passed. These are source-path tests, not device execution or successful
 filesystem expansion. The old artifact stays rejected while the new component
 is being qualified; a successful component build alone is not a flash package.
+
+The first component run `46101177780` compiled both real iOS executables and
+passed macOS host checks. Independent download audit also rejected altered
+code pages, wrong signing IDs and changed entitlements. Review then found that
+removing the old launch service also removed its stdout file: console output
+alone is not guaranteed to enter the kernel's persistent message capture.
+The helper now additionally saves a bounded owner-only JSON result after its
+transaction, using an anchored directory, no-follow/nonblocking open and
+regular-file/owner/link-count/mode checks. Short or failed report writes do not
+change the transaction outcome and never authorize retrying growth. The new
+report writer has real-file fault tests; it requires a refreshed component.
+The full-build gate remains closed until the refreshed artifact is bound.
+
+The original mounted donor is checked again during packaging: exact audited
+launchd hash, original executable directory, and absent HorizonSetup including
+dangling-link refusal. The runtime makes its own absence check before mounting.
+Application staging currently precedes this early userland task. After a first
+successful expansion, a normal subsequent boot lets that existing staging step
+use the new space. The adapter never forces a reboot. App/wallpaper recovery and
+performance remain phone-test outcomes, not guaranteed by these host checks.

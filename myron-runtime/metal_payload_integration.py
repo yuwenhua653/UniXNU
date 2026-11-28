@@ -8,6 +8,16 @@ def apply(d,replace):
         shutil.copyfile(root/'myron-gpu'/name,d/name)
     shutil.copyfile(here/'metal_payload.py',d/'metal_payload.py')
     shutil.copyfile(root/'myron_continuous_contract.py',d/'myron_continuous_contract.py')
+    shutil.copyfile(here/'earlyboot_donor.py',d/'earlyboot_donor.py')
+    p=d/'prepare_userland.py'
+    replace(p,'import hashlib','import hashlib\nimport os')
+    replace(p,'    caches=shared_caches if shared_caches is not None else audit.cache_set(',
+        "    if os.environ.get('MYRON_DATA_GROW') is not None:\n"
+        "        require(os.environ['MYRON_DATA_GROW']=='16','Wrong early-task growth selection')\n"
+        "        from earlyboot_donor import verify as verify_early_task\n"
+        "        early=verify_early_task(os_root,files['sbin/launchd']['sha256'])\n"
+        "        if checkpoint:checkpoint('early-task-donor',early)\n"
+        '    caches=shared_caches if shared_caches is not None else audit.cache_set(')
     p=d/'boot_assets.py'
     replace(p,'import hashlib','import hashlib\nimport os')
     replace(p,"    budget=capacity(kernel,seed['transport_bytes'],len(trust),kernel_transport_bytes)\n    out=Path(out);out.mkdir(parents=True,exist_ok=False)",

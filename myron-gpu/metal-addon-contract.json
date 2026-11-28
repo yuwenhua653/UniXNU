@@ -8,12 +8,12 @@
   },
   "outputs": {
     "gpuaddon.bin": {
-      "bytes": 15691928,
-      "sha256": "00ec29159b04176d1588878eaa1d1e95f0dbcc0acee5d73076639de98a9e50ca"
+      "bytes": 15303064,
+      "sha256": "55b61a393f1b45a472c3fdea387bd9430e58c8451e042216a9be005a9b717b4d"
     },
     "kernel.macho.trustcache": {
-      "bytes": 92368,
-      "sha256": "1ca837ce601d42b49cdf1acdd867b860ee2df12415f04eaa82588ec56fb6e927"
+      "bytes": 92392,
+      "sha256": "894fe26ef9ef06e4be9f55ac6bfb2009247f40fa494cccb965247abb2880f12a"
     }
   },
   "addon_files": {
@@ -49,24 +49,20 @@
     },
     "addons/myron-data-grow": {
       "mode": 493,
-      "bytes": 89744,
-      "sha256": "3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93"
+      "bytes": 90336,
+      "sha256": "6bc7d0b5db5cc800cbda61b7c012be887da1c9c2de7e28ad7ce90d86b625ebd5"
     },
-    "addons/myron-data-daemons/org.unixnu.myron.data-grow.plist": {
-      "mode": 420,
-      "bytes": 715,
-      "sha256": "939585f5cd8278ea20ad51bda5438296a65ddbabcf7fb9a93d9ca05ce2960e63"
-    },
-    "addons/myron-data-xpc/launchd.plist": {
-      "mode": 420,
-      "bytes": 1303864,
-      "sha256": "cc798dc8a2041266c97727d31d7b3c89301d6ac7231d82624b55d21e781f8273"
+    "addons/myron-data-earlyboot/HorizonSetup": {
+      "mode": 493,
+      "bytes": 70048,
+      "sha256": "5fca4eb0f70b6915c51bedf01fad094c6f79ff1d65d401d9088a10c654a5cb0e"
     }
   },
   "owner_cdhashes": [
     "0e94a0114e32dd6d25ba67636adf15472c04d20c",
+    "51cce781ca983db76dd990f7cab5ede0dc7ff13b",
     "74625fb6ca7a9f46b92c712a64b628bbebaeb678",
-    "7890b3ffacb0db0edef6fb8aa75b57b0df6e0319"
+    "c2a6bb2d9c0558598c36776215d151d504cc415d"
   ],
   "original_trust_sha256": "095605d6abf4e82545579930d54a3476dfac35f754c504f87b456daa058cb9d4",
   "original_modules": [
@@ -74,15 +70,16 @@
     "4a9332cd17629a94587fe3899157a397b4b9e0a48adad88f8bdf4b293a953ae9"
   ],
   "data_helper": {
-    "run": 45931203957,
-    "commit": "9d0130bc2a156571e82527b0affb16722d8c465d",
-    "artifact_sha256": "b448603ad1a276414cd08e7c654fb91fc101cab749e38a648cde3daf5731a0ce",
-    "binary_sha256": "3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93",
-    "cdhash": "7890b3ffacb0db0edef6fb8aa75b57b0df6e0319"
+    "run": 46101177780,
+    "commit": "ca5cc1ce41b5d994653c7372495df98ddce2baf6",
+    "artifact_sha256": "197ed709813e7bc89d0cf44c1b6794ded3ed41beda5ecf45e6293d28881f0e9e",
+    "binary_sha256": "6bc7d0b5db5cc800cbda61b7c012be887da1c9c2de7e28ad7ce90d86b625ebd5",
+    "cdhash": "c2a6bb2d9c0558598c36776215d151d504cc415d",
+    "earlyboot_sha256": "5fca4eb0f70b6915c51bedf01fad094c6f79ff1d65d401d9088a10c654a5cb0e",
+    "earlyboot_cdhash": "51cce781ca983db76dd990f7cab5ede0dc7ff13b"
   },
-  "data_cache": {
-    "run": 46085527736,
-    "commit": "f22c5a0d2166dea93576a7211062915621dbb2c6",
-    "artifact_sha256": "e23bc0601b18063be0ee19a2913e1c0e132e1990561e1ca9932be7abc1169749"
-  }
+  "data_helper_sources_sha256": "cc0d3ac1d32e3156be39bb8baca5eacc4e0daa340ac039810cdc6f825fa3dee0",
+  "earlyboot_task": "restore-datapartition",
+  "earlyboot_program": "/usr/libexec/HorizonSetup",
+  "service_cache_modified": false
 }

@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   analyze:
-    if: github.event.head_commit.message == 'Analyze original myron launchd reboot' || github.event.head_commit.message == 'Identify myron backboard first-frame wait' || github.event.head_commit.message == 'Analyze myron Data helper startup'
+    if: github.event.head_commit.message == 'Analyze original myron launchd reboot' || github.event.head_commit.message == 'Identify myron backboard first-frame wait' || github.event.head_commit.message == 'Analyze myron Data helper startup' || github.event.head_commit.message == 'Build myron Data service cache'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -25,6 +25,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_myron_launchd_analysis.py -v
           python3 -m unittest discover -s tests -p test_myron_data_helper_analysis.py -v
           python3 myron-runtime/test_data_helper_launch.py
+          python3 myron-gpu/test_data_launch_cache.py
           python3 myron27-fault-extract.py --self-test
           python3 myron27-build.py --source-only
           git init -q "$RUNNER_TEMP/launchd-upstream"
@@ -39,13 +40,22 @@ jobs:
           analysis_mode=()
           if [ "$ANALYSIS_MESSAGE" = 'Identify myron backboard first-frame wait' ]; then analysis_mode+=(--backboard-wait); fi
           if [ "$ANALYSIS_MESSAGE" = 'Analyze myron Data helper startup' ]; then analysis_mode+=(--data-helper-startup); fi
+          if [ "$ANALYSIS_MESSAGE" = 'Build myron Data service cache' ]; then analysis_mode+=(--prepare-helper-cache); fi
           sudo -n env GITHUB_SHA="$GITHUB_SHA" "$analysis_python" myron27-launchd-analysis.py "${analysis_mode[@]}" --device "$RUNNER_TEMP/myron-iphone27/device/myron27" --upstream "$RUNNER_TEMP/launchd-upstream" --work "$RUNNER_TEMP/launchd-private" --output "$RUNNER_TEMP/launchd-public" --archive-tool "$analysis_ipsw"
         env:
           ANALYSIS_MESSAGE: ${{ github.event.head_commit.message }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.event.head_commit.message != 'Build myron Data service cache'
         with:
           name: myron-launchd-reboot-analysis
           path: ${{ runner.temp }}/launchd-public/*.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.event.head_commit.message == 'Build myron Data service cache'
+        with:
+          name: myron-data-service-cache
+          path: ${{ runner.temp }}/launchd-public/
           if-no-files-found: error
           retention-days: 7
       - name: Remove original image workspace

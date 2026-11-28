@@ -10,14 +10,24 @@ def apply(d,replace):
     shutil.copyfile(root/'myron_continuous_contract.py',d/'myron_continuous_contract.py')
     shutil.copyfile(here/'earlyboot_donor.py',d/'earlyboot_donor.py')
     p=d/'prepare_userland.py'
-    replace(p,'import hashlib','import hashlib\nimport os')
+    # Explicit invocation state: synthetic audit callers do not inherit the
+    # packaging environment, and sudo need not preserve environment variables.
+    replace(p,'def audit_mounts(os_root,system_root,static,system,checkpoint=None,shared_caches=None):',
+        'def audit_mounts(os_root,system_root,static,system,checkpoint=None,shared_caches=None,*,data_growth=None):')
+    replace(p,'def prepare(upstream,out,report_path,archive_tool,data_seed_path=None):',
+        'def prepare(upstream,out,report_path,archive_tool,data_seed_path=None,data_growth=None):')
     replace(p,'    caches=shared_caches if shared_caches is not None else audit.cache_set(',
-        "    if os.environ.get('MYRON_DATA_GROW') is not None:\n"
-        "        require(os.environ['MYRON_DATA_GROW']=='16','Wrong early-task growth selection')\n"
+        "    if data_growth is not None:\n"
+        "        require(data_growth=='16','Wrong early-task growth selection')\n"
         "        from earlyboot_donor import verify as verify_early_task\n"
         "        early=verify_early_task(os_root,files['sbin/launchd']['sha256'])\n"
         "        if checkpoint:checkpoint('early-task-donor',early)\n"
         '    caches=shared_caches if shared_caches is not None else audit.cache_set(')
+    replace(p,"                                     checkpoint,verified_system['shared_caches'])",
+        "                                     checkpoint,verified_system['shared_caches'],data_growth=data_growth)")
+    replace(p,'    a=p.parse_args();prepare(a.upstream,a.out,a.report,a.archive_tool,a.data_seed)',
+        "    p.add_argument('--data-grow',choices=['16'])\n"
+        '    a=p.parse_args();prepare(a.upstream,a.out,a.report,a.archive_tool,a.data_seed,a.data_grow)')
     p=d/'boot_assets.py'
     replace(p,'import hashlib','import hashlib\nimport os')
     replace(p,"    budget=capacity(kernel,seed['transport_bytes'],len(trust),kernel_transport_bytes)\n    out=Path(out);out.mkdir(parents=True,exist_ok=False)",

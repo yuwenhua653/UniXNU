@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "failed_run": 46102280202,
+  "failed_job": 140847502589,
+  "failed_commit": "da5d80f596c62ae69c28e0c4af7bfb701d26ad75",
+  "native_baseline_completed": true,
+  "failure_stage": "userland synthetic fixture tests before original image extraction",
+  "failed_test": "test_executable_evidence_survives_cache_failure",
+  "expected_error": "Missing original shared cache",
+  "actual_error": "Early task requires the analyzed original launchd",
+  "reproduced_locally": true,
+  "cause": "audit_mounts inherited MYRON_DATA_GROW=16 and applied the real donor guard to a synthetic executable fixture",
+  "repair": [
+    "Make data_growth an explicit audit/prepare argument",
+    "Pass --data-grow 16 explicitly across sudo; do not depend on inherited privileged environment",
+    "Retain exact original launchd hash and absent HorizonSetup checks",
+    "Run all four userland test suites in plain and production-like environments before the native build",
+    "Test actual build command and CLI AST, including absent and invalid options"
+  ],
+  "verification": {
+    "plain_tests_passed": 56,
+    "production_environment_tests_passed": 56,
+    "explicit_argument_and_guard_tests_passed": 3,
+    "existing_optional_signer_test_skipped_per_environment": 1,
+    "optional_skip_reason": "Original fixture requires --verified-root; this run checks argument/environment integration",
+    "data_helper_contract": "passed",
+    "runtime_helper_sources_changed": false,
+    "ios_component_rebuild_required": false,
+    "phone_tested": false
+  }
+}

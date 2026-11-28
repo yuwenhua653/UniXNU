@@ -174,3 +174,24 @@ Phone acceptance requires a verified/already-expanded report, real APFS Data
 capacity of 16 GiB, increased free space and intact existing user data. Then a
 normal subsequent boot lets pre-launchd application staging use that capacity.
 Do not format Data or remove an uncertain attempt journal to force acceptance.
+
+## Build integration correction after run 46102280202
+
+The baseline native kernel completed, then the userland synthetic-fixture suite
+failed: `MYRON_DATA_GROW=16` leaked into `audit_mounts`, so its invented launchd
+was rejected by the exact-donor guard before the intended missing-cache check.
+The original failure was reproduced locally before making changes.
+
+`data_growth` is now an explicit audit/prepare parameter. The real build passes
+`--data-grow 16` across sudo, and the CLI validates the only supported value.
+Fixtures keep their default context; explicitly requesting growth with a wrong
+signed image still fails the real donor guard. This also removes reliance on
+sudo preserving the build environment for the original-image guard.
+
+All four userland suites now run before native compilation in both plain and
+production-like environments. Each environment passed 56 tests; its existing
+optional signer integration remains skipped without `--verified-root`. Three
+additional tests exercise the actual build-command AST, the privileged CLI in
+an empty environment, and real audit refusal/dispatch. Helper binaries, APFS
+transaction logic, signature pins and the 16 GiB target are unchanged. Detailed
+provenance: `records/myron-userland-build-fix-46102280202.json`.

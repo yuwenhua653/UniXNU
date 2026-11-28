@@ -417,9 +417,11 @@ if options.userland:
  run([sys.executable,d/'tests/test_original_root.py','-v'])
  archive_tool=shutil.which('ipsw')
  if not archive_tool:raise SystemExit('Install blacktop/tap/ipsw first')
+ growth=os.environ.get('MYRON_DATA_GROW')
+ if growth is not None and growth!='16':raise ValueError('Wrong userland Data growth selection')
  run(['sudo','-n',sys.executable,d/'prepare_userland.py','--upstream',u,'--archive-tool',Path(archive_tool).resolve(),
       '--out',root/'private-userland','--report',root/'reports/original-userland.json',
-      '--data-seed',Path(os.environ['MYRON_DATA_SEED']).resolve()])
+      '--data-seed',Path(os.environ['MYRON_DATA_SEED']).resolve()]+(['--data-grow',growth] if growth is not None else []))
  raise SystemExit(0)
 root_sources=[
  {'path':'references/QcomGeniSpi','url':'https://github.com/UniXNU/QcomGeniSpi.git','commit':'eac47baefe6a5d2368a70351e6ad1b6361bedbe2'},

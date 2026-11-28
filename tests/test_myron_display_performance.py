@@ -24,6 +24,11 @@ callbacks=callbacks.replace('uint64_t hz;__asm__ volatile("mrs %0, cntfrq_el0":"
 assert '__asm__' not in callbacks
 assert 'mdpMap=memory?memory->map(kIOMapAnywhere|kIOMapInhibitCache):nullptr;' in source
 assert source.count('native_legacy_copy_timing_observed(copyEnd-copyStart,')==4
+assert source.count('myron_display_not_ready(')==8
+for site in range(1,8):
+    assert source.count(f'myron_display_not_ready({site});native_legacy_transfer_observed(kIOReturnNotReady,request,0);return;')==1
+begin=probe.index('extern "C" bool native_legacy_prepare_scanout(')
+handoff=probe[begin:probe.index('extern "C" bool native_legacy_gop_mapping_observed',begin)]
 fixture=r'''
 #include <cstdint>
 #include <cstddef>
@@ -35,6 +40,14 @@ GLOBALS
 volatile uint32_t native_legacy_swapstat[16];
 CALLBACKS
 FORMATTER
+static bool inIRQ,interrupts=true;
+static unsigned prepares,cancels,sleeps,succeedAt;
+bool ml_at_interrupt_context(){return inIRQ;}
+bool ml_get_interrupts_enabled(){return interrupts;}
+int myron_boot_progress_prepare_scanout(){return ++prepares==succeedAt;}
+void myron_boot_progress_cancel_scanout(){++cancels;}
+void IOSleep(unsigned ms){assert(ms==1);++sleeps;}
+HANDOFF
 enum {kIOMapWriteCombineCache=0x400,kIOMapInhibitCache=0x100};
 struct IOMemoryMap {} mapped;
 struct Provider {
@@ -58,6 +71,8 @@ int main(){
  assert(copyTotalBytes==12518412);
  for(unsigned i=0;i<5;++i)myron_display_copy_path_observed(i);
  for(unsigned i=0;i<4;++i)assert(copyPaths[i]==1);
+ for(unsigned i=0;i<9;++i)myron_display_not_ready(i);
+ for(unsigned i=0;i<7;++i)assert(transferNotReady[i]==1);
  for(auto &row:firstOpens){row={UINT32_MAX,INT32_MAX,-1,1};}
  copyTotalBytes=copyTotalTicks=copyMaxTicks=copyLastTicks=UINT64_MAX;
  char text[1537];
@@ -68,9 +83,17 @@ int main(){
  }
  size_t n=myron_display_snapshot(text,1536);assert(n<1535);
  assert(strstr(text,"display_copy map_request=")&&strstr(text,"display_open[7]"));
+ assert(strstr(text,"display_not_ready sites=1/1/1/1/1/1/1 handoff=0"));
+ inIRQ=true;assert(!native_legacy_prepare_scanout()&&handoffObservation==1&&!prepares);
+ inIRQ=false;interrupts=false;
+ assert(!native_legacy_prepare_scanout()&&handoffObservation==2&&!prepares);
+ interrupts=true;assert(!native_legacy_prepare_scanout()&&handoffObservation==3);
+ assert(prepares==32&&sleeps==32&&cancels==1);
+ prepares=sleeps=0;succeedAt=3;
+ assert(native_legacy_prepare_scanout()&&handoffObservation==4&&prepares==3&&sleeps==2&&cancels==1);
  puts("PASS generated GOP mapping fallback, original MMIO mapping, four copy paths, timing and snapshot bounds");
 }
-'''.replace('GLOBALS',globals).replace('CALLBACKS',callbacks).replace('FORMATTER',formatter).replace('MAPPING',mapping)
+'''.replace('GLOBALS',globals).replace('CALLBACKS',callbacks).replace('FORMATTER',formatter).replace('MAPPING',mapping).replace('HANDOFF',handoff)
 with tempfile.TemporaryDirectory() as tmp:
     src=Path(tmp)/'test.cpp';exe=Path(tmp)/'test';src.write_text(fixture)
     subprocess.run([a.cxx,'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=undefined',src,'-o',exe],check=True)

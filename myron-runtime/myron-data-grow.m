@@ -209,6 +209,13 @@ int main(int argc,char **argv) {
         NSMutableDictionary *r=[@{@"format":@1,@"resize_called":@NO,@"changes_gpt":@NO} mutableCopy];
         int rc=run(grow,r);r[@"exit_status"]=@(rc);
         event(NULL,[r[@"status"] UTF8String]);
+        // Keep the decision available in the independent kernel checkpoint
+        // buffer even when the full JSON cannot be saved to a nearly full Data.
+        if(r[@"reason"])event(NULL,[[NSString stringWithFormat:@"reason: %@",r[@"reason"]] UTF8String]);
+        event(NULL,[[NSString stringWithFormat:@"observation=%@ result=%@ resize=%@ before=%@ after=%@",
+            r[@"observation_stage"] ?: @(-1),r[@"observation_status"] ?: @(-1),
+            r[@"resize_called"] ?: @NO,r[@"container_bytes_before"] ?: @0,
+            r[@"container_bytes_after"] ?: @0] UTF8String]);
         NSData *json=[NSJSONSerialization dataWithJSONObject:r options:NSJSONWritingPrettyPrinted error:NULL];
         if(json){
             event(NULL,myronAPFSReport(json.bytes,json.length)?"report-saved":"report-unavailable");

@@ -433,9 +433,41 @@ int main(void) {
  test_clock+=1000;boot_progress_putc('\n');
  assert(console_draw_count==draws+2);
  reboot_first=0;persist_console_head=0;
+ // Preserve early task records after the ordinary console tail wraps. Capture
+ // remains active after screen ownership passes to userspace.
+ early_task_count=0;early_task_used=0;early_task_skip=0;early_task_overflow=0;
+ unsigned saved_scanout=scanout_state;scanout_state=2;
+ const char *checkpoint="[myron-data-earlyboot] stage=context-accepted status=0\n";
+ myron_boot_console_write(checkpoint,(int)strlen(checkpoint),1);
+ for(unsigned i=0;i<20;++i) {
+  char line[100];int n=snprintf(line,sizeof(line),"[myron-apfs-grow] pid=2 stage=step-%02u\n",i);
+  myron_boot_console_write(line,n,1);
+ }
  for(unsigned i=0;i<40000;++i)shutdown_log_char((i%26)+'A');
  used=myron_boot_log_snapshot(snap,sizeof snap);assert(used<sizeof snap);
- assert(persist_console_head==40000 && strstr(snap,"[console before"));
+ assert(persist_console_head>40000 && strstr(snap,"[console before"));
+ assert(early_task_count==21 && strstr(snap,"stage=context-accepted"));
+ assert(strstr(snap,"stage=step-10") && !strstr(snap,"stage=step-11"));
+ assert(strstr(snap,"stage=step-16") && strstr(snap,"stage=step-19"));
+ assert(!strstr(strstr(snap,"[console before"),"stage=step"));
+ shutdown_log_char('\n');
+ // Contention cannot join a partial tag to a fabricated suffix.
+ capture_console("[myron-data-earlyboot] stage=",28);
+ console_capture_busy=1;capture_console("dropped",7);console_capture_busy=0;
+ const char *suffix="false-success\n";capture_console(suffix,(int)strlen(suffix));
+ assert(early_task_count==21 && early_task_gaps);
+ capture_console(checkpoint,(int)strlen(checkpoint));assert(early_task_count==22);
+ // Bounded truncation is explicit; unrelated log lines cannot consume slots.
+ const char *tag="[myron-apfs-grow] ";capture_console(tag,(int)strlen(tag));
+ for(unsigned i=0;i<300;++i)shutdown_log_char('Z');
+ shutdown_log_char('\n');
+ assert(early_task_count==23 && early_task_truncated==1);
+ used=myron_boot_log_snapshot(snap,sizeof snap);assert(strstr(snap,"ZZZ...\n"));
+ for(size_t cap=1;cap<4096;++cap) {
+  memset(snap,0x5a,sizeof snap);used=myron_boot_log_snapshot(snap,cap);
+  assert(used<cap && snap[used]==0 && snap[cap]==0x5a);
+ }
+ scanout_state=saved_scanout;
  // Release failure may retry; acknowledged scanout cannot resume console writes.
  release_result=-1;assert(!myron_boot_progress_prepare_scanout());assert(scanout_state==1);
  release_result=0;assert(myron_boot_progress_prepare_scanout());assert(scanout_state==2 && release_calls==2);

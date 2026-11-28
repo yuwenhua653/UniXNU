@@ -38,14 +38,21 @@ int main(int argc,char **argv) {
     (void)argv;checkpoint("entered",0);
     char executable[1024]={0},bootargs[2048]={0};uint32_t executableBytes=sizeof(executable);
     size_t bootargsBytes=sizeof(bootargs);
-    if(argc!=1 || getppid()!=1 || geteuid()!=0 ||
-       _NSGetExecutablePath(executable,&executableBytes) ||
-       !memchr(executable,0,sizeof(executable)) || strcmp(executable,"/usr/libexec/HorizonSetup") ||
-       sysctlbyname("kern.bootargs",bootargs,&bootargsBytes,NULL,0) ||
-       !bootargsBytes || bootargsBytes>sizeof(bootargs) ||
-       !memchr(bootargs,0,bootargsBytes) || !growthRequested(bootargs)){
-        checkpoint("context-refused",0);return 0;
+    if(argc!=1){checkpoint("argc-refused",argc);return 0;}
+    pid_t parent=getppid();if(parent!=1){checkpoint("parent-refused",(int)parent);return 0;}
+    uid_t uid=geteuid();if(uid!=0){checkpoint("uid-refused",(int)uid);return 0;}
+    int pathStatus=_NSGetExecutablePath(executable,&executableBytes);
+    if(pathStatus){checkpoint("path-query-failed",pathStatus);return 0;}
+    if(!memchr(executable,0,sizeof(executable))){checkpoint("path-unterminated",0);return 0;}
+    if(strcmp(executable,"/usr/libexec/HorizonSetup")){checkpoint("path-refused",0);return 0;}
+    if(sysctlbyname("kern.bootargs",bootargs,&bootargsBytes,NULL,0)){
+        checkpoint("bootargs-query-failed",errno);return 0;
     }
+    if(!bootargsBytes || bootargsBytes>sizeof(bootargs) || !memchr(bootargs,0,bootargsBytes)){
+        checkpoint("bootargs-invalid",0);return 0;
+    }
+    if(!growthRequested(bootargs)){checkpoint("growth-not-requested",0);return 0;}
+    checkpoint("context-accepted",0);
     posix_spawn_file_actions_t actions;posix_spawnattr_t attributes;
     int rc=posix_spawn_file_actions_init(&actions);
     if(rc){checkpoint("actions-failed",rc);return 0;}

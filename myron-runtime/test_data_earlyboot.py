@@ -30,7 +30,7 @@ static uid_t fakeUID(void){return fault==2?501:0;}
 static int fakePath(char *path,uint32_t *n){assert(*n==1024);strcpy(path,fault==3?"/tmp/HorizonSetup":"/usr/libexec/HorizonSetup");return fault==4;}
 static int fakeSysctl(const char *name,void *out,size_t *n,void *input,size_t inputn){
  assert(!strcmp(name,"kern.bootargs")&&!input&&!inputn&&*n==2048);
- if(fault==5)return -1;
+ if(fault==5){errno=EPERM;return -1;}
  if(fault==6){memset(out,'x',*n);return 0;}
  strcpy(out,bootargs);*n=fault==7?2049:strlen(bootargs)+1;return 0;
 }
@@ -79,13 +79,16 @@ int main(void){
   run(1);assert(spawns==(fault==0||fault>=13));
   assert(waits==(fault==15?2:(fault==0||fault>=14)?1:0));
   if(fault==0)assert(strstr(last,"helper-exited"));
+  const char *refused[]={NULL,"parent-refused","uid-refused","path-refused","path-query-failed",
+   "bootargs-query-failed status=1","bootargs-invalid","bootargs-invalid"};
+  if(fault>0 && fault<8)assert(strstr(last,refused[fault]));
   if(fault==16)assert(strstr(last,"helper-signalled"));++cases;
  }
- fault=0;run(2);assert(!spawns);++cases;
+ fault=0;run(2);assert(!spawns && strstr(last,"argc-refused status=2"));++cases;
  const char *bad[]={"","myron-data-grow=1","myron-data-grow=160","myron-data-grow=16x",
   "xmyron-data-grow=16","myron-data-grow=16 myron-data-grow=16","myron-data-grow=16 myron-data-grow=0",
   "myron-data-grow=0 myron-data-grow=16"};
- for(unsigned i=0;i<sizeof bad/sizeof *bad;++i){bootargs=bad[i];run(1);assert(!spawns);++cases;}
+ for(unsigned i=0;i<sizeof bad/sizeof *bad;++i){bootargs=bad[i];run(1);assert(!spawns && strstr(last,"growth-not-requested"));++cases;}
  bootargs="\tmyron-data-grow=16\t";run(1);assert(spawns==1);++cases;
  printf("PASS: %u actual early-boot adapter cases; helper failure/signal never returns boot-task failure; no real child executed\n",cases);
 }

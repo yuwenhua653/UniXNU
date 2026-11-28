@@ -173,5 +173,9 @@ prelink=u/'kits/XnuPrelink'""")
     apply_metal_payload(d,replace)
     from data_capacity import apply as apply_data_capacity
     apply_data_capacity(root,replace)
+    from early_task_evidence import apply as apply_early_task_evidence
+    apply_early_task_evidence(d,replace)
+    from display_failure_evidence import apply as apply_display_failure_evidence
+    apply_display_failure_evidence(d,replace)
 
 if __name__=='__main__':apply(Path(sys.argv[1]))

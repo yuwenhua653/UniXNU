@@ -47,11 +47,11 @@ _Static_assert(offsetof(struct direntry,d_name)==21,"XNU extended record name of
 struct io{void *data;uint64_t remain;off_t offset;};typedef struct io *uio_t;
 struct mount_args{user_addr_t type,path;unsigned flags;user_addr_t data;};
 static int scenario,refs,handles,pools,uios,mounts,published,livevm;
-volatile int native_bindfs_boot_mount,native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon2_stage,native_gpu_addon2_status;
+volatile int native_bindfs_boot_mount,native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon2_stage,native_gpu_addon2_status,native_gpu_addon3_stage,native_gpu_addon3_status;
 volatile int native_gpu_addon_files,native_gpu_addon_written,native_gpu_addon_same,native_gpu_addon_failed,native_gpu_addon_error;
 static vfs_context_t vfs_context_current(void){return NULL;}
 static int vnode_open(const char *p,int flags,int mode,int x,vnode_t *out,vfs_context_t ctx){
- (void)mode;(void)x;(void)ctx;assert((!strcmp(p,"/System/Library/Extensions")||!strcmp(p,"/System/Library/LaunchDaemons"))&&flags==(FREAD|O_NOFOLLOW));
+ (void)mode;(void)x;(void)ctx;assert((!strcmp(p,"/System/Library/Extensions")||!strcmp(p,"/System/Library/LaunchDaemons")||!strcmp(p,"/System/Library/xpc"))&&flags==(FREAD|O_NOFOLLOW));
  if(scenario==3)return EIO;*out=&root;handles++;return 0;}
 static int vnode_close(vnode_t n,int flags,vfs_context_t c){(void)n;(void)flags;(void)c;assert(handles);handles--;return 0;}
 static int vnode_lookup(const char *p,int flags,vnode_t *out,vfs_context_t ctx){
@@ -76,9 +76,9 @@ static int vnode_readdir64(vnode_t dir,uio_t u,int flags,int *eof,int *count,vfs
 static int copyout(const void *p,user_addr_t to,size_t n){if(scenario==5)return EFAULT;memcpy((void*)to,p,n);return 0;}
 static int mount(proc_t p,struct mount_args *r,int32_t *result){(void)p;(void)result;
  assert(native_bindfs_boot_mount==1 && r->flags==(MNT_RDONLY|MNT_UNION)&&!strcmp((char*)r->type,"bindfs")&&
- ((!strcmp((char*)r->path,"/System/Library/Extensions")&&!strcmp((char*)r->data,"/private/var/ngpu/addons"))||(!strcmp((char*)r->path,"/System/Library/LaunchDaemons")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-daemons"))));mounts++;return scenario==6?EPERM:0;}
+ ((!strcmp((char*)r->path,"/System/Library/Extensions")&&!strcmp((char*)r->data,"/private/var/ngpu/addons"))||(!strcmp((char*)r->path,"/System/Library/LaunchDaemons")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-daemons"))||(!strcmp((char*)r->path,"/System/Library/xpc")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-xpc"))));mounts++;return scenario==6?EPERM:0;}
 static int PE_parse_boot_argn(const char *s,void *p,size_t n){assert(!strcmp(s,"myron-gpu-metal")&&n==4);*(uint32_t*)p=scenario?1:0;return 1;}
-static void native_gpu_addon_install(proc_t p,user_addr_t scratch){(void)p;assert(scratch);native_gpu_addon_files=8;native_gpu_addon_written=scenario==2?7:8;native_gpu_addon_error=scenario==1?EIO:0;}
+static void native_gpu_addon_install(proc_t p,user_addr_t scratch){(void)p;assert(scratch);native_gpu_addon_files=9;native_gpu_addon_written=scenario==2?8:9;native_gpu_addon_error=scenario==1?EIO:0;}
 static void myron_gpu_addon_available(void){assert(native_gpu_addon_stage==5&&!native_gpu_addon_status&&!native_bindfs_boot_mount);published++;}
 static vm_map_t current_map(void){return NULL;}
 static int mach_vm_allocate_kernel(vm_map_t map,mach_vm_address_t *out,size_t n,int flags){(void)map;(void)flags;assert(n==4096);if(scenario==10)return 1;*out=(uintptr_t)calloc(1,n);livevm++;return 0;}
@@ -87,11 +87,11 @@ static int mach_vm_deallocate(vm_map_t map,mach_vm_address_t addr,size_t n){(voi
 int main(void){
  for(scenario=0;scenario<=15;scenario++){
   native_bindfs_boot_mount=native_gpu_addon_stage=native_gpu_addon_status=0;
-  native_gpu_addon2_stage=0;native_gpu_addon2_status=-1;
+  native_gpu_addon2_stage=native_gpu_addon3_stage=0;native_gpu_addon2_status=native_gpu_addon3_status=-1;
   native_gpu_addon_files=native_gpu_addon_written=native_gpu_addon_same=native_gpu_addon_failed=native_gpu_addon_error=0;
   refs=handles=pools=uios=mounts=published=livevm=0;myron_gpu_addon_prepare(NULL);
   assert(!refs&&!handles&&!pools&&!uios&&!native_bindfs_boot_mount&&!livevm);
-  if(scenario==9)assert(published==1&&mounts==2&&native_gpu_addon2_stage==5&&!native_gpu_addon2_status);
+  if(scenario==9)assert(published==1&&mounts==3&&native_gpu_addon2_stage==5&&!native_gpu_addon2_status&&native_gpu_addon3_stage==5&&!native_gpu_addon3_status);
   else {assert(!published);if(scenario)assert(native_gpu_addon_status);}
  }
  puts("PASS: real addon mount/readiness, 15 failure/disabled paths, sealed-entry discovery, read-only union and scratch cleanup");return 0;}

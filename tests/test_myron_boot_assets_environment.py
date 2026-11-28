@@ -14,14 +14,14 @@ a=p.parse_args()
 command=[sys.executable,str(a.device/'tests/test_boot_assets.py'),
          '--darwinboot',str(a.darwinboot),'-v']
 plain=dict(os.environ)
-for name in ('MYRON_GPU_NATIVE','MYRON_PACKED_KERNEL','MYRON_METAL_ARTIFACT','MYRON_DATA_GROW','MYRON_DATA_HELPER_ARTIFACT'):
+for name in ('MYRON_GPU_NATIVE','MYRON_PACKED_KERNEL','MYRON_METAL_ARTIFACT','MYRON_DATA_GROW','MYRON_DATA_HELPER_ARTIFACT','MYRON_DATA_CACHE_ARTIFACT'):
     plain.pop(name,None)
 with tempfile.TemporaryDirectory(prefix='myron-boot-env-') as tmp:
     # Deliberately absent: fixture tests must not open the build's real archive.
     archive=Path(tmp)/'not-a-test-input.zip'
     production=dict(plain,MYRON_GPU_NATIVE='1',MYRON_PACKED_KERNEL='1',
                     MYRON_METAL_ARTIFACT=str(archive),MYRON_DATA_GROW='16',
-                    MYRON_DATA_HELPER_ARTIFACT=str(archive))
+                    MYRON_DATA_HELPER_ARTIFACT=str(archive),MYRON_DATA_CACHE_ARTIFACT=str(archive))
     for label,environment in [('plain',plain),('production',production)]:
         print('Checking boot assets with '+label+' environment',flush=True)
         subprocess.run(command,check=True,env=environment)

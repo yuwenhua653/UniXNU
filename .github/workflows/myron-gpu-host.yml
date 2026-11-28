@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 myron-runtime/test_gpu_addon_mount.py
           python3 myron-runtime/test_data_helper_launch.py
+          python3 myron-gpu/test_data_launch_cache.py
           python3 myron-gpu/native/test_metal_publish.py --cxx g++
       - name: Check bounded Data persistence and physical power input
         run: |

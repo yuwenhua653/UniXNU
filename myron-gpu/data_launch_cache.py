@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import plistlib
+import zipfile
 
 ORIGINAL_SHA256 = '5e0c65cf8ee4e6551325afdc4c283c350281d98e14f67b45bc55acfa536ae6e1'
 ORIGINAL_BYTES = 2474924
@@ -38,6 +39,8 @@ def add_job(root):
     for path, job in jobs.items():
         require(isinstance(path, str) and path.startswith('/') and
                 isinstance(job, dict), 'Unexpected cached job entry')
+        require(isinstance(job.get('Label'), str) and 0 < len(job['Label']) <= 512,
+                'Cached jobs must use the direct launchd plist schema')
         require(job.get('Label') != LABEL, 'Owner label collides with existing job')
     result = copy.deepcopy(root)
     result['LaunchDaemons'][JOB_PATH] = daemon()
@@ -47,10 +50,13 @@ def add_job(root):
 def verify_delta(original, candidate):
     require(isinstance(candidate, dict) and isinstance(candidate.get('LaunchDaemons'), dict),
             'Invalid merged cache')
-    require(candidate['LaunchDaemons'].get(JOB_PATH) == daemon(), 'Changed owner job')
+    canonical = lambda value: plistlib.dumps(value, fmt=plistlib.FMT_BINARY, sort_keys=True)
+    require(JOB_PATH in candidate['LaunchDaemons'] and
+            canonical(candidate['LaunchDaemons'][JOB_PATH]) == canonical(daemon()), 'Changed owner job')
     restored = copy.deepcopy(candidate)
     del restored['LaunchDaemons'][JOB_PATH]
-    require(restored == original, 'Original system cache entries changed')
+    # Python equality conflates bool and int; plist consumers distinguish them.
+    require(canonical(restored) == canonical(original), 'Original system cache entries changed')
 
 
 def build(original):
@@ -79,3 +85,20 @@ def prepare(original_path, out):
     (out/'launchd.plist').write_bytes(raw)
     (out/'cache-build.json').write_text(json.dumps(report, indent=2)+'\n')
     return report
+
+
+def load_archive(archive, identity):
+    raw = Path(archive).read_bytes()
+    require(sha(raw) == identity['artifact_sha256'], 'Wrong service-cache artifact')
+    with zipfile.ZipFile(archive) as z:
+        names = z.namelist()
+        require(len(names) == 3 and set(names) == {
+            'original-launchd.plist', 'launchd.plist', 'cache-build.json'}, 'Service-cache inventory')
+        original = z.read('original-launchd.plist')
+        merged = z.read('launchd.plist')
+        record = json.loads(z.read('cache-build.json'))
+    expected, report = build(original)
+    require(merged == expected, 'Service cache differs from exact one-job merge')
+    require(all(record.get(k) == v for k, v in report.items()), 'Service-cache audit mismatch')
+    require(record.get('source_commit') == identity['commit'], 'Service-cache source mismatch')
+    return {ADDON_PATH: (0o644, merged)}

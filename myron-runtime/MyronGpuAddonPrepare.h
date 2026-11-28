@@ -48,7 +48,7 @@ native_gpu_addon_prepare(proc_t p,user_addr_t scratch)
     uint32_t enabled=0;
     if(!PE_parse_boot_argn("myron-gpu-metal",&enabled,sizeof enabled) || enabled!=1)return;
     native_gpu_addon_install(p,scratch);
-    if(native_gpu_addon_error || native_gpu_addon_failed || native_gpu_addon_files!=8 ||
+    if(native_gpu_addon_error || native_gpu_addon_failed || native_gpu_addon_files!=9 ||
        native_gpu_addon_written+native_gpu_addon_same!=native_gpu_addon_files){
         native_gpu_addon_status=native_gpu_addon_error?native_gpu_addon_error:EIO;return;
     }
@@ -69,16 +69,29 @@ native_gpu_addon_prepare(proc_t p,user_addr_t scratch)
     native_gpu_addon_mount(p,scratch,0x600,helpers,sizeof helpers,launch,sizeof launch,lower,
         "/System/Library/LaunchDaemons/org.unixnu.myron.data-grow.plist",
         &native_gpu_addon2_stage,&native_gpu_addon2_status);
+    if(native_gpu_addon2_status || native_gpu_addon2_stage!=5)return;
+    /* iOS 27 takes system jobs from this cache, not just the plist directory.
+     * The addon is bound to the kernel by SHA256. Its cache preserves every
+     * original entry and adds only the same one-shot owner job. If the sealed
+     * directory contains only launchd.plist, that entry is intentionally
+     * replaced by the complete merged cache; other names retain union lookup. */
+    error=myron_gpu_sealed_entry("/System/Library/xpc",lower,sizeof lower);
+    if(error){native_gpu_addon3_status=error;return;}
+    static const char cache_source[]="/private/var/ngpu/addons/myron-data-xpc";
+    static const char cache_point[]="/System/Library/xpc";
+    native_gpu_addon_mount(p,scratch,0x800,cache_source,sizeof cache_source,cache_point,sizeof cache_point,lower,
+        "/System/Library/xpc/launchd.plist",&native_gpu_addon3_stage,&native_gpu_addon3_status);
 }
 /* Cached installation/publication state only. Stage 5 proves visibility of
  * the plist, not launchd acceptance, helper execution or APFS growth. */
 size_t myron_data_helper_snapshot(char *out,size_t cap)
 {
     if(!out || !cap)return 0;
-    int n=snprintf(out,cap,"[myron helper] addon_stage=%d addon_status=%d files=%d written=%d same=%d failed=%d error=%d daemon_stage=%d daemon_status=%d\n",
+    int n=snprintf(out,cap,"[myron helper] addon_stage=%d addon_status=%d files=%d written=%d same=%d failed=%d error=%d daemon_stage=%d daemon_status=%d cache_stage=%d cache_status=%d\n",
         native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon_files,
         native_gpu_addon_written,native_gpu_addon_same,native_gpu_addon_failed,
-        native_gpu_addon_error,native_gpu_addon2_stage,native_gpu_addon2_status);
+        native_gpu_addon_error,native_gpu_addon2_stage,native_gpu_addon2_status,
+        native_gpu_addon3_stage,native_gpu_addon3_status);
     return n<0?0:((size_t)n<cap?(size_t)n:cap-1);
 }
 static void
@@ -95,5 +108,6 @@ myron_gpu_addon_prepare(proc_t p)
     printf("myron-gpu-addon: stage=%d status=%d files=%d written=%d same=%d failed=%d error=%d\n",
         native_gpu_addon_stage,native_gpu_addon_status,native_gpu_addon_files,native_gpu_addon_written,
         native_gpu_addon_same,native_gpu_addon_failed,native_gpu_addon_error);
-    printf("myron-data-helper: stage=%d status=%d\n",native_gpu_addon2_stage,native_gpu_addon2_status);
+    printf("myron-data-helper: daemon_stage=%d daemon_status=%d cache_stage=%d cache_status=%d\n",
+        native_gpu_addon2_stage,native_gpu_addon2_status,native_gpu_addon3_stage,native_gpu_addon3_status);
 }

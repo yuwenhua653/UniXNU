@@ -8,8 +8,8 @@
   },
   "outputs": {
     "gpuaddon.bin": {
-      "bytes": 15298608,
-      "sha256": "a7761568a164f40b4c2734f825ac4c25033a9584e7034a4b952108bd0caf7ca8"
+      "bytes": 15691928,
+      "sha256": "00ec29159b04176d1588878eaa1d1e95f0dbcc0acee5d73076639de98a9e50ca"
     },
     "kernel.macho.trustcache": {
       "bytes": 92368,
@@ -56,6 +56,11 @@
       "mode": 420,
       "bytes": 715,
       "sha256": "939585f5cd8278ea20ad51bda5438296a65ddbabcf7fb9a93d9ca05ce2960e63"
+    },
+    "addons/myron-data-xpc/launchd.plist": {
+      "mode": 420,
+      "bytes": 1303864,
+      "sha256": "cc798dc8a2041266c97727d31d7b3c89301d6ac7231d82624b55d21e781f8273"
     }
   },
   "owner_cdhashes": [
@@ -74,5 +79,10 @@
     "artifact_sha256": "b448603ad1a276414cd08e7c654fb91fc101cab749e38a648cde3daf5731a0ce",
     "binary_sha256": "3af601c39b9794f08c85a8de0f5c96b6ccf8ab7dd5cd5c467dfc8c373aefce93",
     "cdhash": "7890b3ffacb0db0edef6fb8aa75b57b0df6e0319"
+  },
+  "data_cache": {
+    "run": 46085527736,
+    "commit": "f22c5a0d2166dea93576a7211062915621dbb2c6",
+    "artifact_sha256": "e23bc0601b18063be0ee19a2913e1c0e132e1990561e1ca9932be7abc1169749"
   }
 }

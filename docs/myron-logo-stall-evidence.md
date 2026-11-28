@@ -46,3 +46,12 @@ reviewed artifact/hash pins before a full device package can be produced.
 
 This change repairs missing diagnostic evidence. It does not claim to fix the
 remaining display stall or prove Data expansion on the phone.
+
+The revised helper passed macOS CI run 46138629408 at commit
+`04e7cd30dfc27121a76da657e8a270df7cce3252`. Artifact 15261240396 was
+independently checked against signed code pages and current source hashes.
+The eight-file addon and owner trust were regenerated from the unchanged
+GPU component. Category 5 remains restricted to the new HorizonSetup CDHash;
+the two original Apple trust modules remain byte-for-byte identical.
+Pin and audit results are recorded in
+`records/myron-logo-evidence-helper-46138629408.json`.

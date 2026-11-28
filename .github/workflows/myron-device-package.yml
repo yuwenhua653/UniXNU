@@ -385,7 +385,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15246315141/zip > "$RUNNER_TEMP/myron-data-helper.zip"
+          gh api repos/yuwenhua653/UniXNU/actions/artifacts/15261240396/zip > "$RUNNER_TEMP/myron-data-helper.zip"
           python3 - <<'PYHELPER'
           import sys
           sys.path.insert(0,'myron-gpu')

@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "purpose": "Preserve early APFS and first-frame refusal evidence",
+  "helper_run": 46138629408,
+  "helper_artifact": 15261240396,
+  "helper_commit": "04e7cd30dfc27121a76da657e8a270df7cce3252",
+  "data_helper": {
+    "run": 46138629408,
+    "commit": "04e7cd30dfc27121a76da657e8a270df7cce3252",
+    "artifact_sha256": "fa908a1e267c0d1b961123cbab6f15a1d8a4670599feff0e40608105120e8918",
+    "binary_sha256": "f366e8b64c47e77948ee3b3ff9cd12b4e5946ebe4816095783051692294a0722",
+    "cdhash": "3dd19ecadbfdcd0c62772e75ab5a304ae1e91cc3",
+    "earlyboot_sha256": "a55c32fbe93a46f249ef36cd6348d5b2bb22d0236eaab2084af0058f9a03127b",
+    "earlyboot_cdhash": "45f55d762e4127e05bb9dbb08ab1938a33a0fd4e"
+  },
+  "outputs": {
+    "gpuaddon.bin": {
+      "bytes": 15303984,
+      "sha256": "9a1b81fbf126c55ea1f6c303e1adba8a1f4845acbc5ce8d0cb360fb089b59b83"
+    },
+    "kernel.macho.trustcache": {
+      "bytes": 92392,
+      "sha256": "fd3efb054b4908a3d85484dc25124fb609fddb9d919e01125ff66165083059a2"
+    }
+  },
+  "owner_constraint_categories": {
+    "0e94a0114e32dd6d25ba67636adf15472c04d20c": 0,
+    "3dd19ecadbfdcd0c62772e75ab5a304ae1e91cc3": 0,
+    "45f55d762e4127e05bb9dbb08ab1938a33a0fd4e": 5,
+    "74625fb6ca7a9f46b92c712a64b628bbebaeb678": 0
+  },
+  "original_trust_unchanged": true,
+  "hardware_qualified": false,
+  "logo_stall_fixed": false,
+  "data_expansion_proven": false,
+  "private_device_files_uploaded": false
+}

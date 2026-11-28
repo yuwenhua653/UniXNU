@@ -382,6 +382,7 @@ def write_posterboard_queries(cache, path):
 def main():
  p=argparse.ArgumentParser(description=__doc__)
  for key in ('device','upstream','work','output','archive-tool'):p.add_argument('--'+key,type=Path,required=True)
+ p.add_argument('--apfs-growth',action='store_true')
  a=p.parse_args();work=a.work.resolve();out=a.output.resolve()
  if sys.platform!='darwin' or os.geteuid()!=0:raise ValueError('Requires read-only macOS image inspection')
  if work.exists() or out.exists():raise ValueError('Require fresh directories')
@@ -414,6 +415,12 @@ def main():
  with volume.attached(image,work/'mount',True) as mounted:
   require(mounted['uuid']==extract.SYSTEMOS[0],'Wrong original volume UUID')
   with symbolicate.CacheSet(mounted['path']/'System/Library/Caches/com.apple.dyld') as cache:
+   if a.apfs_growth:
+    summary=load('myron27-apfs-grow-analysis').write_cache(cache,out/'apfs-growth-api.json',sys.modules[__name__])
+    summary.update(source_volume=raw,source_commit=os.environ.get('GITHUB_SHA'),kernel_built=False,phone_accessed=False)
+    (out/'apfs-growth-provenance.json').write_text(json.dumps(summary,indent=2)+'\n')
+    print('PASS static APFS resize API review; no resize or kernel build',flush=True)
+    return
    # Match pkd's install name against the actual read-only donor volume.
    install = '/System/Library/PrivateFrameworks/PlugInKitDaemon.framework/PlugInKitDaemon'
    donor = mounted['path'].resolve(strict=True)

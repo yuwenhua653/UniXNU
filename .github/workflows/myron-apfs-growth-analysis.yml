@@ -1,0 +1,61 @@
+name: Myron APFS growth preflight analysis only
+on:
+  push:
+    branches: [codex/myron-iphone27]
+permissions:
+  contents: read
+concurrency:
+  group: myron-apfs-growth-analysis
+  cancel-in-progress: false
+jobs:
+  analyze:
+    if: github.event.head_commit.message == 'Analyze myron APFS growth before package'
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, launch]
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Check bounded analyzers and prepare exact source helpers
+        run: |
+          set -euo pipefail
+          python3 -m pip install capstone==5.0.9
+          python3 -m unittest discover -s tests -p test_myron_apfs_grow_analysis.py -v
+          python3 -m unittest discover -s tests -p test_myron_launchd_analysis.py -v
+          python3 myron27-build.py --source-only
+          git init -q "$RUNNER_TEMP/growth-upstream"
+          git -C "$RUNNER_TEMP/growth-upstream" fetch -q --depth 1 https://github.com/UniXNU/UniXNU.git 04573c510c5fd4892ca6948739389141cc9e05f5
+          git -C "$RUNNER_TEMP/growth-upstream" checkout -q --detach FETCH_HEAD
+          brew install blacktop/tap/ipsw
+      - name: Inspect original APIs or launch policy without building XNU
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          growth_python="$(python3 -c 'import sys; print(sys.executable)')"
+          growth_ipsw="$(python3 -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("ipsw")).resolve())')"
+          case "$COMPONENT" in
+            api) analysis=(myron27-library-index.py --apfs-growth);;
+            launch) analysis=(myron27-launchd-analysis.py --growth-launch);;
+            *) exit 1;;
+          esac
+          sudo -n env GITHUB_SHA="$GITHUB_SHA" "$growth_python" "${analysis[@]}" \
+            --device "$RUNNER_TEMP/myron-iphone27/device/myron27" \
+            --upstream "$RUNNER_TEMP/growth-upstream" --work "$RUNNER_TEMP/growth-private" \
+            --output "$RUNNER_TEMP/growth-public" --archive-tool "$growth_ipsw"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: myron-apfs-growth-${{ matrix.component }}-analysis
+          path: ${{ runner.temp }}/growth-public/*.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove original image workspace
+        if: always()
+        run: sudo -n rm -rf "$RUNNER_TEMP/growth-private"

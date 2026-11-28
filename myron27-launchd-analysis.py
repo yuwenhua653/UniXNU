@@ -429,8 +429,9 @@ def main():
     p.add_argument('--backboard-wait',action='store_true')
     p.add_argument('--data-helper-startup',action='store_true')
     p.add_argument('--prepare-helper-cache',action='store_true')
+    p.add_argument('--growth-launch',action='store_true')
     a=p.parse_args();require(sys.platform=='darwin' and os.geteuid()==0,'Read-only inspection requires macOS')
-    require(sum((a.backboard_wait,a.data_helper_startup,a.prepare_helper_cache))<=1,'Select one analysis mode')
+    require(sum((a.backboard_wait,a.data_helper_startup,a.prepare_helper_cache,a.growth_launch))<=1,'Select one analysis mode')
     work=a.work.resolve();out=a.output.resolve();require(not work.exists() and not out.exists(),'Fresh output required')
     work.mkdir(parents=True,mode=0o700);out.mkdir(parents=True)
     extract=load('myron27-fault-extract')
@@ -458,6 +459,11 @@ def main():
     encrypted.unlink();raw=extract.check_raw_image(image,userdata,ROOT_PINS['OS'])
     with volume.attached(image,work/'mount',True) as mounted:
         require(mounted['uuid']==ROOT_PINS['OS'][0],'Wrong OS volume UUID')
+        if a.growth_launch:
+            sys.path.insert(0,str(ROOT/'myron-gpu'))
+            load('myron27-apfs-grow-analysis').write_launch(mounted['path'],audit,trust,sys.modules[__name__],out)
+            (out/'growth-launch-provenance.json').write_text(json.dumps(dict(source_volume=raw,source_commit=os.environ.get('GITHUB_SHA'),kernel_built=False,phone_accessed=False),indent=2)+'\n')
+            return
         if a.prepare_helper_cache:
             sys.path.insert(0,str(ROOT/'myron-gpu'))
             from data_launch_cache import prepare as prepare_cache

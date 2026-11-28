@@ -16,10 +16,10 @@ ORIGINAL_MODULES = (
 # Already compiled arm64e iOS27 component; no new component build is triggered.
 COMPONENT = dict(run=45925023720,commit='80b1c03cfa826cc34f8e06b93d7bebd4eae40f82',
  artifact_sha256='14f73775ea5109f39d8a94837999ddc79ddb46bc76b1b2e87b47e691a1e12549')
-DATA_HELPER = dict(run=46101177780,commit='ca5cc1ce41b5d994653c7372495df98ddce2baf6',
- artifact_sha256='197ed709813e7bc89d0cf44c1b6794ded3ed41beda5ecf45e6293d28881f0e9e',
- binary_sha256='6bc7d0b5db5cc800cbda61b7c012be887da1c9c2de7e28ad7ce90d86b625ebd5',
- cdhash='c2a6bb2d9c0558598c36776215d151d504cc415d',
+DATA_HELPER = dict(run=46101684719,commit='dd3f5dd812780b7f748e10d3ebe025841087898c',
+ artifact_sha256='94b355b6813acfe60c95e8028fcf49788b0db4cbe311c3573e51deaaa31b2eeb',
+ binary_sha256='ef3d5cacb0b4d81aca3ff19bbb5e0e038a2303ac61429b32a96d74779867d148',
+ cdhash='43f44f5c45a8a3e143166bb20042a28b526bc346',
  earlyboot_sha256='5fca4eb0f70b6915c51bedf01fad094c6f79ff1d65d401d9088a10c654a5cb0e',
  earlyboot_cdhash='51cce781ca983db76dd990f7cab5ede0dc7ff13b')
 

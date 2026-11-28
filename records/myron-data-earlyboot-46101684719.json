@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "target": "iPhone12,1/27.0.1/24A446",
+  "component_run": 46101684719,
+  "component_commit": "dd3f5dd812780b7f748e10d3ebe025841087898c",
+  "artifact_id": 15246315141,
+  "artifact_sha256": "94b355b6813acfe60c95e8028fcf49788b0db4cbe311c3573e51deaaa31b2eeb",
+  "helper": {
+    "sha256": "ef3d5cacb0b4d81aca3ff19bbb5e0e038a2303ac61429b32a96d74779867d148",
+    "bytes": 90432,
+    "cdhash": "43f44f5c45a8a3e143166bb20042a28b526bc346"
+  },
+  "earlyboot": {
+    "sha256": "5fca4eb0f70b6915c51bedf01fad094c6f79ff1d65d401d9088a10c654a5cb0e",
+    "bytes": 70048,
+    "cdhash": "51cce781ca983db76dd990f7cab5ede0dc7ff13b",
+    "arm64e": true,
+    "platform": "iOS",
+    "minimum_os": "27.0",
+    "identifier": "com.apple.HorizonSetup",
+    "entitlements": {
+      "platform-application": true,
+      "com.apple.private.security.no-container": true,
+      "com.apple.private.security.no-sandbox": true
+    },
+    "published_path": "/usr/libexec/HorizonSetup",
+    "boot_task": "restore-datapartition"
+  },
+  "source_sha256": {
+    "myron-data-grow.m": "1d6c9ae89b4a4278631b5878b869b18e744b91906379757f8dd11367d9511099",
+    "MyronAPFSGrow.h": "1132123c9fd44ba64b28aa2870859e6d9ed6306e1c51b88d4ee0c52d021a8560",
+    "MyronAPFSTransaction.h": "e68b1c72365a3b8a9f584bc27cf0a95d5335e25c918938f0edaa4767c51821d6",
+    "test_apfs_growth.c": "9d022ebc23f6c41dec774417b5360e8d1e132fbbbdff74ae4abd25062aa49344",
+    "test_apfs_transaction.c": "6199d216272ba0dee2dd721f3e01358589fc76c3a9d2e8070320ce1b3b6e03f3",
+    "test_apfs_journal.py": "de3bc6365dc72dd2b3a99400cf36ff7bb4ce0d692653edff3f77ca7e9d78f14b",
+    "myron-data-earlyboot.c": "f0a52e45f6c9ecd254e225a09c1bbd5d015b19cf9d4c053f9af6607d456b8dfa",
+    "test_data_earlyboot.py": "9c1fc076a47eae1be9bb16049554346d6d76f4755d51da1be8e85f674059e9b8",
+    "MyronAPFSReport.h": "584e41542423ea0ffc944ee835313f5687e2b685b0cc2548360b5bc03e47b5d7",
+    "test_apfs_report.py": "bd23913ed8e342f2892923344b45fc6aed274f8eb9800ac045a2a63e0218d143",
+    "build_data_helper.py": "5603a529724fc9b5dbe229077ae52b458865369e124e056ace2f79e21997b38e"
+  },
+  "outputs": {
+    "gpuaddon.bin": {
+      "bytes": 15303432,
+      "sha256": "e6732c20a589d6db354633cd32c5042b97d595d841ec3261f9a4cd5d8647149c"
+    },
+    "kernel.macho.trustcache": {
+      "bytes": 92392,
+      "sha256": "fc25ef1b74714212e9ca2a56962b5e673094dbb0760d3b5096ca140cad1f95a6"
+    }
+  },
+  "owner_cdhashes": [
+    "0e94a0114e32dd6d25ba67636adf15472c04d20c",
+    "43f44f5c45a8a3e143166bb20042a28b526bc346",
+    "51cce781ca983db76dd990f7cab5ede0dc7ff13b",
+    "74625fb6ca7a9f46b92c712a64b628bbebaeb678"
+  ],
+  "original_apple_modules_unchanged": true,
+  "compiled_ios": true,
+  "independent_download_audit": true,
+  "full_package_build_ready": true,
+  "phone_executed": false,
+  "apfs_resized": false,
+  "retained_data_integrity_verified": false,
+  "host_checks": [
+    "78 actual adapter cases",
+    "198 publication cases",
+    "280 reconstructed dyld startup scenarios",
+    "60 transaction cases",
+    "12 journal I/O cases plus retained-attempt refusal",
+    "8 report I/O failures plus link/type/size/mode checks",
+    "96 actual installer payload corruptions",
+    "10 actual atomic-writer failures",
+    "two boot-asset environments with 12 cases each",
+    "exact donor absence guard",
+    "four sidecar readback tests",
+    "both stale helper artifacts refused by reconstructed packaging"
+  ],
+  "phone_acceptance": [
+    "early task and helper execute",
+    "report status expanded-and-verified or already-expanded",
+    "same Data volume identity and real APFS capacity 16 GiB",
+    "free space materially increases",
+    "retained user data opens normally",
+    "subsequent normal boot permits existing application staging; app/wallpaper/performance require observation"
+  ]
+}

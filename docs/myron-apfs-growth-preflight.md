@@ -150,3 +150,27 @@ Application staging currently precedes this early userland task. After a first
 successful expansion, a normal subsequent boot lets that existing staging step
 use the new space. The adapter never forces a reboot. App/wallpaper recovery and
 performance remain phone-test outcomes, not guaranteed by these host checks.
+
+## Final signed component bound for a full test build
+
+Run `46101684719` succeeded at commit
+`dd3f5dd812780b7f748e10d3ebe025841087898c`. Artifact `15246315141` contains
+both signed iOS executables, the bounded report writer, exact source manifest
+and successful macOS host checks. Independent byte/code-page/identity and
+entitlement checks passed after download. The source-pinned early adapter is
+unchanged from the first successful component; the APFS helper now includes
+the result-file writer. The full evidence is recorded in
+`records/myron-data-earlyboot-46101684719.json`.
+
+The final eight-file addon and four-entry first owner trust module were rebuilt
+and read back; both original Apple modules remain exact. The actual installer
+accepted those bytes, refused 96 corruptions and retained the final file through
+10 atomic-writer failures. Reconstructed packaging accepts only the final
+component and rejects both earlier artifacts. The full-build contract gate now
+passes. This qualifies the source and compiled components for a **full test
+build**, not successful phone execution or an already verified expansion.
+
+Phone acceptance requires a verified/already-expanded report, real APFS Data
+capacity of 16 GiB, increased free space and intact existing user data. Then a
+normal subsequent boot lets pre-launchd application staging use that capacity.
+Do not format Data or remove an uncertain attempt journal to force acceptance.

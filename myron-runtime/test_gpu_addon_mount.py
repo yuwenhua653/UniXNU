@@ -76,7 +76,7 @@ static int vnode_readdir64(vnode_t dir,uio_t u,int flags,int *eof,int *count,vfs
 static int copyout(const void *p,user_addr_t to,size_t n){if(scenario==5)return EFAULT;memcpy((void*)to,p,n);return 0;}
 static int mount(proc_t p,struct mount_args *r,int32_t *result){(void)p;(void)result;
  assert(native_bindfs_boot_mount==1 && r->flags==(MNT_RDONLY|MNT_UNION)&&!strcmp((char*)r->type,"bindfs")&&
- ((!strcmp((char*)r->path,"/System/Library/Extensions")&&!strcmp((char*)r->data,"/private/var/ngpu/addons"))||(!strcmp((char*)r->path,"/System/Library/LaunchDaemons")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-daemons"))||(!strcmp((char*)r->path,"/System/Library/xpc")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-xpc"))));mounts++;return scenario==6?EPERM:0;}
+ ((!strcmp((char*)r->path,"/System/Library/Extensions")&&!strcmp((char*)r->data,"/private/var/ngpu/addons"))||(!strcmp((char*)r->path,"/System/Library/LaunchDaemons")&&!strcmp((char*)r->data,"/private/var/ngpu/addons/myron-data-daemons"))));mounts++;return scenario==6?EPERM:0;}
 static int PE_parse_boot_argn(const char *s,void *p,size_t n){assert(!strcmp(s,"myron-gpu-metal")&&n==4);*(uint32_t*)p=scenario?1:0;return 1;}
 static void native_gpu_addon_install(proc_t p,user_addr_t scratch){(void)p;assert(scratch);native_gpu_addon_files=9;native_gpu_addon_written=scenario==2?8:9;native_gpu_addon_error=scenario==1?EIO:0;}
 static void myron_gpu_addon_available(void){assert(native_gpu_addon_stage==5&&!native_gpu_addon_status&&!native_bindfs_boot_mount);published++;}
@@ -91,7 +91,7 @@ int main(void){
   native_gpu_addon_files=native_gpu_addon_written=native_gpu_addon_same=native_gpu_addon_failed=native_gpu_addon_error=0;
   refs=handles=pools=uios=mounts=published=livevm=0;myron_gpu_addon_prepare(NULL);
   assert(!refs&&!handles&&!pools&&!uios&&!native_bindfs_boot_mount&&!livevm);
-  if(scenario==9)assert(published==1&&mounts==3&&native_gpu_addon2_stage==5&&!native_gpu_addon2_status&&native_gpu_addon3_stage==5&&!native_gpu_addon3_status);
+  if(scenario==9)assert(published==1&&mounts==2&&native_gpu_addon2_stage==5&&!native_gpu_addon2_status&&native_gpu_addon3_stage==-1&&native_gpu_addon3_status==ECANCELED);
   else {assert(!published);if(scenario)assert(native_gpu_addon_status);}
  }
  puts("PASS: real addon mount/readiness, 15 failure/disabled paths, sealed-entry discovery, read-only union and scratch cleanup");return 0;}

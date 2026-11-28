@@ -61,9 +61,10 @@ folder='continuous-boot-'+str(a.run)
 menu=(source/'UPDATE-BOOT.cmd').read_text().replace('boot-update-'+str(old.RUN),folder).replace(str(old.RUN),str(a.run)).replace('Linux/Clang 18 boot comparison','continuous XNU boot').replace('START-IOS27-LINUX-README-CN.txt','START-IOS27-CONTINUOUS-README-CN.txt')
 guide='''myron iOS27 连续启动版
 
-本版补入 CPU 帧缓冲显示服务，保留 UFS 持久日志保存与 recovery 只读导出。
-编译及装配检查通过；新显示链路和进入桌面仍需真机验证。
-日志新增显示注册、客户端连接、帧拷贝和提交计数。GPU 加速尚未接入。
+本版保留已有 Metal GPU、CPU 帧缓冲显示和 UFS 持久日志。
+停用 46087333358 新增的系统服务缓存覆盖，恢复读取原封存系统缓存；开机恢复仍需真机验证。
+保留现有 Data 和 16 GiB 底层设备选择，不回退旧 Data；这不代表 APFS 已扩容。
+扩容任务尚未证实执行，应用、黑壁纸与卡顿仍待修复；不要把此包当作扩容完成版。
 复用已安装的 unixnu，只更新原备份对应槽位的 boot。
 
 将本包解压到原测试目录，START-IOS27-CONTINUOUS.cmd 与原 package、state 同层。

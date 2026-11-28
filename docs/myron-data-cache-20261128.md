@@ -1,4 +1,30 @@
-# Load the Data helper through the iOS 27 service cache
+# Data service cache: runtime publication quarantined
+
+The cache preparation below describes the attempted integration, not the current
+boot policy. Device testing of run `46087333358` reported an automatic reboot
+after the logo. The available capture proves that the cache view was published
+and launchd reached early boot tasks, but ends without the final panic/reboot
+record. It does not establish the exact reboot trigger or helper execution.
+
+The captured APFS mount reports a 4096-byte block size and 262144 blocks
+(1 GiB), while its underlying device reports 4194304 blocks (16 GiB). Thus
+the selected device capacity did not grow the APFS container. App staging still
+refused with ENOSPC; this is separate from the unconfirmed reboot trigger.
+
+The runtime now retains the original sealed `/System/Library/xpc` view. It
+never scans or mounts that directory, including on installation failures.
+Existing GPU and standalone daemon publication remain unchanged. The pinned
+ninth addon file is inert in its owner directory; no attempt is made to remove
+it or any user Data. Status `cache_stage=-1 cache_status=ECANCELED` and
+`cache_policy=disabled` identify the successful quarantine path. Stage zero
+means an earlier path did not reach that point. No boot option re-enables it.
+
+This is a containment/recovery change, not a proven APFS-growth repair or a
+claim that the cache overlay uniquely caused the reboot. Host tests execute the
+actual preparation function, reject every attempt to scan/mount the cache path,
+and cover GPU/helper failure paths. Phone validation is still required.
+
+## Previous cache integration (disabled)
 
 The inspected iPhone12,1/24A446 donor contains
 `/System/Library/xpc/launchd.plist` and its `LaunchDaemons` dictionary.
